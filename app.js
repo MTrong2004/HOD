@@ -428,3 +428,58 @@ window.HODSupabase = (() => {
 
 
 
+
+
+// ===== LEARNING HUB SIMPLE SUBJECT PATCH START =====
+(function(){
+  const HUB_URL='https://bdbkpqnhavyoalgkvqtw.supabase.co';
+  const HUB_KEY='sb_publishable_h-AYsKKK57i0uJpBxJeCHA_csNkgjyB';
+  const SUBJECT_STORE='learninghub_subject_code_simple_v1';
+  let subjectClient=null, subjectsCache=[], pickedCode=localStorage.getItem(SUBJECT_STORE)||'', lock=false;
+  function c(){ if(!window.supabase) return null; if(!subjectClient) subjectClient=window.supabase.createClient(HUB_URL,HUB_KEY); return subjectClient; }
+  function $(id){ return document.getElementById(id); }
+  function esc2(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function user(){ return window.HODSupabase?.getUser?.() || null; }
+  function logged(){ return !!user(); }
+  function subjectCode(){ return localStorage.getItem(SUBJECT_STORE)||''; }
+  function setSubject(code){ if(code) localStorage.setItem(SUBJECT_STORE,code); else localStorage.removeItem(SUBJECT_STORE); pickedCode=code||''; syncSubjectTexts(); }
+  function meta(code){ return subjectsCache.find(x=>x.code===code) || null; }
+  function label(code){ const m=meta(code); return m ? `${m.code} · ${m.name||''}` : (code || 'Chưa chọn môn'); }
+  function notifyUX(msg){ if(typeof notify==='function') notify(msg); else console.log(msg); }
+  function syncSubjectTexts(){ const code=subjectCode(); if($('subjectInlineText')) $('subjectInlineText').textContent=code?label(code):'Chưa chọn môn'; if($('hodAccountSubjectText')) $('hodAccountSubjectText').textContent=code?label(code):'Chưa chọn môn'; ensureChip(); const chip=$('subjectTopChip'); if(chip){ chip.textContent=code?label(code):'Chọn môn'; chip.classList.toggle('hidden',!logged()); } }
+  function ensureChip(){ const actions=document.querySelector('#fc .actions')||document.querySelector('.actions'); if(!actions||$('subjectTopChip')) return; const b=document.createElement('button'); b.id='subjectTopChip'; b.type='button'; b.className='subjectChip hidden'; b.onclick=()=>openGate(); actions.prepend(b); }
+  function updateBrand(code){ const b=document.querySelector('.brand'); if(!b) return; const m=meta(code)||{code:code||'LEARN', name:code?'':'Hub'}; b.innerHTML=`${esc2(m.code||'LEARN')}<span>${esc2(m.name ? ' / '+m.name : ' Hub')}</span>`; }
+  function closeAccountMenu(){ $('hodAccountMenu')?.classList.add('hidden'); }
+  function gateOn(on){ document.body.classList.toggle('has-subject-gate',!!on); $('subjectGate')?.classList.toggle('hidden',!on); $('subjectGate')?.setAttribute('aria-hidden', on?'false':'true'); }
+  function showErr(msg){ const e=$('subjectError'); if(e){ e.textContent=msg; e.classList.remove('hidden'); } }
+  function clearErr(){ $('subjectError')?.classList.add('hidden'); }
+  function showLoading(on,msg='Đang tải danh sách môn học...'){ const e=$('subjectLoading'); if(e){ e.textContent=msg; e.classList.toggle('hidden',!on);} }
+  function fallbackSubjects(){ return [{code:'HOD102', name:'HOD102 Learning', description:'Môn mặc định để bắt đầu học.', cover:'', is_active:true}]; }
+
+  async function getSubjects(){
+    const supa=c();
+    if(!supa||!logged()) return fallbackSubjects();
+    const {data,error}=await supa.from('subjects').select('*').eq('is_active', true).order('sort_order',{ascending:true}).order('code',{ascending:true});
+    if(error || !data || !data.length){ console.warn(error||'No subjects'); showErr('Không tải được danh sách môn học. Đang dùng môn mặc định.'); return fallbackSubjects(); }
+    return data;
+  }
+
+  function card(s){ return `<button class="subjectCard ${pickedCode===s.code?'active':''}" data-code="${esc2(s.code)}" type="button"><span class="subjectCardCode">${esc2(s.code)}</span><h3>${esc2(s.name||s.code)}</h3><p>${esc2(s.description||'Môn học chưa có mô tả.')}</p><div class="subjectMeta"><span>${s.is_active===false?'Tạm ẩn':'Sẵn sàng học'}</span><span class="subjectChoose">${pickedCode===s.code?'Đã chọn':'Chọn môn'}</span></div></button>`; }
+  function applyPicked(){ if($('subjectPickedText')) $('subjectPickedText').textContent=pickedCode?label(pickedCode):'Chưa chọn môn'; if($('subjectEnter')) $('subjectEnter').disabled=!pickedCode; document.querySelectorAll('.subjectCard').forEach(x=>x.classList.toggle('active',x.dataset.code===pickedCode)); }
+  function renderSubjects(){ const list=$('subjectList'); if(!list) return; const q=(($('subjectSearch')?.value)||'').trim().toLowerCase(); const arr=subjectsCache.filter(s=>!q||`${s.code||''} ${s.name||''} ${s.description||''}`.toLowerCase().includes(q)); list.innerHTML=arr.map(card).join(''); $('subjectEmpty')?.classList.toggle('hidden',!!arr.length); list.querySelectorAll('.subjectCard').forEach(x=>x.onclick=()=>{ pickedCode=x.dataset.code; applyPicked(); }); applyPicked(); }
+  async function refreshSubjects(){ if(!logged()) return; clearErr(); showLoading(true); try{ subjectsCache=await getSubjects(); if(!pickedCode && subjectCode()) pickedCode=subjectCode(); if(!pickedCode && subjectsCache[0]) pickedCode=subjectsCache[0].code; renderSubjects(); syncSubjectTexts(); } finally { showLoading(false); } }
+  function openGate(){ if(!logged()) return; if($('subjectUserEmail')) $('subjectUserEmail').textContent=user()?.email||'Chưa đăng nhập'; gateOn(true); closeAccountMenu(); refreshSubjects(); }
+  function closeGate(){ gateOn(false); }
+  async function loadBySubject(code){ const supa=c(); if(!supa || !logged() || !code) return false; const {data,error}=await supa.from('questions').select('*').eq('is_active', true).eq('subject_code', code).order('num',{ascending:true}); if(error){ console.warn(error); notifyUX('Không tải được dữ liệu môn học.'); return false; } if(!data || !data.length){ RAW=[]; pool=[]; ci=0; if($('idx')) $('idx').textContent='0'; if($('total')) $('total').textContent='0'; try{renderStudy()}catch(e){} try{renderQuiz()}catch(e){} notifyUX(`Môn ${code} chưa có dữ liệu.`); return false; } RAW=data.map(r=>({ id:r.id, subject_code:r.subject_code||code, num:r.num, question:r.question, options:r.options||{}, answer:r.answer, answer_text:r.answer_text, images:r.images||[] })); pool=[...RAW]; ci=0; flipped=false; if($('idx')) $('idx').textContent='1'; if($('total')) $('total').textContent=String(pool.length); updateBrand(code); syncSubjectTexts(); try{renderCard()}catch(e){} try{renderQuiz()}catch(e){} try{renderStudy()}catch(e){} notifyUX(`Đã tải ${label(code)}`); return true; }
+  async function enterSubject(){ if(!pickedCode) return; setSubject(pickedCode); closeGate(); await loadBySubject(pickedCode); }
+  async function logoutGate(){ closeGate(); setSubject(''); await window.HODSupabase?.signOut?.(); }
+
+  function patchSubmit(){ if(window.__hubPatchSubmit || !window.HODSupabase?.submitEditRequest) return; window.__hubPatchSubmit=true; const old=window.HODSupabase.submitEditRequest.bind(window.HODSupabase); window.HODSupabase.submitEditRequest=async function(newDraft, oldQ){ if(oldQ?.id) return old(newDraft, oldQ); const supa=c(); const code=oldQ?.subject_code || subjectCode(); const num=oldQ?.num; if(supa && code && num){ const {data,error}=await supa.from('questions').select('*').eq('subject_code', code).eq('num', num).maybeSingle(); if(!error && data) oldQ={...oldQ,id:data.id,subject_code:data.subject_code||code}; } return old(newDraft, oldQ); }; }
+  function patchSave(){ if(window.__hubPatchSave || typeof saveEditor!=='function') return; window.__hubPatchSave=true; const old=saveEditor; saveEditor=async function(){ let oldQ=clone(RAW.find(c=>c.num===editDraft.num)||pool[ci]||editDraft); editDraft.question=$('editQuestion').value.trim(); editDraft.answer=$('editAnswer').value.trim().toUpperCase(); let ops={}; document.querySelectorAll('[data-opt]').forEach(t=>{ if(t.value.trim()) ops[t.dataset.opt]=t.value.trim(); }); editDraft.options=ops; editDraft.answer_text=answerText(editDraft); editDraft.subject_code=subjectCode(); if(window.HODSupabase&&window.HODSupabase.isReady()){ await window.HODSupabase.submitEditRequest(editDraft, oldQ); return; } return old(); }; }
+  function patchSignOut(){ if(window.__hubPatchSignout || !window.HODSupabase?.signOut) return; window.__hubPatchSignout=true; const old=window.HODSupabase.signOut.bind(window.HODSupabase); window.HODSupabase.signOut=async function(){ setSubject(''); return old(); }; }
+  function ensureChangeBtn(){ if(!$('hodChangeSubjectBtn')) return; $('hodChangeSubjectBtn').onclick=e=>{ e?.preventDefault?.(); openGate(); }; }
+
+  function bind(){ ensureChip(); ensureChangeBtn(); syncSubjectTexts(); $('subjectRefresh')?.addEventListener('click', refreshSubjects); $('subjectSearch')?.addEventListener('input', renderSubjects); $('subjectEnter')?.addEventListener('click', enterSubject); $('subjectLogout')?.addEventListener('click', logoutGate); if(logged() && subjectCode()) loadBySubject(subjectCode()); setInterval(async()=>{ if(lock) return; lock=true; try{ ensureChip(); ensureChangeBtn(); patchSubmit(); patchSave(); patchSignOut(); syncSubjectTexts(); if(logged()){ if(!subjectCode()) openGate(); } else { closeGate(); setSubject(''); } } finally { lock=false; } }, 700); }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', bind); else bind();
+})();
+// ===== LEARNING HUB SIMPLE SUBJECT PATCH END =====

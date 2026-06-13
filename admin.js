@@ -600,3 +600,148 @@ document.addEventListener('DOMContentLoaded', init);
     }).join('') || '<p class=muted>Chưa có lịch sử chỉnh sửa.</p>';
   };
 })();
+
+
+// ===== FINAL_ADMIN_AUTO_CHECK_LOADING_EFFECT_20260613 =====
+// Admin tự check mỗi 10 giây + có hiệu ứng loading khi đang check.
+(function(){
+  const AUTO_MS = 10000;
+  let timer = null;
+  let checking = false;
+  let knownPendingIds = null;
+
+  function pendingIdsFrom(list){
+    return new Set((list || []).filter(x => x.status === 'pending').map(x => String(x.id)));
+  }
+
+  function ensureStyle(){
+    if(document.getElementById('adminAutoCheckStyle')) return;
+    const style = document.createElement('style');
+    style.id = 'adminAutoCheckStyle';
+    style.textContent = `
+      #adminAutoCheckChip{
+        position:fixed;right:18px;bottom:18px;z-index:99999;
+        min-width:168px;height:40px;padding:0 14px;border-radius:999px;
+        display:flex;align-items:center;justify-content:center;gap:9px;
+        border:1px solid rgba(232,212,168,.28);
+        background:linear-gradient(145deg,rgba(24,16,11,.94),rgba(8,6,5,.94));
+        color:#e8d4a8;font-weight:900;font-size:13px;
+        box-shadow:0 18px 46px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,255,255,.05);
+        backdrop-filter:blur(12px);opacity:.78;transform:translateY(0);
+        transition:opacity .18s ease, transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+        pointer-events:none;
+      }
+      #adminAutoCheckChip.hidden{display:none!important}
+      #adminAutoCheckChip.is-checking{opacity:1;transform:translateY(-2px);border-color:rgba(232,212,168,.48);box-shadow:0 22px 58px rgba(0,0,0,.44),0 0 24px rgba(232,212,168,.14)}
+      #adminAutoCheckChip .autoDot{
+        width:18px;height:18px;border-radius:50%;border:2px solid rgba(232,212,168,.24);border-top-color:#e8d4a8;
+      }
+      #adminAutoCheckChip.is-checking .autoDot{animation:autoCheckSpin .72s linear infinite}
+      #adminAutoCheckChip.is-idle .autoDot{border-color:rgba(114,197,140,.38);background:rgba(114,197,140,.18)}
+      @keyframes autoCheckSpin{to{transform:rotate(360deg)}}
+      #refreshBtn.auto-checking{position:relative;color:transparent!important;pointer-events:none}
+      #refreshBtn.auto-checking:after{
+        content:'';position:absolute;left:50%;top:50%;width:18px;height:18px;margin:-9px 0 0 -9px;
+        border-radius:50%;border:2px solid rgba(232,212,168,.28);border-top-color:#e8d4a8;animation:autoCheckSpin .72s linear infinite;
+      }
+      @media(max-width:760px){#adminAutoCheckChip{right:12px;bottom:12px;min-width:140px;height:36px;font-size:12px}}
+    `;
+    document.head.appendChild(style);
+  }
+
+  function ensureChip(){
+    ensureStyle();
+    let chip = document.getElementById('adminAutoCheckChip');
+    if(!chip){
+      chip = document.createElement('div');
+      chip.id = 'adminAutoCheckChip';
+      chip.className = 'is-idle';
+      chip.innerHTML = '<span class="autoDot"></span><span class="autoText">Tự check 10s</span>';
+      document.body.appendChild(chip);
+    }
+    return chip;
+  }
+
+  function setChecking(on){
+    const chip = ensureChip();
+    const text = chip.querySelector('.autoText');
+    chip.classList.toggle('is-checking', !!on);
+    chip.classList.toggle('is-idle', !on);
+    chip.classList.remove('hidden');
+    if(text) text.textContent = on ? 'Đang kiểm tra...' : 'Tự check 10s';
+    const btn = $('refreshBtn');
+    if(btn){
+      btn.classList.toggle('auto-checking', !!on);
+      btn.title = on ? 'Đang tự kiểm tra yêu cầu mới...' : 'Admin tự kiểm tra yêu cầu mới mỗi 10 giây';
+    }
+  }
+
+  function notifyNew(count){
+    if(count <= 0) return;
+    toast(count === 1 ? 'Có 1 yêu cầu sửa mới' : `Có ${count} yêu cầu sửa mới`);
+    const oldTitle = document.title;
+    document.title = `(${count}) Yêu cầu sửa mới`;
+    setTimeout(() => { document.title = oldTitle || 'Learning Hub Admin'; }, 3500);
+  }
+
+  async function autoCheck(){
+    if(checking) return;
+    if(!client || !user || !profile || !isEditor()) return;
+    if(document.body.classList.contains('is-busy')) return;
+    checking = true;
+    setChecking(true);
+    try{
+      const oldPending = knownPendingIds || pendingIdsFrom(cache.requests);
+      const req = await client.from('edit_requests').select('*').order('created_at', { ascending:false });
+      if(req.error) return;
+
+      const newRequests = req.data || [];
+      const newPending = pendingIdsFrom(newRequests);
+      let newCount = 0;
+      if(knownPendingIds){
+        newPending.forEach(id => { if(!oldPending.has(id)) newCount++; });
+      }
+      knownPendingIds = newPending;
+      cache.requests = newRequests;
+
+      if(isAdmin()){
+        const logs = await client.from('admin_logs').select('*').order('created_at', { ascending:false }).limit(500);
+        if(!logs.error) cache.logs = logs.data || [];
+      }
+
+      render();
+      notifyNew(newCount);
+    }catch(e){
+      console.warn('[Admin auto check]', e);
+    }finally{
+      checking = false;
+      setChecking(false);
+    }
+  }
+
+  function startAutoCheck(){
+    ensureChip();
+    setChecking(false);
+    if(timer) return;
+    timer = setInterval(autoCheck, AUTO_MS);
+    setTimeout(autoCheck, 2500);
+  }
+
+  const oldLoadAll = typeof loadAll === 'function' ? loadAll : null;
+  if(oldLoadAll && !window.__adminAutoCheckLoadingPatched){
+    window.__adminAutoCheckLoadingPatched = true;
+    loadAll = async function(){
+      const res = await oldLoadAll.apply(this, arguments);
+      knownPendingIds = pendingIdsFrom(cache.requests);
+      startAutoCheck();
+      return res;
+    };
+    window.loadAll = loadAll;
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    ensureChip();
+    setChecking(false);
+    setTimeout(startAutoCheck, 1500);
+  });
+})();

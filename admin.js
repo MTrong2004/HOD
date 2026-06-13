@@ -745,3 +745,128 @@ document.addEventListener('DOMContentLoaded', init);
     setTimeout(startAutoCheck, 1500);
   });
 })();
+
+
+// ===== FINAL_ADMIN_SHOW_LAST_ACTIVITY_20260613 =====
+// Tab Người dùng: hiển thị hoạt động gần nhất thay vì chỉ login.
+(function(){
+  function activityTime(p){
+    return p?.last_activity || p?.last_login || p?.updated_at || p?.created_at || '';
+  }
+  function activityBadge(p){
+    const t = activityTime(p);
+    if(!t) return 'Chưa có';
+    const diff = Date.now() - new Date(t).getTime();
+    if(!isFinite(diff)) return date(t);
+    if(diff < 2 * 60 * 1000) return 'Đang hoạt động';
+    if(diff < 60 * 60 * 1000) return Math.max(1, Math.floor(diff / 60000)) + ' phút trước';
+    return date(t);
+  }
+
+  window.renderUsers = renderUsers = function(){
+    const arr = cache.profiles.filter(p => match(`${p.email || ''} ${p.role || ''} ${p.id} ${p.last_activity || ''}`));
+    $('userList').innerHTML = '<div class="userRow muted tableHead"><b>Email</b><b>Role</b><b>TT</b><b>Hoạt động gần nhất</b><b>Hành động</b></div>' + arr.map(p => {
+      const acts = isAdmin()
+        ? `<button class="act" onclick="viewUserEdits('${p.id}')">Lịch sử</button>
+          <button class="act ${isBlocked(p) ? 'ok' : 'bad'}" onclick="toggleBlock('${p.id}',${!isBlocked(p)})">${isBlocked(p) ? 'Unblock' : 'Block'}</button>
+          <button class="act warn" onclick="setRole('${p.id}','${p.role === 'editor' ? 'user' : 'editor'}')">${p.role === 'editor' ? 'Gỡ editor' : 'Cho editor'}</button>
+          <button class="act warn" onclick="setRole('${p.id}','${p.role === 'admin' ? 'user' : 'admin'}')">${p.role === 'admin' ? 'Gỡ admin' : 'Cho admin'}</button>`
+        : `<button class="act" onclick="viewUserEdits('${p.id}')">Lịch sử</button>`;
+      const activeText = activityBadge(p);
+      const activeClass = activeText === 'Đang hoạt động' ? 'activityNow' : '';
+      return `<div class=userRow>
+        <div><div class=mail>${esc(p.email || p.id)}</div><div class=uid>${esc(p.id)}</div></div>
+        <div>${badge(p.role || 'user')}</div>
+        <div>${isBlocked(p) ? badge('blocked') : badge('active')}</div>
+        <div><b class="lastActivity ${activeClass}">${esc(activeText)}</b><div class="uid">${esc(date(activityTime(p)))}</div></div>
+        <div class=actions>${acts}</div>
+      </div>`;
+    }).join('');
+  };
+
+  async function refreshProfilesOnly(){
+    if(!client || !user || !profile || !isEditor()) return;
+    try{
+      const r = await client.from('profiles').select('*').order('last_activity', { ascending:false, nullsFirst:false });
+      if(!r.error){
+        cache.profiles = r.data || [];
+        renderStats();
+        renderUsers();
+      }
+    }catch(e){
+      console.warn('[profiles activity refresh]', e);
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    setInterval(refreshProfilesOnly, 30000);
+    setTimeout(refreshProfilesOnly, 5000);
+  });
+})();
+
+
+// ===== FINAL_ADMIN_SORT_USERS_BY_LAST_ACTIVITY_20260613 =====
+// Đưa người hoạt động gần nhất lên đầu tab Người dùng.
+(function(){
+  function activityTime(p){
+    return p?.last_activity || p?.last_login || p?.updated_at || p?.created_at || '';
+  }
+  function activityMs(p){
+    const t = activityTime(p);
+    const n = t ? new Date(t).getTime() : 0;
+    return Number.isFinite(n) ? n : 0;
+  }
+  function activityBadge(p){
+    const t = activityTime(p);
+    if(!t) return 'Chưa có';
+    const diff = Date.now() - new Date(t).getTime();
+    if(!Number.isFinite(diff)) return date(t);
+    if(diff < 2 * 60 * 1000) return 'Đang hoạt động';
+    if(diff < 60 * 60 * 1000) return Math.max(1, Math.floor(diff / 60000)) + ' phút trước';
+    return date(t);
+  }
+
+  window.renderUsers = renderUsers = function(){
+    const arr = cache.profiles
+      .filter(p => match(`${p.email || ''} ${p.role || ''} ${p.id} ${p.last_activity || ''}`))
+      .sort((a,b) => activityMs(b) - activityMs(a));
+
+    $('userList').innerHTML = '<div class="userRow muted tableHead"><b>Email</b><b>Role</b><b>TT</b><b>Hoạt động gần nhất</b><b>Hành động</b></div>' + arr.map(p => {
+      const acts = isAdmin()
+        ? `<button class="act" onclick="viewUserEdits('${p.id}')">Lịch sử</button>
+          <button class="act ${isBlocked(p) ? 'ok' : 'bad'}" onclick="toggleBlock('${p.id}',${!isBlocked(p)})">${isBlocked(p) ? 'Unblock' : 'Block'}</button>
+          <button class="act warn" onclick="setRole('${p.id}','${p.role === 'editor' ? 'user' : 'editor'}')">${p.role === 'editor' ? 'Gỡ editor' : 'Cho editor'}</button>
+          <button class="act warn" onclick="setRole('${p.id}','${p.role === 'admin' ? 'user' : 'admin'}')">${p.role === 'admin' ? 'Gỡ admin' : 'Cho admin'}</button>`
+        : `<button class="act" onclick="viewUserEdits('${p.id}')">Lịch sử</button>`;
+
+      const activeText = activityBadge(p);
+      const activeClass = activeText === 'Đang hoạt động' ? 'activityNow' : '';
+      return `<div class="userRow activitySortedRow ${activeClass}">
+        <div><div class="mail">${esc(p.email || p.id)}</div><div class="uid">${esc(p.id)}</div></div>
+        <div>${badge(p.role || 'user')}</div>
+        <div>${isBlocked(p) ? badge('blocked') : badge('active')}</div>
+        <div><b class="lastActivity ${activeClass}">${esc(activeText)}</b><div class="uid">${esc(date(activityTime(p)))}</div></div>
+        <div class="actions">${acts}</div>
+      </div>`;
+    }).join('');
+  };
+
+  async function refreshProfilesOnly(){
+    if(!client || !user || !profile || !isEditor()) return;
+    try{
+      const r = await client.from('profiles').select('*').order('last_activity', { ascending:false, nullsFirst:false });
+      if(!r.error){
+        cache.profiles = r.data || [];
+        renderStats();
+        renderUsers();
+      }
+    }catch(e){
+      console.warn('[profiles activity refresh]', e);
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(refreshProfilesOnly, 1500);
+    setInterval(refreshProfilesOnly, 30000);
+  });
+})();

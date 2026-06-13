@@ -2019,3 +2019,108 @@ html,body,button,input,textarea,
     font-size:.88rem!important;
   }
 }
+
+
+/* ===== FINAL_DISABLE_MOBILE_BLUE_TAP_HIGHLIGHT_20260613 ===== */
+/* Tắt lớp phủ xanh khi chạm trên mobile */
+html,
+body,
+*,
+*::before,
+*::after{
+  -webkit-tap-highlight-color: transparent!important;
+}
+button,
+a,
+input,
+textarea,
+select,
+label,
+.tab,
+.btn,
+.navBtn,
+.modeBtn,
+.cnt,
+.primary,
+.start,
+.retry,
+.card,
+.zone,
+.face,
+.opt,
+.qopt,
+.sopt,
+.subjectCard,
+.subjectChoose,
+.hodGoogleClean,
+.hodTopAvatar,
+.hodAccountMenu button,
+.hodOpenReportsBtn,
+.mobileCardNav button,
+.cardToolBtn,
+.edit,
+.modalX{
+  -webkit-tap-highlight-color: transparent!important;
+  tap-highlight-color: transparent!important;
+  touch-action: manipulation;
+  outline-color: transparent!important;
+}
+button:focus,
+a:focus,
+.tab:focus,
+.btn:focus,
+.navBtn:focus,
+.modeBtn:focus,
+.cnt:focus,
+.primary:focus,
+.start:focus,
+.retry:focus,
+.card:focus,
+.zone:focus,
+.opt:focus,
+.qopt:focus,
+.sopt:focus,
+.subjectCard:focus,
+.subjectChoose:focus,
+.hodGoogleClean:focus,
+.hodTopAvatar:focus,
+.hodAccountMenu button:focus,
+.hodOpenReportsBtn:focus,
+.mobileCardNav button:focus,
+.cardToolBtn:focus,
+.edit:focus,
+.modalX:focus{
+  outline:none!important;
+  box-shadow:inherit;
+}
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible{
+  outline:1px solid rgba(232,212,168,.45)!important;
+  outline-offset:2px!important;
+}
+@media(max-width:860px){
+  button,
+  a,
+  input,
+  textarea,
+  select,
+  .tab,
+  .btn,
+  .card,
+  .zone,
+  .subjectCard,
+  .hodGoogleClean,
+  .hodTopAvatar{
+    -webkit-touch-callout:none;
+    -webkit-user-select:none;
+    user-select:none;
+  }
+  input,
+  textarea{
+    -webkit-user-select:text;
+    user-select:text;
+  }
+}

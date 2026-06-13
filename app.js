@@ -745,3 +745,53 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c){const r
   setTimeout(boot, 300);
   setTimeout(boot, 1000);
 })();
+
+
+// ===== FINAL_USER_LAST_ACTIVITY_TRACKING_20260613 =====
+// Cập nhật hoạt động gần nhất của người dùng trên web.
+(function(){
+  const MIN_GAP = 45000;
+  let lastSent = 0;
+  let sending = false;
+
+  function client(){ return window.HODSupabase?.__client || null; }
+  function user(){ return window.HODSupabase?.getUser?.() || null; }
+
+  async function touchActivity(force=false){
+    const c = client();
+    const u = user();
+    if(!c || !u || sending) return;
+    const nowMs = Date.now();
+    if(!force && nowMs - lastSent < MIN_GAP) return;
+    sending = true;
+    lastSent = nowMs;
+    try{
+      await c.from('profiles').update({
+        email: u.email || '',
+        last_activity: new Date().toISOString()
+      }).eq('id', u.id);
+    }catch(e){
+      console.warn('[last_activity]', e);
+    }finally{
+      sending = false;
+    }
+  }
+
+  function bindActivityEvents(){
+    ['click','touchstart','keydown','mousemove','scroll'].forEach(ev => {
+      window.addEventListener(ev, () => touchActivity(false), {passive:true});
+    });
+    document.addEventListener('visibilitychange', () => {
+      if(!document.hidden) touchActivity(true);
+    });
+    window.addEventListener('focus', () => touchActivity(true));
+    setInterval(() => {
+      if(!document.hidden) touchActivity(false);
+    }, 60000);
+  }
+
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindActivityEvents);
+  else bindActivityEvents();
+  setTimeout(() => touchActivity(true), 2500);
+  setTimeout(() => touchActivity(true), 7000);
+})();

@@ -217,3 +217,18 @@ create unique index if not exists uq_edit_requests_one_pending_per_user_question
 drop policy if exists "edit_requests update own pending" on public.edit_requests;
 create policy "edit_requests update own pending" on public.edit_requests for update to authenticated using (user_id = auth.uid() and status = 'pending' and public.is_not_blocked()) with check (user_id = auth.uid() and status = 'pending' and public.is_not_blocked());
 notify pgrst, 'reload schema';
+
+
+-- ===== FINAL_USER_LAST_ACTIVITY_20260613 =====
+-- Theo dõi hoạt động gần nhất của người dùng trên web
+alter table public.profiles add column if not exists last_activity timestamptz;
+
+-- Điền tạm dữ liệu cũ để admin không bị trống
+update public.profiles
+set last_activity = coalesce(last_activity, last_login, created_at, now())
+where last_activity is null;
+
+create index if not exists idx_profiles_last_activity
+on public.profiles(last_activity desc);
+
+notify pgrst, 'reload schema';

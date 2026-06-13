@@ -49,3 +49,55 @@ body{height:100dvh;overflow:hidden}
 @media (max-width:900px){body{font-size:14px}.side{width:210px}.top{padding:0 14px}.topTools{gap:6px}.topTools input{width:190px;max-width:32vw}.workspace{padding:14px}.userRow{grid-template-columns:1fr;align-items:start}.userRow>div{min-width:0}.pageScroll .tableHead{display:none}.compactScroll{max-height:260px}#adminChip{max-width:160px}}
 @media (max-width:680px){body{flex-direction:column}.side{width:100%;border-right:none;border-bottom:1px solid var(--bd);display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:14px}.brand{grid-column:1 / -1;padding-bottom:6px}.foot{grid-column:1 / -1;margin-top:0;grid-template-columns:1fr 1fr}.main{min-height:0}.top{height:auto;align-items:flex-start;gap:12px;padding:12px;flex-direction:column}.topTools{width:100%;flex-wrap:wrap}.topTools input{width:100%;max-width:none}.stats{grid-template-columns:1fr 1fr}.workspace{padding:12px}.filters{display:flex;flex-wrap:wrap;gap:8px}.filter{margin-right:0}.modal{padding:12px}.modalBox{max-width:100%;max-height:90vh}.modalBodyScroll{max-height:72vh}}
 @media (max-width:480px){.stats{grid-template-columns:1fr}.side{grid-template-columns:1fr}.foot{grid-template-columns:1fr}.nav,.foot button{width:100%}.userRow,.item,.panel,.stat{border-radius:16px}}
+
+
+/* ===== FINAL_ADMIN_REPORT_HISTORY_DISPLAY_FIX_20260613 ===== */
+.historyItem,
+.reqItem{
+  padding:16px!important;
+  min-height:0!important;
+}
+.historyHead{
+  align-items:flex-start!important;
+}
+.historyQuestionText{
+  margin:6px 0 0!important;
+  color:rgba(245,240,232,.76)!important;
+  line-height:1.45!important;
+  font-size:.92rem!important;
+  max-width:980px!important;
+  display:-webkit-box!important;
+  -webkit-line-clamp:2!important;
+  -webkit-box-orient:vertical!important;
+  overflow:hidden!important;
+}
+.historyTime{
+  white-space:nowrap!important;
+  padding-left:10px!important;
+}
+.historyUser{
+  margin:6px 0 0!important;
+  font-size:.84rem!important;
+}
+.adminChangeChips,
+.changeChips{
+  margin:10px 0 8px!important;
+  max-height:none!important;
+  overflow:visible!important;
+}
+.adminChangeChips span,
+.changeChips span{
+  font-size:.75rem!important;
+}
+@media(max-width:760px){
+  .historyHead{
+    display:grid!important;
+    gap:8px!important;
+  }
+  .historyTime{
+    padding-left:0!important;
+  }
+  .historyQuestionText{
+    -webkit-line-clamp:3!important;
+  }
+}

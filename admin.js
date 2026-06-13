@@ -445,3 +445,158 @@ document.addEventListener('DOMContentLoaded', init);
 
 // ===== FINAL_ADMIN_DIRECT_EDIT_PATCH_20260613 =====
 (function(){const $=id=>document.getElementById(id);const esc2=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));function optVal(q,k){return(q.options&&q.options[k])?q.options[k]:''}window.editQuestionDirect=function(id){if(!isEditor())return alert('Admin hoặc Editor mới được sửa.');const q=cache.questions.find(x=>x.id===id);if(!q)return alert('Không tìm thấy câu hỏi.');openModal('Sửa trực tiếp câu '+(q.num||q.id),`<div class="field"><label>Câu hỏi</label><textarea id="dqQuestion" style="width:100%;min-height:110px">${esc2(q.question)}</textarea></div><div class="compare" style="grid-template-columns:1fr 1fr">${['A','B','C','D','E'].map(k=>`<div class="field"><label>Đáp án ${k}</label><textarea data-dq-opt="${k}" style="width:100%;min-height:70px">${esc2(optVal(q,k))}</textarea></div>`).join('')}</div><div class="field"><label>Đáp án đúng</label><input id="dqAnswer" value="${esc2(q.answer)}" style="width:100%"></div><div class="field"><label>Giải thích</label><textarea id="dqAnswerText" style="width:100%;min-height:90px">${esc2(q.answer_text||'')}</textarea></div><div class="actions"><button class="act ok" onclick="saveQuestionDirect(${q.id})">Lưu trực tiếp</button></div>`)};window.saveQuestionDirect=async function(id){if(!isEditor())return alert('Admin hoặc Editor mới được sửa.');const q=cache.questions.find(x=>x.id===id);if(!q)return alert('Không tìm thấy câu hỏi.');const ops={};document.querySelectorAll('[data-dq-opt]').forEach(t=>{if((t.value||'').trim())ops[t.dataset.dqOpt]=t.value.trim()});const payload={question:$('dqQuestion').value.trim(),options:ops,answer:$('dqAnswer').value.trim().toUpperCase(),answer_text:$('dqAnswerText').value.trim(),updated_at:new Date().toISOString()};setBusy(true,'Đang lưu...');try{const res=await client.from('questions').update(payload).eq('id',id);if(res.error)return alert(res.error.message);try{await client.from('question_history').insert({question_id:id,request_id:null,previous_data:{question:q.question,options:q.options||{},answer:q.answer,answer_text:q.answer_text,images:q.images||[]},new_data:{...payload,images:q.images||[]},changed_by:user.id,approved_by:user.id})}catch(e){}await logAction('direct_edit_question','questions',id,{});closeModal();await loadAll();toast('Đã sửa trực tiếp')}finally{setBusy(false)}};const oldRQ=renderQuestions;renderQuestions=function(){const arr=cache.questions.filter(q=>match(`${q.num||''} ${q.question||''} ${q.answer||''}`)).slice(0,100);$('questionList').innerHTML=arr.map(q=>`<div class=item><div class=head><b>Câu ${esc(q.num||q.id)}</b>${q.is_active===false?badge('hidden'):badge('active')}</div><p>${esc(q.question)}</p><p class=muted>Đáp án: ${esc(q.answer)}</p><div class=actions><button class=act onclick="viewQuestion(${q.id})">Xem</button><button class="act warn" onclick="editQuestionDirect(${q.id})">Sửa trực tiếp</button><button class="act warn" onclick="toggleQuestion(${q.id},${q.is_active===false})">${q.is_active===false?'Hiện':'Ẩn'}</button></div></div>`).join('')||'<p class=muted>Không có.</p>'};window.renderQuestions=renderQuestions})();
+
+
+// ===== FINAL_ADMIN_REPORT_HISTORY_DISPLAY_FIX_20260613 =====
+// Fix tab Lịch sử/Yêu cầu: hiện đúng số câu, thông tin người gửi và nội dung thay đổi rõ hơn.
+(function(){
+  function findQuestionById(id){
+    return (cache.questions || []).find(q => String(q.id) === String(id)) || null;
+  }
+  function displayQuestionNo(row){
+    const q = findQuestionById(row.question_id);
+    return row.question_num || row.num || q?.num || row.question_id || '?';
+  }
+  function userOf(row){
+    return row.user_email || row.email || row.admin_email || row.changed_by || row.user_id || 'Không rõ người gửi';
+  }
+  function changedListFromData(oldData, newData){
+    const fields = ['question','options','answer','answer_text','images'];
+    return fields.filter(k => safe(oldData?.[k]) !== safe(newData?.[k]));
+  }
+  function historyFields(h){
+    return changedListFromData(h.previous_data || {}, h.new_data || {});
+  }
+  function miniChips(fields){
+    return `<div class="changeChips adminChangeChips">${fields.map(f=>`<span>${esc(labelField(f))}</span>`).join('') || '<span>Chưa rõ thay đổi</span>'}</div>`;
+  }
+  function historyHTML(h){
+    const no = displayQuestionNo(h);
+    const q = findQuestionById(h.question_id);
+    const title = q?.question || h.new_data?.question || h.previous_data?.question || '';
+    const fields = historyFields(h);
+    return `<div class="item historyItem">
+      <div class="head historyHead">
+        <div>
+          <b>Câu ${esc(no)}</b>
+          ${title ? `<p class="muted historyQuestionText">${esc(title)}</p>` : ''}
+        </div>
+        <span class="muted historyTime">${esc(date(h.created_at))}</span>
+      </div>
+      ${miniChips(fields)}
+      <p class="muted historyUser">Người sửa: ${esc(userOf(h))}</p>
+      <div class="actions">
+        <button class="act" onclick="viewHistoryFixed('${esc(h.id || h.question_id || '')}')">Trước/sau</button>
+      </div>
+    </div>`;
+  }
+
+  window.renderHistory = function(){
+    const arr = (cache.history || []).filter(h => match(`${safe(h)} ${displayQuestionNo(h)} ${findQuestionById(h.question_id)?.question || ''}`));
+    $('historyList').innerHTML = arr.map(historyHTML).join('') || '<p class=muted>Chưa có lịch sử chỉnh sửa.</p>';
+  };
+
+  window.viewHistoryFixed = function(id){
+    const h = (cache.history || []).find(x => String(x.id || x.question_id || '') === String(id)) || cache.history[0];
+    if(!h) return;
+    const no = displayQuestionNo(h);
+    openModal(`Lịch sử câu ${no}`, compareHTML(h.previous_data || {}, h.new_data || {}));
+  };
+  window.viewHistory = function(id){
+    const h = (cache.history || []).find(x => String(x.id || 0) === String(id)) || cache.history[0];
+    if(!h) return;
+    const no = displayQuestionNo(h);
+    openModal(`Lịch sử câu ${no}`, compareHTML(h.previous_data || {}, h.new_data || {}));
+  };
+
+  const oldReqHTML = window.reqHTML || (typeof reqHTML === 'function' ? reqHTML : null);
+  window.reqHTML = reqHTML = function(r){
+    const fields = changedFields(r);
+    const userText = r.user_email || r.email || r.user_id || 'Không rõ user';
+    const oldData = r.old_data || getQuestionByReq(r) || {};
+    const newData = r.new_data || {};
+    const preview = newData.question || oldData.question || '';
+    return `<div class="item reqItem ${esc(r.status || '')}">
+      <div class="head">
+        <div>
+          <b>Câu ${esc(questionLabel(r))}</b>
+          ${preview ? `<p class="muted historyQuestionText">${esc(preview)}</p>` : ''}
+          <p class="muted">${esc(date(r.created_at))} · ${esc(userText)}</p>
+        </div>
+        ${badge(r.status)}
+      </div>
+      <div class="changeChips">${fields.map(f => `<span>${esc(labelField(f))}</span>`).join('') || '<span>Chưa rõ thay đổi</span>'}</div>
+      <div class="actions">
+        <button class="act" onclick="viewReq(${r.id})">So sánh</button>
+        ${r.status === 'pending' ? `<button class="act ok" onclick="approve(${r.id})">Duyệt</button><button class="act bad" onclick="rejectReq(${r.id})">Từ chối</button>` : ''}
+      </div>
+    </div>`;
+  };
+
+  const oldRender = window.render || (typeof render === 'function' ? render : null);
+  window.render = render = function(){
+    renderStats();
+    renderRequests();
+    renderUsers();
+    renderHistory();
+    renderLogs();
+    renderQuestions();
+  };
+})();
+
+
+// ===== FINAL_ADMIN_HISTORY_SHOW_EDITOR_EMAIL_20260613 =====
+// Hiển thị Gmail người sửa thay vì UUID trong tab Lịch sử.
+(function(){
+  function emailByUserId(id){
+    if(!id) return '';
+    const p = (cache.profiles || []).find(x => String(x.id) === String(id));
+    return p?.email || '';
+  }
+  function findQuestionById(id){
+    return (cache.questions || []).find(q => String(q.id) === String(id)) || null;
+  }
+  function realQuestionNum(row){
+    const q = findQuestionById(row?.question_id);
+    return row?.question_num || row?.new_data?.num || row?.previous_data?.num || row?.old_data?.num || row?.num || q?.num || row?.question_id || '?';
+  }
+  function realSubjectCode(row){
+    const q = findQuestionById(row?.question_id);
+    return row?.subject_code || row?.new_data?.subject_code || row?.previous_data?.subject_code || row?.old_data?.subject_code || q?.subject_code || '';
+  }
+  function historyTitle(row){
+    const q = findQuestionById(row?.question_id);
+    return row?.new_data?.question || row?.previous_data?.question || row?.old_data?.question || q?.question || '';
+  }
+  function changedKeys(oldData, newData){
+    return ['question','options','answer','answer_text','images'].filter(k => safe(oldData?.[k]) !== safe(newData?.[k]));
+  }
+  function chips(keys){
+    return `<div class="changeChips adminChangeChips">${keys.map(k=>`<span>${esc(labelField(k))}</span>`).join('') || '<span>Chưa rõ thay đổi</span>'}</div>`;
+  }
+  function editorEmail(row){
+    return row?.changed_by_email || row?.user_email || row?.admin_email || emailByUserId(row?.changed_by) || emailByUserId(row?.user_id) || emailByUserId(row?.approved_by) || 'Không rõ email';
+  }
+
+  window.renderHistory = renderHistory = function(){
+    const arr = (cache.history || []).filter(h => match(`${safe(h)} ${realQuestionNum(h)} ${historyTitle(h)} ${realSubjectCode(h)} ${editorEmail(h)}`));
+    $('historyList').innerHTML = arr.map(h => {
+      const no = realQuestionNum(h);
+      const subject = realSubjectCode(h);
+      const title = historyTitle(h);
+      const keys = changedKeys(h.previous_data || {}, h.new_data || {});
+      return `<div class="item historyItem">
+        <div class="head historyHead">
+          <div>
+            <b>${subject ? esc(subject) + ' · ' : ''}Câu ${esc(no)}</b>
+            ${title ? `<p class="muted historyQuestionText">${esc(title)}</p>` : ''}
+          </div>
+          <span class="muted historyTime">${esc(date(h.created_at))}</span>
+        </div>
+        ${chips(keys)}
+        <p class="muted historyUser">Người sửa: ${esc(editorEmail(h))}</p>
+        <div class="actions"><button class="act" onclick="viewHistoryFixed('${esc(h.id || h.question_id || '')}')">Trước/sau</button></div>
+      </div>`;
+    }).join('') || '<p class=muted>Chưa có lịch sử chỉnh sửa.</p>';
+  };
+})();

@@ -692,3 +692,56 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c){const r
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
   setInterval(ensureReportButton, 700);
 })();
+
+
+// ===== FINAL_MOBILE_FLASHCARD_NAVIGATION_20260613 =====
+// Mobile: thêm nút chuyển câu và vuốt trái/phải để đổi flashcard.
+(function(){
+  function $(id){ return document.getElementById(id); }
+  function goPrev(){ if(typeof prev === 'function') prev(); }
+  function goNext(){ if(typeof next === 'function') next(); }
+
+  function ensureMobileNav(){
+    const zone = $('zone');
+    if(!zone || $('mobileCardNav')) return;
+    const nav = document.createElement('div');
+    nav.id = 'mobileCardNav';
+    nav.className = 'mobileCardNav';
+    nav.innerHTML = `
+      <button id="mobilePrev" type="button" aria-label="Câu trước">‹</button>
+      <div class="mobileSwipeHint">Vuốt trái / phải để đổi câu</div>
+      <button id="mobileNext" type="button" aria-label="Câu sau">›</button>`;
+    zone.appendChild(nav);
+    $('mobilePrev')?.addEventListener('click', e => { e.stopPropagation(); goPrev(); });
+    $('mobileNext')?.addEventListener('click', e => { e.stopPropagation(); goNext(); });
+  }
+
+  function bindSwipe(){
+    const zone = $('zone');
+    if(!zone || zone.__mobileSwipeBound) return;
+    zone.__mobileSwipeBound = true;
+    let sx = 0, sy = 0, st = 0;
+    zone.addEventListener('touchstart', e => {
+      const t = e.changedTouches && e.changedTouches[0];
+      if(!t) return;
+      sx = t.clientX; sy = t.clientY; st = Date.now();
+    }, {passive:true});
+    zone.addEventListener('touchend', e => {
+      const t = e.changedTouches && e.changedTouches[0];
+      if(!t) return;
+      const dx = t.clientX - sx;
+      const dy = t.clientY - sy;
+      const fastEnough = Date.now() - st < 900;
+      if(!fastEnough) return;
+      if(Math.abs(dx) > 58 && Math.abs(dx) > Math.abs(dy) * 1.25){
+        e.preventDefault?.();
+        if(dx < 0) goNext(); else goPrev();
+      }
+    }, {passive:false});
+  }
+
+  function boot(){ ensureMobileNav(); bindSwipe(); }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+  setTimeout(boot, 300);
+  setTimeout(boot, 1000);
+})();

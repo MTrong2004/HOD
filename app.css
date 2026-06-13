@@ -1287,3 +1287,564 @@ html,body,button,input,textarea,
     padding-top:48px!important;
   }
 }
+
+
+/* ===== FINAL_MOBILE_FLASHCARD_OPTIMIZE_20260613 ===== */
+/* Tối ưu giao diện Flashcard cho mobile */
+@media(max-width:760px){
+  html,body{
+    height:100dvh!important;
+    overflow:hidden!important;
+  }
+  body{--headH:126px!important;}
+
+  .globalTop{
+    height:74px!important;
+    padding:10px 12px!important;
+    grid-template-columns:minmax(0,1fr) auto!important;
+    gap:8px!important;
+  }
+  .globalTop>div:first-child{
+    gap:3px!important;
+    min-width:0!important;
+  }
+  .globalTop .brand{
+    font-size:1rem!important;
+    letter-spacing:.12em!important;
+    max-width:58vw!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+  }
+  .globalTop .counter{
+    font-size:.76rem!important;
+    max-width:58vw!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+  }
+  .globalTop .actions{
+    gap:6px!important;
+  }
+  .globalTop .actions .btn,
+  .hodTopAvatar{
+    width:38px!important;
+    height:38px!important;
+    min-width:38px!important;
+  }
+
+  .tabs{
+    top:74px!important;
+    height:44px!important;
+    width:calc(100vw - 16px)!important;
+    gap:4px!important;
+    border-radius:0 0 16px 16px!important;
+  }
+  .tab{
+    height:36px!important;
+    font-size:.68rem!important;
+    padding:0 4px!important;
+    letter-spacing:0!important;
+  }
+  .content{
+    padding-top:var(--headH)!important;
+    height:100dvh!important;
+    overflow:hidden!important;
+  }
+  #fc.pane.active{
+    height:calc(100dvh - var(--headH))!important;
+    overflow:hidden!important;
+  }
+  #fc .top,
+  #fc .prog{
+    display:none!important;
+  }
+  #fc .zone{
+    height:100%!important;
+    padding:8px 8px 12px!important;
+    align-items:stretch!important;
+    overflow:hidden!important;
+  }
+  #fc .arrow{
+    display:none!important;
+  }
+  #fc .card{
+    width:100%!important;
+    max-width:100%!important;
+    height:100%!important;
+    min-height:0!important;
+    border-radius:18px!important;
+  }
+  #fc .face{
+    border-radius:18px!important;
+    overflow:hidden!important;
+  }
+  #fc .front,
+  #fc .front.hasImg{
+    display:flex!important;
+    flex-direction:column!important;
+    padding:48px 12px 12px!important;
+    overflow:auto!important;
+    gap:0!important;
+    scrollbar-width:thin!important;
+  }
+  #fc .tag,
+  #fc .front.hasImg #tag{
+    font-size:.58rem!important;
+    padding:3px 9px!important;
+    margin:0 0 8px!important;
+    letter-spacing:.11em!important;
+    max-width:calc(100% - 86px)!important;
+  }
+  #fc .q,
+  #fc .front.hasImg #question{
+    font-size:1rem!important;
+    line-height:1.34!important;
+    font-weight:650!important;
+    margin:0 0 10px!important;
+    padding-right:0!important;
+    letter-spacing:0!important;
+  }
+  #fc .opts{
+    gap:7px!important;
+    overflow:visible!important;
+    flex:0 0 auto!important;
+    margin:0!important;
+  }
+  #fc .opt{
+    min-height:42px!important;
+    padding:8px 9px!important;
+    border-radius:12px!important;
+    gap:8px!important;
+    align-items:flex-start!important;
+  }
+  #fc .letter{
+    width:28px!important;
+    height:28px!important;
+    min-width:28px!important;
+    border-radius:9px!important;
+    font-size:.82rem!important;
+    margin-top:0!important;
+  }
+  #fc .ot{
+    font-size:.92rem!important;
+    line-height:1.34!important;
+    font-weight:500!important;
+  }
+  #fc .imgs,
+  #fc .qimgs,
+  #fc .front.hasImg #images{
+    width:100%!important;
+    display:flex!important;
+    justify-content:center!important;
+    align-items:center!important;
+    flex-wrap:wrap!important;
+    max-height:none!important;
+    overflow:visible!important;
+    margin:4px 0 10px!important;
+    padding:0!important;
+    gap:8px!important;
+  }
+  #fc .imgs img,
+  #fc .qimgs img,
+  #fc .front.hasImg #images img{
+    width:auto!important;
+    max-width:100%!important;
+    max-height:34dvh!important;
+    object-fit:contain!important;
+    border-radius:12px!important;
+  }
+
+  #fc #cardTools,
+  #fc .cardTools{
+    top:10px!important;
+    right:54px!important;
+    gap:6px!important;
+    z-index:120!important;
+  }
+  #fc #cardTools .cardToolBtn,
+  #fc .cardTools .cardToolBtn,
+  #fc .eyeBtn,
+  #fc #editCard,
+  #fc .edit{
+    width:34px!important;
+    height:34px!important;
+    min-width:34px!important;
+    min-height:34px!important;
+    font-size:.95rem!important;
+  }
+  #fc #editCard,
+  #fc .edit{
+    top:10px!important;
+    right:12px!important;
+    z-index:121!important;
+  }
+
+  #fc .back{
+    padding:18px 14px!important;
+    overflow:auto!important;
+  }
+  #fc .answerLetter{
+    min-width:70px!important;
+    min-height:64px!important;
+    font-size:2.35rem!important;
+    border-radius:18px!important;
+    margin-bottom:14px!important;
+  }
+  #fc .answerBox{
+    width:100%!important;
+    padding:14px!important;
+    border-radius:16px!important;
+    max-height:54dvh!important;
+    overflow:auto!important;
+  }
+  #fc .answerText{
+    font-size:1rem!important;
+    line-height:1.42!important;
+    font-weight:550!important;
+  }
+}
+
+@media(max-width:380px){
+  body{--headH:120px!important;}
+  .globalTop{height:70px!important;padding:9px 10px!important;}
+  .tabs{top:70px!important;height:42px!important;}
+  .tab{height:34px!important;font-size:.63rem!important;}
+  #fc .front,#fc .front.hasImg{padding:46px 10px 10px!important;}
+  #fc .q{font-size:.94rem!important;line-height:1.32!important;}
+  #fc .ot{font-size:.86rem!important;}
+  #fc .opt{min-height:39px!important;padding:7px 8px!important;}
+  #fc .letter{width:26px!important;height:26px!important;min-width:26px!important;}
+}
+
+
+/* ===== FINAL_MOBILE_FLASHCARD_LAYOUT_FIX_20260613 ===== */
+/* Fix mobile: thẻ flashcard bị tụt xuống, xuất hiện thanh cuộn trắng và khoảng trống lớn */
+@media(max-width:760px){
+  html,body{
+    width:100%!important;
+    height:100dvh!important;
+    overflow:hidden!important;
+  }
+  body{
+    --headH:122px!important;
+    min-height:100dvh!important;
+  }
+
+  .globalTop{
+    height:72px!important;
+    padding:10px 14px!important;
+    grid-template-columns:minmax(0,1fr) auto!important;
+    align-items:center!important;
+    gap:8px!important;
+  }
+  .globalTop>div:first-child{
+    min-width:0!important;
+    gap:3px!important;
+  }
+  .globalTop .brand{
+    font-size:1.02rem!important;
+    letter-spacing:.14em!important;
+    max-width:56vw!important;
+    overflow:hidden!important;
+    white-space:nowrap!important;
+    text-overflow:ellipsis!important;
+  }
+  .globalTop .counter{
+    font-size:.76rem!important;
+    max-width:56vw!important;
+    overflow:hidden!important;
+    white-space:nowrap!important;
+    text-overflow:ellipsis!important;
+  }
+  .globalTop .actions{
+    gap:7px!important;
+  }
+  .globalTop .actions .btn,
+  .hodTopAvatar{
+    width:38px!important;
+    height:38px!important;
+    min-width:38px!important;
+  }
+
+  .tabs{
+    top:72px!important;
+    left:8px!important;
+    right:8px!important;
+    width:auto!important;
+    transform:none!important;
+    height:44px!important;
+    padding:4px!important;
+    gap:4px!important;
+    border-radius:0 0 16px 16px!important;
+    overflow:hidden!important;
+  }
+  .tab{
+    height:36px!important;
+    margin:0!important;
+    font-size:.68rem!important;
+    letter-spacing:0!important;
+    padding:0 4px!important;
+    min-width:0!important;
+  }
+
+  .content{
+    height:calc(100dvh - var(--headH))!important;
+    padding-top:0!important;
+    margin-top:var(--headH)!important;
+    overflow:hidden!important;
+    min-height:0!important;
+  }
+  #fc.pane,
+  #fc.pane.active{
+    height:100%!important;
+    min-height:0!important;
+    overflow:hidden!important;
+  }
+  #fc .top,
+  #fc .prog,
+  #fc .nav{
+    display:none!important;
+  }
+  #fc .zone{
+    height:100%!important;
+    min-height:0!important;
+    padding:8px!important;
+    overflow:hidden!important;
+    align-items:stretch!important;
+    justify-content:center!important;
+  }
+  #fc .arrow{
+    display:none!important;
+  }
+  #fc .card{
+    width:100%!important;
+    max-width:100%!important;
+    height:100%!important;
+    min-height:0!important;
+    border-radius:18px!important;
+  }
+  #fc .face{
+    border-radius:18px!important;
+    overflow:hidden!important;
+  }
+  #fc .front,
+  #fc .front.hasImg{
+    display:flex!important;
+    flex-direction:column!important;
+    padding:48px 12px 12px!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+    min-height:0!important;
+    scrollbar-width:none!important;
+  }
+  #fc .front::-webkit-scrollbar,
+  #fc .back::-webkit-scrollbar,
+  #fc .answerBox::-webkit-scrollbar{
+    width:0!important;
+    height:0!important;
+    display:none!important;
+  }
+
+  #fc .tag,
+  #fc .front.hasImg #tag{
+    font-size:.58rem!important;
+    padding:3px 9px!important;
+    margin:0 0 8px!important;
+    max-width:calc(100% - 92px)!important;
+  }
+  #fc .q,
+  #fc .front.hasImg #question{
+    font-size:1rem!important;
+    line-height:1.34!important;
+    font-weight:650!important;
+    margin:0 0 10px!important;
+    padding-right:0!important;
+  }
+  #fc .opts{
+    gap:7px!important;
+    overflow:visible!important;
+    flex:0 0 auto!important;
+  }
+  #fc .opt{
+    min-height:42px!important;
+    padding:8px 9px!important;
+    border-radius:12px!important;
+    gap:8px!important;
+    align-items:flex-start!important;
+  }
+  #fc .letter{
+    width:28px!important;
+    height:28px!important;
+    min-width:28px!important;
+    font-size:.82rem!important;
+  }
+  #fc .ot{
+    font-size:.92rem!important;
+    line-height:1.34!important;
+  }
+  #fc .imgs,
+  #fc .qimgs,
+  #fc .front.hasImg #images{
+    width:100%!important;
+    display:flex!important;
+    justify-content:center!important;
+    align-items:center!important;
+    flex-wrap:wrap!important;
+    max-height:none!important;
+    overflow:visible!important;
+    margin:4px 0 10px!important;
+    padding:0!important;
+    gap:8px!important;
+  }
+  #fc .imgs img,
+  #fc .qimgs img,
+  #fc .front.hasImg #images img{
+    max-width:100%!important;
+    max-height:32dvh!important;
+    width:auto!important;
+    height:auto!important;
+    object-fit:contain!important;
+  }
+
+  #fc #cardTools,
+  #fc .cardTools{
+    top:10px!important;
+    right:54px!important;
+    gap:6px!important;
+    z-index:120!important;
+  }
+  #fc #cardTools .cardToolBtn,
+  #fc .cardTools .cardToolBtn,
+  #fc .eyeBtn,
+  #fc #editCard,
+  #fc .edit{
+    width:34px!important;
+    height:34px!important;
+    min-width:34px!important;
+    min-height:34px!important;
+  }
+  #fc #editCard,
+  #fc .edit{
+    top:10px!important;
+    right:12px!important;
+    z-index:121!important;
+  }
+
+  #fc .back{
+    padding:18px 14px!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+    scrollbar-width:none!important;
+  }
+  #fc .answerLetter{
+    min-width:70px!important;
+    min-height:64px!important;
+    font-size:2.35rem!important;
+    border-radius:18px!important;
+    margin-bottom:14px!important;
+  }
+  #fc .answerBox{
+    width:100%!important;
+    padding:14px!important;
+    border-radius:16px!important;
+    max-height:54dvh!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+    scrollbar-width:none!important;
+  }
+  #fc .answerText{
+    font-size:1rem!important;
+    line-height:1.42!important;
+  }
+}
+
+@media(max-width:380px){
+  body{--headH:116px!important;}
+  .globalTop{height:68px!important;padding:8px 10px!important;}
+  .tabs{top:68px!important;height:40px!important;}
+  .tab{height:32px!important;font-size:.62rem!important;}
+  #fc .front,#fc .front.hasImg{padding:44px 10px 10px!important;}
+  #fc .q{font-size:.94rem!important;line-height:1.32!important;}
+  #fc .ot{font-size:.86rem!important;}
+  #fc .opt{min-height:39px!important;padding:7px 8px!important;}
+  #fc .letter{width:26px!important;height:26px!important;min-width:26px!important;}
+}
+
+
+/* ===== FINAL_MOBILE_FLASHCARD_NAVIGATION_20260613 ===== */
+/* Mobile: nút đổi câu + hướng dẫn vuốt trái/phải */
+.mobileCardNav{display:none!important;}
+@media(max-width:760px){
+  .mobileCardNav{
+    position:absolute!important;
+    left:12px!important;
+    right:12px!important;
+    bottom:14px!important;
+    z-index:130!important;
+    display:grid!important;
+    grid-template-columns:44px minmax(0,1fr) 44px!important;
+    align-items:center!important;
+    gap:10px!important;
+    pointer-events:none!important;
+  }
+  .mobileCardNav button{
+    pointer-events:auto!important;
+    width:44px!important;
+    height:44px!important;
+    border-radius:50%!important;
+    border:1px solid rgba(232,212,168,.34)!important;
+    background:rgba(15,10,8,.72)!important;
+    color:var(--gold2)!important;
+    font-size:2rem!important;
+    line-height:1!important;
+    font-weight:900!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    box-shadow:0 12px 28px rgba(0,0,0,.32),inset 0 1px 0 rgba(255,255,255,.05)!important;
+    backdrop-filter:blur(10px)!important;
+  }
+  .mobileCardNav button:active{
+    transform:scale(.94)!important;
+  }
+  .mobileSwipeHint{
+    pointer-events:none!important;
+    justify-self:center!important;
+    max-width:100%!important;
+    padding:8px 12px!important;
+    border-radius:999px!important;
+    border:1px solid rgba(232,212,168,.16)!important;
+    background:rgba(15,10,8,.46)!important;
+    color:rgba(245,240,232,.68)!important;
+    font-size:.72rem!important;
+    font-weight:800!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+    backdrop-filter:blur(8px)!important;
+  }
+  #fc .front,
+  #fc .front.hasImg{
+    padding-bottom:68px!important;
+  }
+  #fc .back{
+    padding-bottom:72px!important;
+  }
+}
+@media(max-width:380px){
+  .mobileCardNav{
+    left:10px!important;
+    right:10px!important;
+    bottom:10px!important;
+    grid-template-columns:40px minmax(0,1fr) 40px!important;
+    gap:8px!important;
+  }
+  .mobileCardNav button{
+    width:40px!important;
+    height:40px!important;
+    font-size:1.8rem!important;
+  }
+  .mobileSwipeHint{
+    font-size:.66rem!important;
+    padding:7px 9px!important;
+  }
+}

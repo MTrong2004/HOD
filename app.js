@@ -3,7 +3,8 @@ window.HOD_DATA=[];
 
 /* ===== merged app logic ===== */
 
-﻿'use strict';const dataEl=document.getElementById('data'),BASE=[],STORE='hod102_user_edits_v1';let edits={};try{edits=JSON.parse(localStorage.getItem(STORE)||'{}')}catch(e){}function clone(x){return JSON.parse(JSON.stringify(x))}let RAW=[],pool=[],ci=Math.max(0,Math.min(+localStorage.getItem('hod102_ci')||0,BASE.length-1)),flipped=false,flipDir='horizontal',cardFontSize=localStorage.getItem('hod102_card_font_size_v3')||'1',flipMode=localStorage.getItem('hod102_flip_mode')||'single',hideOptions=localStorage.getItem('hod102_hide_options')==='1',randomActive=localStorage.getItem('hod102_random_active')==='1',qCnt=20,qSet=[],qDone={},qSel={},quizMode='practice',examSubmitted=false,timerInt=null,examStart=0,editDraft=null;function rebuild(){RAW=BASE.map(c=>Object.assign(clone(c),edits[c.num]||{}));pool=pool.length?pool.map(o=>RAW.find(c=>c.num===o.num)||o):[...RAW]}rebuild();const $=id=>document.getElementById(id);function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}function sortAns(s){return(s||'').split('').sort().join('')}function answerText(c){return(c.answer||'').split('').map(ch=>ch+'. '+(c.options?.[ch]||'')).join('; ')}function optionsHTML(c){return Object.entries(c.options||{}).map(([k,v])=>`<div class="opt"><div class="letter">${k}</div><div class="ot">${esc(v)}</div></div>`).join('')}function imgsHTML(c){return(c.images||[]).map(im=>`<img src="${im.src}" alt="">`).join('')}function setv(k,v){document.documentElement.style.setProperty(k,v)}function fit(c){
+﻿'use strict';const dataEl=document.getElementById('data'),BASE=[],STORE='hod102_user_edits_v1';let edits={};try{edits=JSON.parse(localStorage.getItem(STORE)||'{}')}catch(e){}function clone(x){return JSON.parse(JSON.stringify(x))}
+function notify(msg){const t=document.getElementById('toast');if(!t)return;t.textContent=msg;t.classList.remove('hidden');t.classList.add('show');clearTimeout(t._tid);t._tid=setTimeout(()=>{t.classList.add('hidden');t.classList.remove('show')},2200)}let RAW=[],pool=[],ci=Math.max(0,Math.min(+localStorage.getItem('hod102_ci')||0,BASE.length-1)),flipped=false,flipDir='horizontal',cardFontSize=localStorage.getItem('hod102_card_font_size_v3')||'1',flipMode=localStorage.getItem('hod102_flip_mode')||'single',hideOptions=localStorage.getItem('hod102_hide_options')==='1',randomActive=localStorage.getItem('hod102_random_active')==='1',qCnt=20,qSet=[],qDone={},qSel={},quizMode='practice',examSubmitted=false,timerInt=null,examStart=0,editDraft=null;function rebuild(){RAW=BASE.map(c=>Object.assign(clone(c),edits[c.num]||{}));pool=pool.length?pool.map(o=>RAW.find(c=>c.num===o.num)||o):[...RAW]}rebuild();const $=id=>document.getElementById(id);function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}function sortAns(s){return(s||'').split('').sort().join('')}function answerText(c){return(c.answer||'').split('').map(ch=>ch+'. '+(c.options?.[ch]||'')).join('; ')}function optionsHTML(c){return Object.entries(c.options||{}).map(([k,v])=>`<div class="opt"><div class="letter">${k}</div><div class="ot">${esc(v)}</div></div>`).join('')}function imgsHTML(c){return(c.images||[]).map(im=>`<img src="${esc(im.src)}" alt="">`).join('')}function setv(k,v){document.documentElement.style.setProperty(k,v)}function fit(c){
   setv('--qfs','1.08rem');setv('--ofs','.92rem');setv('--qlh','1.32');setv('--olh','1.36');setv('--afs','1rem');
   setv('--imgmax',(c.images&&c.images.length)?'380px':'0px');setv('--imgcol',(c.images&&c.images.length)?'620px':'0px');
   setv('--frontpad','14px 18px');setv('--optgap','6px');setv('--optpad','7px 10px');setv('--qmb','8px');setv('--imgmb','7px');setv('--tagmb','6px');setv('--letter','25px');setv('--letterfs','.76rem');setv('--tagfs','.62rem');setv('--tagpad','3px 10px');setv('--ogap','8px');
@@ -261,7 +262,7 @@ window.HODSupabase = (() => {
     const count = $id('adminCount');
     if (list) list.innerHTML = '<div class="more">Đang tải...</div>';
     const { data, error } = await client.from('edit_requests').select('*').eq('status','pending').order('created_at',{ascending:false});
-    if (error) { if(list) list.innerHTML = '<div class="more">'+error.message+'</div>'; return; }
+    if (error) { if(list) list.innerHTML = '<div class="more">'+esc(error.message)+'</div>'; return; }
     if (count) count.textContent = `${data.length} yêu cầu`;
     if (!list) return;
     list.innerHTML = data.length ? data.map(r => `
@@ -302,7 +303,7 @@ window.HODSupabase = (() => {
     }).eq('id', id);
     if (rErr) return alert('Không cập nhật request: ' + rErr.message);
 
-    await client.from('question_history').insert({
+    const histResult = await client.from('question_history').insert({
       question_id: req.question_id,
       request_id: req.id,
       previous_data: req.old_data,
@@ -310,9 +311,10 @@ window.HODSupabase = (() => {
       changed_by: req.user_id,
       approved_by: currentUser.id
     });
+    if (histResult.error) console.warn('Không lưu được lịch sử:', histResult.error);
     notify2('Đã duyệt yêu cầu');
-    await loadPendingRequests();
-    await loadQuestionsFromSupabase();
+    try { await loadPendingRequests(); } catch(e) { console.warn('loadPendingRequests failed:', e); }
+    try { await loadQuestionsFromSupabase(); } catch(e) { console.warn('loadQuestions failed:', e); }
   }
 
   async function rejectRequest(id){
@@ -323,7 +325,7 @@ window.HODSupabase = (() => {
     }).eq('id', id);
     if (error) return alert(error.message);
     notify2('Đã từ chối yêu cầu');
-    await loadPendingRequests();
+    try { await loadPendingRequests(); } catch(e) { console.warn('loadPendingRequests failed:', e); }
   }
 
   async function init(){
@@ -351,7 +353,7 @@ window.HODSupabase = (() => {
 
   document.addEventListener('DOMContentLoaded', init);
 
-  return { init, isReady, isAdmin, submitEditRequest, loadQuestionsFromSupabase, openAuth, openAdmin, signOut, signInGoogle, getUser: () => currentUser, getProfile: () => currentProfile, get __client(){ return client; } };
+  return { init, isReady, isAdmin, submitEditRequest, loadQuestionsFromSupabase, openAuth, openAdmin, signOut, signInGoogle, getUser: () => currentUser, getProfile: () => currentProfile, get __client(){ if(typeof console!=='undefined')console.warn('__client is deprecated'); return client; } };
 })();
 
 // ===== HOD Login + Admin UI (added) =====
@@ -419,7 +421,7 @@ window.HODSupabase = (() => {
   function isAdmin(){return !!window.HODSupabase?.isAdmin?.()}
   function email(){return profile()?.email || user()?.email || ''}
   function meta(){return user()?.user_metadata || {}}
-  function avatarHTML(){const u=meta().avatar_url || meta().picture || ''; const e=email(); const l=(e||'U').trim().charAt(0).toUpperCase(); return u ? '<img src="'+u+'" alt="avatar">' : l}
+  function avatarHTML(){const u=meta().avatar_url || meta().picture || ''; const e=email(); const l=(e||'U').trim().charAt(0).toUpperCase(); return u ? '<img src="'+esc(u)+'" alt="avatar">' : l}
   function ensureAvatar(){const actions=document.querySelector('.globalTop .actions')||document.querySelector('#fc .actions')||document.querySelector('.actions'); if(!actions||$('hodTopAvatar'))return; const btn=document.createElement('button'); btn.id='hodTopAvatar'; btn.className='hodTopAvatar'; btn.type='button'; btn.onclick=toggleMenu; actions.appendChild(btn)}
   function toggleMenu(){ if(!user()) return showLogin(); updateMenu(); $('hodAccountMenu')?.classList.toggle('hidden') }
   function showLogin(){ document.body?.classList.add('hod-locked'); $('hodLoginGate')?.classList.remove('hidden'); $('hodAccountMenu')?.classList.add('hidden') }
@@ -483,6 +485,100 @@ window.HODSupabase = (() => {
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', bind); else bind();
 })();
 // ===== LEARNING HUB MERGED SUBJECT PATCH END =====
+
+
+// ===== ADD_SUBJECT_FEATURE_20260614 =====
+(function(){
+  const HUB_URL='https://bdbkpqnhavyoalgkvqtw.supabase.co';
+  const HUB_KEY='sb_publishable_h-AYsKKK57i0uJpBxJeCHA_csNkgjyB';
+  const $=id=>document.getElementById(id);
+  let supa=null;
+  function client(){ if(!window.supabase) return null; if(!supa) supa=window.supabase.createClient(HUB_URL,HUB_KEY); return supa; }
+  function canManage(){
+    const p=window.HODSupabase?.getProfile?.()||null;
+    const u=window.HODSupabase?.getUser?.()||null;
+    const role=String(p?.role||'').toLowerCase();
+    return !!u && (role==='admin'||role==='editor') && !(p?.blocked||p?.is_blocked||p?.status==='blocked');
+  }
+
+  function showAddBtn(){
+    const btn=$('addSubjectBtn');
+    if(!btn) return;
+    btn.classList.toggle('hidden', !canManage());
+  }
+
+  function toggleForm(show){
+    const form=$('addSubjectForm');
+    if(!form) return;
+    form.classList.toggle('hidden', !show);
+    if(show){
+      $('addSubjectCode').value='';
+      $('addSubjectName').value='';
+      $('addSubjectDesc').value='';
+      $('addSubjectCode')?.focus();
+    }
+  }
+
+  async function saveSubject(){
+    const code=($('addSubjectCode')?.value||'').trim().toUpperCase();
+    const name=($('addSubjectName')?.value||'').trim();
+    const desc=($('addSubjectDesc')?.value||'').trim();
+
+    if(!code){ notify('Vui lòng nhập mã môn'); $('addSubjectCode')?.focus(); return; }
+    if(!/^[A-Z0-9_]{2,20}$/.test(code)){ notify('Mã môn chỉ gồm chữ, số, gạch dưới (2-20 ký tự)'); $('addSubjectCode')?.focus(); return; }
+    if(!name){ notify('Vui lòng nhập tên môn'); $('addSubjectName')?.focus(); return; }
+
+    const c=client();
+    if(!c){ notify('Chưa kết nối Supabase'); return; }
+
+    const saveBtn=$('addSubjectSave');
+    if(saveBtn){ saveBtn.disabled=true; saveBtn.textContent='Đang lưu...'; }
+
+    try{
+      const {data:existing}=await c.from('subjects').select('code').eq('code',code).maybeSingle();
+      if(existing){
+        notify('Mã môn '+code+' đã tồn tại');
+        return;
+      }
+
+      const maxOrder=await c.from('subjects').select('sort_order').order('sort_order',{ascending:false}).limit(1);
+      const nextOrder=((maxOrder.data?.[0]?.sort_order)||0)+1;
+
+      const {error}=await c.from('subjects').insert({
+        code: code,
+        name: name,
+        description: desc || null,
+        is_active: true,
+        sort_order: nextOrder
+      });
+
+      if(error){
+        notify('Lỗi: '+error.message);
+        return;
+      }
+
+      notify('Đã thêm môn '+code);
+      toggleForm(false);
+      $('subjectRefresh')?.click();
+    } catch(e){
+      console.warn('Add subject error:', e);
+      notify('Lỗi khi thêm môn học');
+    } finally {
+      if(saveBtn){ saveBtn.disabled=false; saveBtn.textContent='Lưu môn học'; }
+    }
+  }
+
+  function bind(){
+    $('addSubjectBtn')?.addEventListener('click', ()=>toggleForm(true));
+    $('addSubjectCancel')?.addEventListener('click', ()=>toggleForm(false));
+    $('addSubjectSave')?.addEventListener('click', saveSubject);
+    $('addSubjectCode')?.addEventListener('input', function(){ this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,''); });
+    showAddBtn();
+    setInterval(showAddBtn, 2000);
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', bind); else bind();
+})();
+// ===== ADD_SUBJECT_FEATURE END =====
 
 
 // ===== PATCH_NO_LOCAL_QUESTIONS_SUPABASE_ONLY =====
@@ -2471,8 +2567,8 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c){const r
 })();
 
 
-// ===== FINAL_DELETE_REPLACE_OPEN_BUTTON_20260614 =====
-// Đưa nút Xóa vào đúng vị trí chữ "Mở" trong tab Tất cả.
+// ===== FINAL_DELETE_BUTTON_BESIDE_OPEN_20260614 =====
+// Nút Xóa nằm CẠNH nút Mở/Thu gọn, không xóa nút Mở.
 (function(){
   function $(id){ return document.getElementById(id); }
   function canManage(){
@@ -2490,67 +2586,62 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c){const r
     const m = String(card?.textContent || '').match(/CÂU\s*(\d+)/i);
     return m ? Number(m[1]) : null;
   }
-  function fixDeleteButtonPosition(){
+  function addDeleteButtons(){
     const list = $('studyList');
     if(!list) return;
     const show = canManage() && isStudyTab();
-    document.body.classList.toggle('delete-replaces-open', show);
+    document.body.classList.toggle('study-has-delete', show);
 
     list.querySelectorAll('.sitem, .compactStudyCard').forEach(card => {
-      card.querySelectorAll('.expandHint').forEach(x => x.remove());
       let holder = card.querySelector('.compactCardRight');
       if(!holder){
         holder = document.createElement('div');
-        holder.className = 'compactCardRight studyActionRight';
+        holder.className = 'compactCardRight';
         const line = card.querySelector('.compactCardLine');
         if(line) line.appendChild(holder); else card.appendChild(holder);
       }
-      if(!show) return;
+      const existing = card.querySelector('.studyDeleteAction');
+      if(!show){ if(existing) existing.remove(); return; }
       const num = getNum(card);
       if(!num) return;
       card.dataset.num = String(num);
-      let btn = card.querySelector('.studyDeleteAction');
-      if(!btn){
-        btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'studyDeleteAction';
-        btn.dataset.deleteNum = String(num);
-        btn.title = 'Xóa câu ' + num;
-      }
-      btn.textContent = 'Xóa';
-      btn.classList.add('replaceOpenDeleteBtn');
+      if(existing){ existing.dataset.deleteNum = String(num); return; }
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'studyDeleteAction';
       btn.dataset.deleteNum = String(num);
       btn.title = 'Xóa câu ' + num;
-      holder.appendChild(btn); // nằm đúng chỗ nút Mở cũ, ngoài cùng bên phải
+      btn.textContent = 'Xóa';
+      holder.appendChild(btn);
     });
   }
   function patchRender(){
-    if(window.__deleteReplaceOpenRenderPatched20260614) return;
+    if(window.__deleteButtonRenderPatched) return;
     const old = typeof renderStudy === 'function' ? renderStudy : null;
     if(!old) return;
-    window.__deleteReplaceOpenRenderPatched20260614 = true;
+    window.__deleteButtonRenderPatched = true;
     renderStudy = function(){
       const r = old.apply(this, arguments);
-      setTimeout(fixDeleteButtonPosition, 0);
-      setTimeout(fixDeleteButtonPosition, 100);
+      setTimeout(addDeleteButtons, 0);
+      setTimeout(addDeleteButtons, 100);
       return r;
     };
     window.renderStudy = renderStudy;
   }
   function boot(){
     patchRender();
-    fixDeleteButtonPosition();
+    addDeleteButtons();
     document.querySelectorAll('.tab').forEach(t => {
-      if(t.__replaceOpenDeleteBound) return;
-      t.__replaceOpenDeleteBound = true;
-      t.addEventListener('click', () => setTimeout(fixDeleteButtonPosition, 100));
+      if(t.__deleteBtnBound) return;
+      t.__deleteBtnBound = true;
+      t.addEventListener('click', () => setTimeout(addDeleteButtons, 100));
     });
   }
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
   setTimeout(boot, 300);
   setTimeout(boot, 1000);
-  setInterval(fixDeleteButtonPosition, 1500);
+  setInterval(addDeleteButtons, 1500);
 })();
 
 
@@ -2568,16 +2659,19 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c){const r
   function getQ(num){ num=Number(num); return (RAW||[]).find(q=>Number(q.num)===num) || null; }
 
   async function doDelete(num){
-    const q=getQ(num); if(!q) return alert('Không thấy câu');
-    if(!canManage()) return alert('Không có quyền');
-    if(!confirm('Xóa câu '+num+'?')) return;
-    const c=client(); if(!c) return alert('Chưa kết nối');
-    const {error}= await c.from('questions').update({is_active:false, updated_at:new Date().toISOString()}).eq(q.id? 'id':'num', q.id||num);
-    if(error) return alert('Lỗi: '+error.message);
+    num = Number(num);
+    const q=getQ(num); if(!q) return notify('Không thấy câu ' + num);
+    if(!canManage()) return notify('Không có quyền xóa');
+    if(!confirm('Xóa câu '+num+'?\nCâu hỏi sẽ bị ẩn (soft delete).')) return;
+    const c=client(); if(!c) return notify('Chưa kết nối Supabase');
+    const col = q.id ? 'id' : 'num';
+    const val = q.id || num;
+    const {error}= await c.from('questions').update({is_active:false, updated_at:new Date().toISOString()}).eq(col, val);
+    if(error) return notify('Lỗi xóa: '+error.message);
     RAW = (RAW||[]).filter(x=>Number(x.num)!==num);
     pool = (pool||[]).filter(x=>Number(x.num)!==num);
     try{ renderStudy?.(); renderCard?.(); renderQuiz?.(); }catch(e){}
-    alert('Đã xóa');
+    notify('Đã xóa câu ' + num);
   }
 
   if(!document.__deleteActionBound){
@@ -2586,6 +2680,7 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c){const r
       const btn = e.target.closest && e.target.closest('.studyDeleteAction');
       if(!btn) return;
       e.preventDefault();
+      e.stopPropagation();
       doDelete(btn.dataset.deleteNum);
     });
   }

@@ -43,7 +43,7 @@ function toast(t) {
 }
 
 function err(t) {
-  $('errorBox').innerHTML = t;
+  $('errorBox').textContent = typeof t === 'string' ? t.replace(/<[^>]*>/g, '') : String(t);
   $('errorBox').classList.remove('hidden');
 }
 
@@ -77,7 +77,7 @@ function bind() {
   $('googleBtn').onclick = () => client.auth.signInWithOAuth({
     provider: 'google',
     options: { redirectTo: location.href.split('#')[0] }
-  });
+  }).catch(e => { console.warn('OAuth error:', e); alert('Đăng nhập thất bại: ' + (e.message || e)); });
   $('logoutBtn').onclick = logout;
   $('denyLogout').onclick = logout;
   $('openStudy').onclick = () => open('index.html', '_blank');
@@ -129,7 +129,7 @@ async function loadProfile() {
 async function safeLoad(name, promise, silent = false) {
   const r = await promise;
   if (r.error) {
-    if (!silent) err(`Lỗi bảng <b>${name}</b>: ${esc(r.error.message)}`);
+    if (!silent) err('Lỗi bảng ' + name + ': ' + (r.error.message || 'Unknown error'));
     return [];
   }
   return r.data || [];
@@ -154,7 +154,7 @@ async function loadAll() {
 }
 
 async function logAction(a, t, id, d) {
-  if (!isAdmin()) return;
+  if (!isAdmin() || !user) return;
   try {
     await client.from('admin_logs').insert({
       admin_id: user.id,
@@ -164,7 +164,7 @@ async function logAction(a, t, id, d) {
       target_id: String(id || ''),
       details: d || {}
     });
-  } catch (e) {}
+  } catch (e) { console.warn('logAction failed:', e); }
 }
 
 function key() {
@@ -345,6 +345,7 @@ function viewUserEdits(uid) {
 async function approve(id) {
   const r = cache.requests.find(x => x.id === id);
   if (!r || r.status !== 'pending') return;
+  if (!user) return alert('Chưa đăng nhập.');
   if (!confirm(`Duyệt thay đổi cho câu ${questionLabel(r)}?`)) return;
 
   const q = r.new_data || {};
@@ -359,12 +360,14 @@ async function approve(id) {
     }).eq('id', r.question_id);
     if (u.error) return alert(u.error.message);
 
-    await client.from('edit_requests').update({
+    const reqUpdate = await client.from('edit_requests').update({
       status: 'approved',
       reviewed_at: new Date().toISOString(),
       reviewed_by: user.id
     }).eq('id', id);
-    await client.from('question_history').insert({
+    if (reqUpdate.error) console.warn('Không cập nhật được request:', reqUpdate.error);
+
+    const histInsert = await client.from('question_history').insert({
       question_id: r.question_id,
       request_id: r.id,
       previous_data: r.old_data,
@@ -372,6 +375,8 @@ async function approve(id) {
       changed_by: r.user_id,
       approved_by: user.id
     });
+    if (histInsert.error) console.warn('Không lưu được lịch sử:', histInsert.error);
+
     await logAction('approve_request', 'edit_requests', id, {});
     await loadAll();
   } finally {
@@ -382,6 +387,7 @@ async function approve(id) {
 async function rejectReq(id) {
   const r = cache.requests.find(x => x.id === id);
   if (!r || r.status !== 'pending') return;
+  if (!user) return alert('Chưa đăng nhập.');
   const note = prompt('Lý do từ chối:');
   if (note === null) return;
 
@@ -403,7 +409,7 @@ async function rejectReq(id) {
 
 async function toggleBlock(id, b) {
   if (!isAdmin()) return alert('Chỉ admin được block.');
-  if (id === user.id && b) return alert('Không nên tự khóa tài khoản đang dùng.');
+  if (user && id === user.id && b) return alert('Không nên tự khóa tài khoản đang dùng.');
   if (!confirm(`${b ? 'Block' : 'Unblock'} user này?`)) return;
   const r = await client.from('profiles').update({ blocked: b }).eq('id', id);
   if (r.error) return alert(r.error.message);
@@ -413,7 +419,7 @@ async function toggleBlock(id, b) {
 
 async function setRole(id, role) {
   if (!isAdmin()) return alert('Chỉ admin được cấp/gỡ quyền.');
-  if (id === user.id && role !== 'admin') return alert('Không nên tự gỡ quyền admin của tài khoản đang dùng.');
+  if (user && id === user.id && role !== 'admin') return alert('Không nên tự gỡ quyền admin của tài khoản đang dùng.');
   if (!confirm(`Đổi vai trò thành ${role}?`)) return;
   const r = await client.from('profiles').update({ role }).eq('id', id);
   if (r.error) return alert(r.error.message);
@@ -984,18 +990,28 @@ document.addEventListener('DOMContentLoaded', init);
   };
 
   window.deleteQuestionAdmin = async function(id){
-    if(!isAdmin()) return alert('Chỉ admin mới được xóa vĩnh viễn.');
+    if(!isAdmin()) return alert('Chỉ admin mới được xóa.');
     const q = (cache.questions || []).find(x => String(x.id) === String(id));
     if(!q) return alert('Không tìm thấy câu hỏi.');
-    const ok = confirm(`Xóa vĩnh viễn ${q.subject_code || ''} - Câu ${q.num || q.id}?\n\nThao tác này không khôi phục được.`);
+    const ok = confirm(`Xóa ${q.subject_code || ''} - Câu ${q.num || q.id}?\n\nCâu hỏi sẽ được chuyển vào Thùng rác.`);
     if(!ok) return;
     setBusy(true, 'Đang xóa...');
     try{
+      let backedUp = false;
+      try{
+        const backup = await client.from('deleted_questions').insert({
+          id: q.id,
+          original_data: q,
+          deleted_by: user?.id,
+          deleted_by_email: user?.email || profile?.email
+        });
+        backedUp = !backup.error;
+      }catch(e){}
       const r = await client.from('questions').delete().eq('id', id);
       if(r.error) return alert('Không xóa được: ' + r.error.message + '\nBạn có thể dùng nút Ẩn thay thế.');
       await logAction('delete_question', 'questions', id, { subject_code: q.subject_code, num: q.num });
       await loadAll();
-      toast('Đã xóa câu hỏi');
+      toast(backedUp ? 'Đã chuyển vào Thùng rác' : 'Đã xóa (chưa có bảng backup)');
     }finally{
       setBusy(false);
     }
@@ -1261,7 +1277,7 @@ document.addEventListener('DOMContentLoaded', init);
   function imagesHTML(q){
     const imgs = Array.isArray(q.images) ? q.images.map(imageSrc).filter(Boolean) : [];
     if(!imgs.length) return '';
-    return `<div class="adminQuestionImages">${imgs.map(src => `<img src="${esc(src)}" loading="lazy" onclick="openImagePreviewAdmin('${esc(src)}')">`).join('')}</div>`;
+    return `<div class="adminQuestionImages">${imgs.map(src => `<img src="${esc(src)}" loading="lazy" onclick="openImagePreviewAdmin(decodeURIComponent('${encodeURIComponent(src)}'))">`).join('')}</div>`;
   }
   window.openImagePreviewAdmin = function(src){
     openModal('Xem ảnh', `<div class="adminImagePreview"><img src="${esc(src)}"></div>`);
@@ -1270,16 +1286,20 @@ document.addEventListener('DOMContentLoaded', init);
   async function loadAllRows(table, orderCol){
     let from = 0;
     let rows = [];
-    while(true){
+    const MAX_PAGES = 200;
+    let page = 0;
+    while(page < MAX_PAGES){
+      page++;
       let q = client.from(table).select('*');
       if(orderCol) q = q.order(orderCol, { ascending:true });
       const r = await q.range(from, from + PAGE_SIZE - 1);
-      if(r.error){ err(`Lỗi bảng <b>${table}</b>: ${esc(r.error.message)}`); return rows; }
+      if(r.error){ err('Lỗi bảng ' + table + ': ' + esc(r.error.message)); return rows; }
       const data = r.data || [];
       rows = rows.concat(data);
       if(data.length < PAGE_SIZE) break;
       from += PAGE_SIZE;
     }
+    if(page >= MAX_PAGES) console.warn('loadAllRows: đã đạt giới hạn ' + MAX_PAGES + ' trang cho bảng ' + table);
     return rows;
   }
 
@@ -2634,6 +2654,98 @@ document.addEventListener('DOMContentLoaded', init);
 
     const raw = rawSearch();
     const note = raw ? `Tìm thấy ${arr.length} / ${cache.questions.length} câu với từ khóa: “${esc(raw)}”. Câu khớp trong đáp án sẽ tự mở.` : `Đang hiển thị ${arr.length} / ${cache.questions.length} câu${STATE.subject!=='all'?' của môn '+esc(STATE.subject):''}.`;
-    $('questionList').innerHTML = toolbar + `<div class="questionResultNote smartSearchNote compactSearchNote">${note}</div>` + html;
+    $('questionList').innerHTML = toolbar + `<div class=”questionResultNote smartSearchNote compactSearchNote”>${note}</div>` + html;
   };
+})();
+
+// ===== TRASH_BIN_20260614 =====
+(function(){
+  let trashItems = [];
+
+  window.loadTrash = async function(){
+    if(!isAdmin()) return;
+    const el = $('trashList');
+    const cnt = $('trashCount');
+    if(el) el.innerHTML = '<p class=”muted”>Đang tải...</p>';
+    const {data, error} = await client.from('deleted_questions').select('*').order('deleted_at',{ascending:false});
+    if(error){ if(el) el.innerHTML = '<p class=”muted”>Lỗi: '+esc(error.message)+'</p>'; return; }
+    trashItems = data || [];
+    if(cnt) cnt.textContent = trashItems.length + ' câu';
+    if(!el) return;
+    if(!trashItems.length){ el.innerHTML = '<p class=”muted”>Thùng rác trống.</p>'; return; }
+    el.innerHTML = trashItems.map(t => {
+      const q = t.original_data || {};
+      return `<div class=”item trashItem”>
+        <div class=”head”>
+          <div><b>${esc(q.subject_code||'')} - Câu ${esc(String(q.num||q.id||'?'))}</b>
+          <span class=”badge deleted”>Đã xóa</span></div>
+          <span class=”muted”>${esc(date(t.deleted_at))} · ${esc(t.deleted_by_email||'')}</span>
+        </div>
+        <p>${esc(String(q.question||'').substring(0,120))}${(q.question||'').length>120?'...':''}</p>
+        <p class=”muted”>Đáp án: ${esc(q.answer||'')}</p>
+        <div class=”actions”>
+          <button class=”act ok” onclick=”restoreQuestion(${t.id})”>Khôi phục</button>
+          <button class=”act bad” onclick=”permanentDelete(${t.id})”>Xóa vĩnh viễn</button>
+          <button class=”act” onclick=”viewTrashDetail(${t.id})”>Xem</button>
+        </div>
+      </div>`;
+    }).join('');
+  };
+
+  window.restoreQuestion = async function(id){
+    if(!isAdmin()) return alert('Chỉ admin mới khôi phục được.');
+    const t = trashItems.find(x => x.id === id);
+    if(!t) return alert('Không tìm thấy.');
+    if(!confirm('Khôi phục câu hỏi này?')) return;
+    setBusy(true,'Đang khôi phục...');
+    try{
+      const q = t.original_data;
+      const ins = await client.from('questions').insert(q);
+      if(ins.error) return alert('Không khôi phục được: '+ins.error.message);
+      await client.from('deleted_questions').delete().eq('id',id);
+      await logAction('restore_question','questions',q.id,{subject_code:q.subject_code,num:q.num});
+      await loadAll();
+      await loadTrash();
+      toast('Đã khôi phục');
+    }finally{ setBusy(false); }
+  };
+
+  window.permanentDelete = async function(id){
+    if(!isAdmin()) return alert('Chỉ admin.');
+    const t = trashItems.find(x => x.id === id);
+    if(!t) return alert('Không tìm thấy.');
+    const q = t.original_data || {};
+    if(!confirm('Xóa VĨNH VIỄN câu '+esc(String(q.num||q.id||'?'))+'?\n\nKhông thể khôi phục sau thao tác này!')) return;
+    setBusy(true,'Đang xóa vĩnh viễn...');
+    try{
+      const r = await client.from('deleted_questions').delete().eq('id',id);
+      if(r.error) return alert('Lỗi: '+r.error.message);
+      await logAction('permanent_delete','deleted_questions',id,{subject_code:q.subject_code,num:q.num});
+      await loadTrash();
+      toast('Đã xóa vĩnh viễn');
+    }finally{ setBusy(false); }
+  };
+
+  window.viewTrashDetail = function(id){
+    const t = trashItems.find(x => x.id === id);
+    if(!t) return;
+    const q = t.original_data || {};
+    openModal('Chi tiết câu đã xóa',`
+      <p><b>Môn:</b> ${esc(q.subject_code||'')}</p>
+      <p><b>Câu ${esc(String(q.num||''))}:</b> ${esc(q.question||'')}</p>
+      <p><b>Đáp án:</b> ${esc(q.answer||'')} ${q.answer_text?'- '+esc(q.answer_text):''}</p>
+      <p><b>Xóa lúc:</b> ${esc(date(t.deleted_at))}</p>
+      <p><b>Xóa bởi:</b> ${esc(t.deleted_by_email||'')}</p>
+      <div class=”actions” style=”margin-top:12px”>
+        <button class=”act ok” onclick=”restoreQuestion(${t.id});closeModal();”>Khôi phục</button>
+        <button class=”act bad” onclick=”permanentDelete(${t.id});closeModal();”>Xóa vĩnh viễn</button>
+      </div>
+    `);
+  };
+
+  document.querySelectorAll('.nav').forEach(b => {
+    if(b.dataset.page === 'trash'){
+      b.addEventListener('click', () => setTimeout(loadTrash, 50));
+    }
+  });
 })();

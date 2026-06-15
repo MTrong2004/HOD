@@ -52,6 +52,28 @@
     </div>
     <div class="subjectGateTools">
       <input id="subjectSearch" type="text" placeholder="Tìm mã môn hoặc tên môn...">
+      <button id="addSubjectBtn" class="btn addSubjectBtn hidden" type="button">+ Thêm môn</button>
+    </div>
+    <div id="addSubjectForm" class="addSubjectForm hidden">
+      <h3>Thêm môn học mới</h3>
+      <div class="addSubjectFields">
+        <div class="addSubjectField">
+          <label for="addSubjectCode">Mã môn <span class="req">*</span></label>
+          <input id="addSubjectCode" type="text" placeholder="VD: ABC123" maxlength="20">
+        </div>
+        <div class="addSubjectField">
+          <label for="addSubjectName">Tên môn <span class="req">*</span></label>
+          <input id="addSubjectName" type="text" placeholder="VD: ABC123 Learning" maxlength="100">
+        </div>
+        <div class="addSubjectField full">
+          <label for="addSubjectDesc">Mô tả</label>
+          <textarea id="addSubjectDesc" placeholder="Mô tả ngắn về môn học..." rows="2" maxlength="300"></textarea>
+        </div>
+      </div>
+      <div class="addSubjectActions">
+        <button id="addSubjectSave" class="primary" type="button">Lưu môn học</button>
+        <button id="addSubjectCancel" class="btn" type="button">Hủy</button>
+      </div>
     </div>
     <div id="subjectLoading" class="subjectState subjectLoading hidden">Đang tải danh sách môn học...</div>
     <div id="subjectError" class="subjectState subjectError hidden">Không tải được danh sách môn học. Đang dùng môn mặc định.</div>

@@ -101,6 +101,9 @@ function bind() {
 }
 
 async function logout() {
+  // Xóa nhãn đăng nhập trong bộ nhớ tạm để lần sau đăng nhập lại Bot sẽ thông báo tiếp
+  sessionStorage.removeItem('is_logged_in');
+
   await client.auth.signOut();
   show('login');
 }
@@ -124,6 +127,20 @@ async function loadProfile() {
   profile = r.data || { id: user.id, email: user.email, role: 'user' };
   $('adminChip').textContent = `${profile.email || user.email} · ${profile.role}`;
   document.body.classList.toggle('role-admin', isAdmin());
+
+  // ===== CHỈ THÔNG BÁO LOGIN KHI KHÔNG PHẢI LÀ F5 =====
+  if (profile) {
+    // Kiểm tra xem trong bộ nhớ tạm của lần duyệt này đã có nhãn "is_logged_in" chưa
+    const isAlreadyNotified = sessionStorage.getItem('is_logged_in');
+
+    if (!isAlreadyNotified) {
+      // Nếu chưa có nhãn (tức là vừa đăng nhập mới hoặc đổi tài khoản), tiến hành gửi Discord
+      await sendLoginToDiscord(profile.email || user.email, profile.role || 'user');
+      
+      // Gửi xong thì dán nhãn lại để nếu có F5 trang, Bot sẽ không gửi trùng nữa
+      sessionStorage.setItem('is_logged_in', 'true');
+    }
+  }
 }
 
 async function safeLoad(name, promise, silent = false) {
@@ -157,6 +174,7 @@ async function loadAll() {
 async function logAction(a, t, id, d) {
   if (!isAdmin() || !user) return;
   try {
+    // 1. Ghi vào Database Supabase để lưu trữ lịch sử hệ thống
     await client.from('admin_logs').insert({
       admin_id: user.id,
       admin_email: user.email,
@@ -165,7 +183,13 @@ async function logAction(a, t, id, d) {
       target_id: String(id || ''),
       details: d || {}
     });
-  } catch (e) { console.warn('logAction failed:', e); }
+
+    // 2. Kích hoạt lệnh gửi thông báo màu sắc sang Discord ngay lập tức từ mạng của Web
+    await sendActionToDiscord(a, t, id, d);
+    
+  } catch (e) { 
+    console.warn('logAction failed:', e); 
+  }
 }
 
 function key() {
@@ -4447,4 +4471,70 @@ Hãy tạo càng nhiều câu hỏi càng tốt từ tài liệu, bao phủ tấ
     }
   });
 })();
+
+// ===== DISCORD_NOTIFICATIONS_CLIENT_SIDE_PATCH_20260625 =====
+async function sendActionToDiscord(actionName, targetType, targetId, details) {
+  const discordUrl = 'https://discord.com/api/webhooks/1519452717947420732/j-EVKdyuRYHRXU6MJbW9z_2lAy-wV2XnEOVULJEtDSgtignSVh2fWTTJKFgHj2MgoTJQ';
+  
+  // Xác định màu sắc (Color) dựa trên vai trò hiện tại của tài khoản Admin đang thao tác
+  // Admin: Đỏ (10038562), Editor: Xanh lá (3066993), Khác: Xanh dương (3447003)
+  let embedColor = 3447003; 
+  if (profile && profile.role === 'admin') embedColor = 10038562;
+  else if (profile && profile.role === 'editor') embedColor = 3066993;
+
+  const payload = {
+    embeds: [{
+      title: `⚙️ HÀNH ĐỘNG HỆ THỐNG: ${String(actionName || '').toUpperCase()}`,
+      color: embedColor,
+      fields: [
+        { name: '👤 Tài khoản', value: user?.email || profile?.email || 'N/A', inline: true },
+        { name: '🎭 Vai trò', value: profile?.role || 'user', inline: true },
+        { name: '🔢 Đối tượng', value: `${targetType || 'N/A'} (ID: ${targetId || 'N/A'})`, inline: false },
+        { name: '⏰ Thời điểm', value: new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }), inline: false }
+      ]
+    }]
+  };
+
+  try {
+    await fetch(discordUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  } catch (error) {
+    console.warn('Lỗi gửi Discord Client:', error);
+  }
+}
+
+
+// Hàm chuyên biệt để thông báo khi có người đăng nhập thành công vào hệ thống
+async function sendLoginToDiscord(email, role) {
+  const discordUrl = 'https://discord.com/api/webhooks/1519452717947420732/j-EVKdyuRYHRXU6MJbW9z_2lAy-wV2XnEOVULJEtDSgtignSVh2fWTTJKFgHj2MgoTJQ';
+  
+  let embedColor = 3447003; 
+  if (role === 'admin') embedColor = 10038562; // Admin màu đỏ
+  else if (role === 'editor') embedColor = 3066993; // Editor màu xanh lá
+
+  const payload = {
+    embeds: [{
+      title: `🔑 ĐĂNG NHẬP HỆ THỐNG THÀNH CÔNG`,
+      color: embedColor,
+      fields: [
+        { name: '👤 Tài khoản Gmail', value: email || 'N/A', inline: true },
+        { name: '🎭 Vai trò', value: role || 'user', inline: true },
+        { name: '⏰ Thời điểm', value: new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }), inline: false }
+      ]
+    }]
+  };
+
+  try {
+    await fetch(discordUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  } catch (error) {
+    console.warn('Lỗi gửi thông báo login:', error);
+  }
+}
 

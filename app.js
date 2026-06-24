@@ -126,6 +126,19 @@ window.HODSupabase = (() => {
     }
   }
 
+  function showPendingApproval(){
+    const el = $id('hodPendingApproval');
+    if(el) el.classList.remove('hidden');
+    const emailEl = $id('hodPendingEmail');
+    if(emailEl) emailEl.textContent = currentUser?.email || '';
+    $id('hodLoginGate')?.classList.add('hidden');
+    document.body?.classList.add('hod-locked');
+  }
+  function hidePendingApproval(){
+    const el = $id('hodPendingApproval');
+    if(el) el.classList.add('hidden');
+  }
+
   async function loadProfile(){
     if (!client || !currentUser) { currentProfile = null; updateAuthUI(); return null; }
     const now = new Date().toISOString();
@@ -137,13 +150,28 @@ window.HODSupabase = (() => {
     else console.warn('Không đọc được profile:', sel.error);
 
     if (!existing) {
+      let regMode = 'approval';
+      try{
+        const {data:setting} = await client.from('site_settings').select('value').eq('key','registration_mode').maybeSingle();
+        if(setting && setting.value){
+          regMode = typeof setting.value === 'string' ? setting.value.replace(/"/g,'') : String(setting.value);
+        }
+      }catch(e){}
+
+      if(regMode === 'closed'){
+        alert('Hệ thống hiện không cho phép đăng ký mới. Vui lòng liên hệ admin.');
+        await signOut();
+        return null;
+      }
+
+      const autoApprove = (regMode === 'open');
       const ins = await client.from('profiles')
-        .insert({ ...base, role: 'user', blocked: false })
+        .insert({ ...base, role: 'user', blocked: false, approved: autoApprove })
         .select('*')
         .single();
       if (ins.error) {
         console.warn('Không tạo được profile mới:', ins.error);
-        currentProfile = { ...base, role: 'user', blocked: false };
+        currentProfile = { ...base, role: 'user', blocked: false, approved: autoApprove };
       } else currentProfile = ins.data;
     } else {
       const upd = await client.from('profiles')
@@ -162,6 +190,13 @@ window.HODSupabase = (() => {
       await signOut();
       return null;
     }
+
+    if (currentProfile?.approved === false) {
+      showPendingApproval();
+      return null;
+    }
+    hidePendingApproval();
+
     updateAuthUI();
     return currentProfile;
   }
@@ -336,17 +371,28 @@ window.HODSupabase = (() => {
     $id('authClose')?.addEventListener('click', closeAuth);
     $id('adminClose')?.addEventListener('click', closeAdmin);
     $id('adminReload')?.addEventListener('click', loadPendingRequests);
+    $id('hodPendingRefresh')?.addEventListener('click', async () => {
+      const btn = $id('hodPendingRefresh');
+      if(btn){ btn.disabled = true; btn.textContent = 'Đang kiểm tra...'; }
+      await loadProfile();
+      if(currentProfile?.approved !== false) await loadQuestionsFromSupabase();
+      if(btn){ btn.disabled = false; btn.textContent = 'Kiểm tra lại'; }
+    });
+    $id('hodPendingLogout')?.addEventListener('click', async () => {
+      await signOut();
+      hidePendingApproval();
+    });
 
     if (!configured()) { updateAuthUI(); return; }
     client = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
     const { data } = await client.auth.getSession();
     currentUser = data.session?.user || null;
-    if (currentUser) { await loadProfile(); await loadQuestionsFromSupabase(); }
+    if (currentUser) { const prof = await loadProfile(); if(prof) await loadQuestionsFromSupabase(); }
     else updateAuthUI();
 
     client.auth.onAuthStateChange(async (_event, session) => {
       currentUser = session?.user || null;
-      if (currentUser) { await loadProfile(); await loadQuestionsFromSupabase(); }
+      if (currentUser) { const prof = await loadProfile(); if(prof) await loadQuestionsFromSupabase(); }
       else { currentProfile = null; updateAuthUI(); }
     });
   }
@@ -424,13 +470,13 @@ window.HODSupabase = (() => {
   function avatarHTML(){const u=meta().avatar_url || meta().picture || ''; const e=email(); const l=(e||'U').trim().charAt(0).toUpperCase(); return u ? '<img src="'+esc(u)+'" alt="avatar">' : l}
   function ensureAvatar(){const actions=document.querySelector('.globalTop .actions')||document.querySelector('#fc .actions')||document.querySelector('.actions'); if(!actions||$('hodTopAvatar'))return; const btn=document.createElement('button'); btn.id='hodTopAvatar'; btn.className='hodTopAvatar'; btn.type='button'; btn.onclick=toggleMenu; actions.appendChild(btn)}
   function toggleMenu(){ if(!user()) return showLogin(); updateMenu(); $('hodAccountMenu')?.classList.toggle('hidden') }
-  function showLogin(){ document.body?.classList.add('hod-locked'); $('hodLoginGate')?.classList.remove('hidden'); $('hodAccountMenu')?.classList.add('hidden') }
-  function hideLogin(){ document.body?.classList.remove('hod-locked'); $('hodLoginGate')?.classList.add('hidden') }
+  function showLogin(){ document.body?.classList.add('hod-locked'); $('hodLoginGate')?.classList.remove('hidden'); $('hodAccountMenu')?.classList.add('hidden'); $('hodPendingApproval')?.classList.add('hidden'); }
+  function hideLogin(){ document.body?.classList.remove('hod-locked'); $('hodLoginGate')?.classList.add('hidden'); }
   function login(){const api=window.HODSupabase;if(!api){alert('Supabase chưa sẵn sàng, hãy tải lại trang.');return} if(api.signInGoogle){api.signInGoogle();return} api.openAuth?.()}
   async function logout(){ await window.HODSupabase?.signOut?.(); showLogin(); updateAll() }
   function openDash(){ if(isAdmin()) window.open('admin.html','_blank'); else alert('Tài khoản này không có quyền admin.') }
   function updateMenu(){ const admin=isAdmin(); const mail=$('hodAccountEmail'); if(mail) mail.textContent=email()||'Chưa đăng nhập'; const role=$('hodAccountRole'); if(role) role.textContent=admin?'Admin':'Người học'; const av=$('hodAccountAvatarBig'); if(av) av.innerHTML=avatarHTML(); $('hodAccountDashboard')?.classList.toggle('hidden',!admin) }
-  function updateAll(){ ensureAvatar(); const u=user(); const admin=isAdmin(); document.body?.classList.toggle('hod-is-admin-final',admin); if(u) hideLogin(); else showLogin(); const top=$('hodTopAvatar'); if(top){top.innerHTML=avatarHTML(); top.style.display=u?'grid':'none'} const headerAdmin=$('adminOpenBtn'); if(headerAdmin){headerAdmin.remove();} if(!admin)$('adminModal')?.classList.add('hidden'); updateMenu() }
+  function updateAll(){ ensureAvatar(); const u=user(); const p=profile(); const admin=isAdmin(); const pending=u && p && p.approved===false; document.body?.classList.toggle('hod-is-admin-final',admin); if(pending){ $('hodLoginGate')?.classList.add('hidden'); $('hodPendingApproval')?.classList.remove('hidden'); document.body?.classList.add('hod-locked'); const emailEl=$('hodPendingEmail'); if(emailEl) emailEl.textContent=p.email||u.email||''; } else if(u){ hideLogin(); $('hodPendingApproval')?.classList.add('hidden'); } else { showLogin(); } const top=$('hodTopAvatar'); if(top){top.innerHTML=avatarHTML(); top.style.display=(u&&!pending)?'grid':'none'} const headerAdmin=$('adminOpenBtn'); if(headerAdmin){headerAdmin.remove();} if(!admin)$('adminModal')?.classList.add('hidden'); updateMenu() }
   function patchAdmin(){ if(!window.HODSupabase||window.HODSupabase.__avatarCleanPatch)return; const old=window.HODSupabase.openAdmin; window.HODSupabase.openAdmin=function(){ if(!window.HODSupabase.isAdmin?.()){ $('adminModal')?.classList.add('hidden'); alert('Tài khoản này không có quyền admin.'); return } return old?.apply(this,arguments)}; window.HODSupabase.__avatarCleanPatch=true }
   function bind(){ $('hodGateLoginBtn')?.addEventListener('click',login); $('hodLogoutBtn')?.addEventListener('click',logout); $('hodAccountDashboard')?.addEventListener('click',openDash); document.addEventListener('click',e=>{const m=$('hodAccountMenu'),a=$('hodTopAvatar'); if(m&&!m.contains(e.target)&&a&&!a.contains(e.target))m.classList.add('hidden')}); setInterval(()=>{patchAdmin();updateAll()},500); setTimeout(()=>{patchAdmin();updateAll()},250) }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind); else bind();
@@ -481,30 +527,186 @@ window.HODSupabase = (() => {
   function patchSave(){ if(window.__hubPatchSaveMerged || typeof saveEditor!=='function') return; window.__hubPatchSaveMerged=true; const old=saveEditor; saveEditor=async function(){ let oldQ=clone(RAW.find(c=>c.num===editDraft.num)||pool[ci]||editDraft); editDraft.question=$('editQuestion').value.trim(); editDraft.answer=$('editAnswer').value.trim().toUpperCase(); let ops={}; document.querySelectorAll('[data-opt]').forEach(t=>{ if(t.value.trim()) ops[t.dataset.opt]=t.value.trim(); }); editDraft.options=ops; editDraft.answer_text=answerText(editDraft); editDraft.subject_code=subjectCode(); if(window.HODSupabase&&window.HODSupabase.isReady()){ await window.HODSupabase.submitEditRequest(editDraft, oldQ); return; } return old(); }; }
   function patchSignOut(){ if(window.__hubPatchSignoutMerged || !window.HODSupabase?.signOut) return; window.__hubPatchSignoutMerged=true; const old=window.HODSupabase.signOut.bind(window.HODSupabase); window.HODSupabase.signOut=async function(){ setSubject(''); return old(); }; }
   function ensureChangeBtn(){ if(!$('hodChangeSubjectBtn')) return; $('hodChangeSubjectBtn').onclick=e=>{ e?.preventDefault?.(); openGate(); }; }
-  function bind(){ ensureChip(); ensureChangeBtn(); syncSubjectTexts(); $('subjectRefresh')?.addEventListener('click', refreshSubjects); $('subjectSearch')?.addEventListener('input', renderSubjects); $('subjectEnter')?.addEventListener('click', enterSubject); $('subjectLogout')?.addEventListener('click', logoutGate); if(logged() && subjectCode()) loadBySubject(subjectCode()); setInterval(async()=>{ if(lock) return; lock=true; try{ ensureChip(); ensureChangeBtn(); patchSubmit(); patchSave(); patchSignOut(); syncSubjectTexts(); if(logged()){ if(!subjectCode()) openGate(); } else { closeGate(); setSubject(''); } } finally { lock=false; } }, 700); }
+  function isApproved(){ const p=window.HODSupabase?.getProfile?.()||null; return !p || p.approved !== false; }
+  function bind(){ ensureChip(); ensureChangeBtn(); syncSubjectTexts(); $('subjectRefresh')?.addEventListener('click', refreshSubjects); $('subjectSearch')?.addEventListener('input', renderSubjects); $('subjectEnter')?.addEventListener('click', enterSubject); $('subjectLogout')?.addEventListener('click', logoutGate); if(logged() && isApproved() && subjectCode()) loadBySubject(subjectCode()); setInterval(async()=>{ if(lock) return; lock=true; try{ ensureChip(); ensureChangeBtn(); patchSubmit(); patchSave(); patchSignOut(); syncSubjectTexts(); if(logged() && isApproved()){ if(!subjectCode()) openGate(); } else if(!logged()) { closeGate(); setSubject(''); } } finally { lock=false; } }, 700); }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', bind); else bind();
 })();
 // ===== LEARNING HUB MERGED SUBJECT PATCH END =====
 
 
-// ===== ADD_SUBJECT_FEATURE_20260614 =====
+// ===== ADD_SUBJECT_FEATURE_20260625 =====
 (function(){
   const HUB_URL='https://bdbkpqnhavyoalgkvqtw.supabase.co';
   const HUB_KEY='sb_publishable_h-AYsKKK57i0uJpBxJeCHA_csNkgjyB';
   const $=id=>document.getElementById(id);
   let supa=null;
   function client(){ if(!window.supabase) return null; if(!supa) supa=window.supabase.createClient(HUB_URL,HUB_KEY); return supa; }
-  function canManage(){
+  function esc2(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+
+  function isLoggedIn(){
+    return !!window.HODSupabase?.getUser?.();
+  }
+  function isAdminOrEditor(){
     const p=window.HODSupabase?.getProfile?.()||null;
-    const u=window.HODSupabase?.getUser?.()||null;
     const role=String(p?.role||'').toLowerCase();
-    return !!u && (role==='admin'||role==='editor') && !(p?.blocked||p?.is_blocked||p?.status==='blocked');
+    return isLoggedIn() && (role==='admin'||role==='editor') && !(p?.blocked||p?.is_blocked||p?.status==='blocked');
+  }
+  function isAdmin(){
+    const p=window.HODSupabase?.getProfile?.()||null;
+    return isLoggedIn() && String(p?.role||'').toLowerCase()==='admin' && !(p?.blocked||p?.is_blocked||p?.status==='blocked');
+  }
+  function canAdd(){
+    const p=window.HODSupabase?.getProfile?.()||null;
+    return isLoggedIn() && !(p?.blocked||p?.is_blocked||p?.status==='blocked');
   }
 
   function showAddBtn(){
     const btn=$('addSubjectBtn');
     if(!btn) return;
-    btn.classList.toggle('hidden', !canManage());
+    btn.classList.toggle('hidden', !canAdd());
+  }
+
+  const AI_PROMPT = `Bạn là trợ lý tạo ngân hàng câu hỏi trắc nghiệm. Hãy đọc tài liệu tôi gửi và tạo câu hỏi trắc nghiệm.
+
+YÊU CẦU:
+- Mỗi câu hỏi có 4 đáp án A, B, C, D (có thể thêm E nếu cần)
+- Đáp án đúng ghi chữ cái (VD: "A" hoặc "AC" nếu nhiều đáp án)
+- Câu hỏi phải rõ ràng, chính xác theo nội dung tài liệu
+- Giải thích ngắn gọn tại sao đáp án đó đúng
+- Nếu câu hỏi CÓ HÌNH ẢNH đi kèm (biểu đồ, sơ đồ, hình minh họa...), hãy thêm trường "images" chứa mô tả hình ảnh cần thiết
+- Trả về kết quả dưới dạng file .md hoặc .txt chứa JSON bên trong block code
+- Trả về ĐÚNG format JSON bên trong block \`\`\`json ... \`\`\`, không thêm text nào khác bên ngoài block
+
+FORMAT (trả về trong file .md hoặc .txt):
+\`\`\`json
+[
+  {
+    "num": 1,
+    "question": "Nội dung câu hỏi?",
+    "options": {
+      "A": "Lựa chọn A",
+      "B": "Lựa chọn B",
+      "C": "Lựa chọn C",
+      "D": "Lựa chọn D"
+    },
+    "answer": "A",
+    "answer_text": "Giải thích ngắn gọn",
+    "images": []
+  },
+  {
+    "num": 2,
+    "question": "Câu hỏi có hình ảnh minh họa (xem hình bên dưới)?",
+    "options": {
+      "A": "...",
+      "B": "...",
+      "C": "...",
+      "D": "..."
+    },
+    "answer": "B",
+    "answer_text": "Giải thích",
+    "images": [{"src": "URL_HÌNH_ẢNH_HOẶC_MÔ_TẢ", "alt": "Mô tả hình ảnh"}]
+  }
+]
+\`\`\`
+
+LƯU Ý VỀ HÌNH ẢNH:
+- Nếu tài liệu có hình ảnh liên quan đến câu hỏi, hãy thêm vào trường "images"
+- Trường "src" có thể là URL trực tiếp của hình hoặc mô tả để người dùng tự thêm sau
+- Trường "alt" là mô tả ngắn về nội dung hình ảnh
+- Nếu câu không có hình, để "images": []
+
+Hãy tạo càng nhiều câu hỏi càng tốt từ tài liệu, bao phủ tất cả các chủ đề quan trọng.`;
+
+  let parsedQuestions = [];
+
+  function getAddSubjectHTML(){
+    return `<div class="userAddSubjectWrap">
+      <div class="addSubjectFields">
+        <div class="addSubjectField">
+          <label for="addSubjectCode">Mã môn <span class="req">*</span></label>
+          <input id="addSubjectCode" type="text" placeholder="VD: ABC123" maxlength="20">
+        </div>
+        <div class="addSubjectField">
+          <label for="addSubjectName">Tên môn <span class="req">*</span></label>
+          <input id="addSubjectName" type="text" placeholder="VD: ABC123 Learning" maxlength="100">
+        </div>
+        <div class="addSubjectField full">
+          <label for="addSubjectDesc">Mô tả</label>
+          <textarea id="addSubjectDesc" placeholder="Mô tả ngắn về môn học..." rows="2" maxlength="300"></textarea>
+        </div>
+      </div>
+
+      <div class="aiImportTabs userAiTabs">
+        <button class="aiTab active" onclick="window.__switchUserImportTab('prompt')">1. Lấy Prompt</button>
+        <button class="aiTab" onclick="window.__switchUserImportTab('import')">2. Import câu hỏi</button>
+      </div>
+
+      <div id="userAiTabPrompt" class="aiTabContent active">
+        <div class="aiStepCard">
+          <div class="aiStepNum">1</div>
+          <div class="aiStepBody">
+            <h4>Copy prompt bên dưới</h4>
+            <p>Bấm nút copy để sao chép prompt tạo câu hỏi.</p>
+          </div>
+        </div>
+        <div class="aiPromptBox">
+          <pre id="userAiPromptText">${esc2(AI_PROMPT)}</pre>
+          <button class="primary aiCopyBtn" type="button" onclick="window.__copyUserAIPrompt()">📋 Copy Prompt</button>
+        </div>
+
+        <div class="aiStepCard">
+          <div class="aiStepNum">2</div>
+          <div class="aiStepBody">
+            <h4>Mở AI và gửi tài liệu</h4>
+            <p>Dán prompt vào AI, upload tài liệu môn học. AI sẽ trả về file .md hoặc .txt chứa JSON câu hỏi.</p>
+          </div>
+        </div>
+        <div class="aiToolLinks">
+          <a href="https://gemini.google.com" target="_blank" class="aiToolBtn gemini">
+            <span class="aiToolIcon">✦</span> Google Gemini
+          </a>
+          <a href="https://chatgpt.com" target="_blank" class="aiToolBtn chatgpt">
+            <span class="aiToolIcon">◉</span> ChatGPT
+          </a>
+          <a href="https://claude.ai" target="_blank" class="aiToolBtn claude">
+            <span class="aiToolIcon">◈</span> Claude
+          </a>
+        </div>
+
+        <div class="aiStepCard">
+          <div class="aiStepNum">3</div>
+          <div class="aiStepBody">
+            <h4>Tải file .md / .txt hoặc copy JSON</h4>
+            <p>Tải file AI trả về rồi import, hoặc copy JSON và dán vào tab <b>"Import câu hỏi"</b>.</p>
+          </div>
+        </div>
+        <div class="addSubjectActions">
+          <button class="primary" type="button" onclick="window.__switchUserImportTab('import')">Tiếp → Import câu hỏi</button>
+        </div>
+      </div>
+
+      <div id="userAiTabImport" class="aiTabContent">
+        <div class="userImportForm">
+          <div class="addSubjectField full">
+            <label>Import từ file .md / .txt</label>
+            <input type="file" id="userImportFile" accept=".md,.txt,.json" class="userFileInput">
+            <p class="userFileHint">Chọn file .md hoặc .txt mà AI đã trả về. Hệ thống sẽ tự trích xuất JSON từ file.</p>
+          </div>
+          <div class="addSubjectField full">
+            <label>Hoặc dán JSON trực tiếp</label>
+            <textarea id="userImportData" rows="10" placeholder='Dán mảng JSON câu hỏi vào đây...&#10;&#10;[&#10;  {&#10;    "num": 1,&#10;    "question": "...",&#10;    "options": {"A":"...","B":"...","C":"...","D":"..."},&#10;    "answer": "A",&#10;    "answer_text": "...",&#10;    "images": []&#10;  }&#10;]'></textarea>
+          </div>
+          <div id="userImportPreview" class="aiImportPreview hidden"></div>
+          <div class="addSubjectActions">
+            <button class="btn" type="button" onclick="window.__previewUserImport()">Xem trước</button>
+            <button class="primary" type="button" id="userImportBtn" onclick="window.__submitSubjectRequest()" disabled>Gửi yêu cầu thêm môn</button>
+            <button class="btn" type="button" onclick="window.__closeAddSubject()">Hủy</button>
+          </div>
+        </div>
+      </div>
+
+      ${!isAdminOrEditor() ? '<div class="userApprovalNote">⏳ Yêu cầu của bạn sẽ được gửi đến admin để duyệt trước khi môn học được thêm vào hệ thống.</div>' : ''}
+    </div>`;
   }
 
   function toggleForm(show){
@@ -512,14 +714,110 @@ window.HODSupabase = (() => {
     if(!form) return;
     form.classList.toggle('hidden', !show);
     if(show){
-      $('addSubjectCode').value='';
-      $('addSubjectName').value='';
-      $('addSubjectDesc').value='';
-      $('addSubjectCode')?.focus();
+      form.innerHTML = getAddSubjectHTML();
+      parsedQuestions = [];
+      $('addSubjectCode')?.addEventListener('input', function(){ this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,''); });
+      $('userImportFile')?.addEventListener('change', handleFileImport);
     }
   }
 
-  async function saveSubject(){
+  function handleFileImport(e){
+    const file = e.target.files?.[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = function(){
+      const text = reader.result;
+      let jsonStr = text;
+      const mdMatch = text.match(/```json\s*([\s\S]*?)```/);
+      if(mdMatch) jsonStr = mdMatch[1];
+      else {
+        const jsonMatch = text.match(/```\s*([\s\S]*?)```/);
+        if(jsonMatch) jsonStr = jsonMatch[1];
+      }
+      if($('userImportData')) $('userImportData').value = jsonStr.trim();
+      notify('Đã đọc file ' + file.name);
+      window.__previewUserImport();
+    };
+    reader.readAsText(file);
+  }
+
+  window.__switchUserImportTab = function(tab){
+    document.querySelectorAll('.userAiTabs .aiTab').forEach(b => b.classList.toggle('active', b.textContent.includes(tab === 'prompt' ? 'Prompt' : 'Import')));
+    $('userAiTabPrompt')?.classList.toggle('active', tab === 'prompt');
+    $('userAiTabImport')?.classList.toggle('active', tab === 'import');
+  };
+
+  window.__copyUserAIPrompt = function(){
+    navigator.clipboard.writeText(AI_PROMPT).then(() => {
+      notify('Đã copy prompt!');
+    }).catch(() => {
+      const el = $('userAiPromptText');
+      if(el){
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        notify('Hãy bấm Ctrl+C để copy');
+      }
+    });
+  };
+
+  window.__previewUserImport = function(){
+    const raw = ($('userImportData')?.value || '').trim();
+    const preview = $('userImportPreview');
+    const btn = $('userImportBtn');
+    if(!raw){ alert('Chưa dán dữ liệu JSON.'); return; }
+
+    let data;
+    try {
+      let cleaned = raw;
+      if(cleaned.startsWith('```json')) cleaned = cleaned.replace(/^```json\s*/, '').replace(/```\s*$/, '');
+      else if(cleaned.startsWith('```')) cleaned = cleaned.replace(/^```\s*/, '').replace(/```\s*$/, '');
+      data = JSON.parse(cleaned);
+    } catch(e){
+      alert('JSON không hợp lệ. Hãy kiểm tra lại format.\n\nLỗi: ' + e.message);
+      return;
+    }
+
+    if(!Array.isArray(data)){
+      if(data.questions && Array.isArray(data.questions)) data = data.questions;
+      else { alert('Dữ liệu phải là mảng JSON [...]'); return; }
+    }
+
+    const errors = [];
+    data.forEach((q, i) => {
+      if(!q.question) errors.push('Câu '+(i+1)+': thiếu "question"');
+      if(!q.options || typeof q.options !== 'object') errors.push('Câu '+(i+1)+': thiếu "options"');
+      if(!q.answer) errors.push('Câu '+(i+1)+': thiếu "answer"');
+    });
+    if(errors.length){
+      alert('Dữ liệu có lỗi:\n\n' + errors.slice(0, 10).join('\n'));
+      return;
+    }
+
+    parsedQuestions = data;
+    if(preview){
+      const imgCount = data.filter(q => q.images && q.images.length > 0).length;
+      preview.classList.remove('hidden');
+      preview.innerHTML = `
+        <div class="aiPreviewHeader">
+          <b>Xem trước: ${data.length} câu hỏi${imgCount ? ' ('+imgCount+' câu có hình ảnh)' : ''}</b>
+        </div>
+        <div class="aiPreviewList">${data.slice(0, 8).map((q, i) => `
+          <div class="aiPreviewItem">
+            <span class="aiPreviewNum">Câu ${q.num || (i+1)}</span>
+            <span class="aiPreviewQ">${esc2((q.question || '').substring(0, 100))}${(q.question||'').length>100?'...':''}</span>
+            <span class="aiPreviewA">${q.images&&q.images.length?'🖼 ':''} Đáp án: ${esc2(q.answer || '?')}</span>
+          </div>
+        `).join('')}${data.length > 8 ? '<div class="aiPreviewMore">...và '+(data.length - 8)+' câu khác</div>' : ''}</div>
+      `;
+    }
+    if(btn) btn.disabled = false;
+    notify('OK! ' + data.length + ' câu hỏi sẵn sàng');
+  };
+
+  window.__submitSubjectRequest = async function(){
     const code=($('addSubjectCode')?.value||'').trim().toUpperCase();
     const name=($('addSubjectName')?.value||'').trim();
     const desc=($('addSubjectDesc')?.value||'').trim();
@@ -531,8 +829,8 @@ window.HODSupabase = (() => {
     const c=client();
     if(!c){ notify('Chưa kết nối Supabase'); return; }
 
-    const saveBtn=$('addSubjectSave');
-    if(saveBtn){ saveBtn.disabled=true; saveBtn.textContent='Đang lưu...'; }
+    const btn=$('userImportBtn');
+    if(btn){ btn.disabled=true; btn.textContent='Đang gửi...'; }
 
     try{
       const {data:existing}=await c.from('subjects').select('code').eq('code',code).maybeSingle();
@@ -541,38 +839,74 @@ window.HODSupabase = (() => {
         return;
       }
 
-      const maxOrder=await c.from('subjects').select('sort_order').order('sort_order',{ascending:false}).limit(1);
-      const nextOrder=((maxOrder.data?.[0]?.sort_order)||0)+1;
+      if(isAdminOrEditor()){
+        const maxOrder=await c.from('subjects').select('sort_order').order('sort_order',{ascending:false}).limit(1);
+        const nextOrder=((maxOrder.data?.[0]?.sort_order)||0)+1;
 
-      const {error}=await c.from('subjects').insert({
-        code: code,
-        name: name,
-        description: desc || null,
-        is_active: true,
-        sort_order: nextOrder
-      });
+        const {error}=await c.from('subjects').insert({
+          code: code, name: name, description: desc || null,
+          is_active: true, sort_order: nextOrder
+        });
+        if(error){ notify('Lỗi: '+error.message); return; }
 
-      if(error){
-        notify('Lỗi: '+error.message);
-        return;
+        if(parsedQuestions.length){
+          let success=0, errors=0;
+          for(let i=0; i<parsedQuestions.length; i++){
+            const q=parsedQuestions[i];
+            const payload={
+              subject_code: code,
+              num: q.num || (i+1),
+              question: q.question || '',
+              options: q.options || {},
+              answer: (q.answer || '').toUpperCase(),
+              answer_text: q.answer_text || '',
+              images: q.images || [],
+              is_active: true,
+              updated_at: new Date().toISOString()
+            };
+            const r=await c.from('questions').insert(payload);
+            if(r.error) errors++; else success++;
+          }
+          notify('Đã thêm môn '+code+' với '+success+' câu hỏi'+(errors?' ('+errors+' lỗi)':''));
+        } else {
+          notify('Đã thêm môn '+code);
+        }
+
+        toggleForm(false);
+        $('subjectRefresh')?.click();
+      } else {
+        const u=window.HODSupabase?.getUser?.();
+        const p=window.HODSupabase?.getProfile?.()||null;
+        const {error}=await c.from('subject_requests').insert({
+          code: code,
+          name: name,
+          description: desc || null,
+          questions_data: parsedQuestions || [],
+          user_id: u?.id,
+          user_email: u?.email || p?.email || '',
+          status: 'pending'
+        });
+        if(error){
+          notify('Lỗi: '+error.message);
+          return;
+        }
+        notify('Đã gửi yêu cầu thêm môn '+code+'. Vui lòng chờ admin duyệt.');
+        toggleForm(false);
       }
 
-      notify('Đã thêm môn '+code);
-      toggleForm(false);
-      $('subjectRefresh')?.click();
+      parsedQuestions = [];
     } catch(e){
       console.warn('Add subject error:', e);
-      notify('Lỗi khi thêm môn học');
+      notify('Lỗi khi gửi yêu cầu');
     } finally {
-      if(saveBtn){ saveBtn.disabled=false; saveBtn.textContent='Lưu môn học'; }
+      if(btn){ btn.disabled=false; btn.textContent=isAdminOrEditor()?'Thêm môn học':'Gửi yêu cầu thêm môn'; }
     }
-  }
+  };
+
+  window.__closeAddSubject = function(){ toggleForm(false); };
 
   function bind(){
     $('addSubjectBtn')?.addEventListener('click', ()=>toggleForm(true));
-    $('addSubjectCancel')?.addEventListener('click', ()=>toggleForm(false));
-    $('addSubjectSave')?.addEventListener('click', saveSubject);
-    $('addSubjectCode')?.addEventListener('input', function(){ this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,''); });
     showAddBtn();
     setInterval(showAddBtn, 2000);
   }

@@ -19,6 +19,20 @@
     <button class="hodGoogleClean" id="hodGateLoginBtn" type="button"><span>G</span> Đăng nhập bằng Google</button>
   </section>
 </div>
+<div id="hodPendingApproval" class="hodPendingApproval hidden">
+  <section class="hodPendingPanel">
+    <div class="hodPendingIcon">
+      <svg viewBox="0 0 48 48" width="64" height="64"><circle cx="24" cy="24" r="22" fill="none" stroke="currentColor" stroke-width="2.5" opacity=".3"/><path d="M24 12v14l8 5" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+    </div>
+    <h2>Chờ phê duyệt</h2>
+    <p>Tài khoản của bạn đang chờ admin phê duyệt.<br>Bạn sẽ có thể sử dụng Learning Hub sau khi được duyệt.</p>
+    <p class="hodPendingEmail" id="hodPendingEmail"></p>
+    <div class="hodPendingActions">
+      <button id="hodPendingRefresh" type="button">Kiểm tra lại</button>
+      <button id="hodPendingLogout" type="button">Đăng xuất</button>
+    </div>
+  </section>
+</div>
 <div id="hodAccountMenu" class="hodAccountMenu hidden">
   <div class="hodAccountHead">
     <div id="hodAccountAvatarBig" class="hodAvatarBig">U</div>
@@ -54,27 +68,7 @@
       <input id="subjectSearch" type="text" placeholder="Tìm mã môn hoặc tên môn...">
       <button id="addSubjectBtn" class="btn addSubjectBtn hidden" type="button">+ Thêm môn</button>
     </div>
-    <div id="addSubjectForm" class="addSubjectForm hidden">
-      <h3>Thêm môn học mới</h3>
-      <div class="addSubjectFields">
-        <div class="addSubjectField">
-          <label for="addSubjectCode">Mã môn <span class="req">*</span></label>
-          <input id="addSubjectCode" type="text" placeholder="VD: ABC123" maxlength="20">
-        </div>
-        <div class="addSubjectField">
-          <label for="addSubjectName">Tên môn <span class="req">*</span></label>
-          <input id="addSubjectName" type="text" placeholder="VD: ABC123 Learning" maxlength="100">
-        </div>
-        <div class="addSubjectField full">
-          <label for="addSubjectDesc">Mô tả</label>
-          <textarea id="addSubjectDesc" placeholder="Mô tả ngắn về môn học..." rows="2" maxlength="300"></textarea>
-        </div>
-      </div>
-      <div class="addSubjectActions">
-        <button id="addSubjectSave" class="primary" type="button">Lưu môn học</button>
-        <button id="addSubjectCancel" class="btn" type="button">Hủy</button>
-      </div>
-    </div>
+    <div id="addSubjectForm" class="addSubjectForm hidden"></div>
     <div id="subjectLoading" class="subjectState subjectLoading hidden">Đang tải danh sách môn học...</div>
     <div id="subjectError" class="subjectState subjectError hidden">Không tải được danh sách môn học. Đang dùng môn mặc định.</div>
     <div id="subjectEmpty" class="subjectState subjectEmpty hidden">Chưa có môn học khả dụng.</div>

@@ -232,3 +232,110 @@ create index if not exists idx_profiles_last_activity
 on public.profiles(last_activity desc);
 
 notify pgrst, 'reload schema';
+
+
+-- ===== ACCESS_APPROVAL_20260624 =====
+-- Tài khoản mới cần admin phê duyệt trước khi sử dụng web
+alter table public.profiles add column if not exists approved boolean default false;
+
+-- Grandfather: tất cả user hiện tại đều được approved
+update public.profiles set approved = true where approved is null or approved = false;
+
+-- Cập nhật is_not_blocked: check cả approved
+create or replace function public.is_not_blocked()
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid()
+      and coalesce(blocked, false) = false
+      and coalesce(approved, true) = true
+  );
+$$;
+
+notify pgrst, 'reload schema';
+
+
+-- ===== SUBJECT_REQUESTS_AND_TRASH_20260625 =====
+-- Yêu cầu thêm môn học từ user thường (cần admin duyệt)
+create table if not exists public.subject_requests (
+  id bigserial primary key,
+  code text not null,
+  name text not null,
+  description text,
+  questions_data jsonb default '[]'::jsonb,
+  user_id uuid,
+  user_email text,
+  status text default 'pending',
+  admin_note text,
+  reviewed_at timestamptz,
+  reviewed_by uuid,
+  created_at timestamptz default now()
+);
+
+alter table public.subject_requests enable row level security;
+
+drop policy if exists "subject_requests insert own" on public.subject_requests;
+create policy "subject_requests insert own" on public.subject_requests
+  for insert to authenticated
+  with check (user_id = auth.uid() and status = 'pending' and public.is_not_blocked());
+
+drop policy if exists "subject_requests read own or editor" on public.subject_requests;
+create policy "subject_requests read own or editor" on public.subject_requests
+  for select to authenticated
+  using (user_id = auth.uid() or public.is_editor_or_admin());
+
+drop policy if exists "subject_requests editor update" on public.subject_requests;
+create policy "subject_requests editor update" on public.subject_requests
+  for update to authenticated
+  using (public.is_editor_or_admin())
+  with check (public.is_editor_or_admin());
+
+-- Thùng rác môn học (admin xóa môn)
+create table if not exists public.deleted_subjects (
+  id bigserial primary key,
+  original_data jsonb not null,
+  deleted_by uuid,
+  deleted_by_email text,
+  deleted_at timestamptz default now()
+);
+
+alter table public.deleted_subjects enable row level security;
+
+drop policy if exists "deleted_subjects admin only" on public.deleted_subjects;
+create policy "deleted_subjects admin only" on public.deleted_subjects
+  for all to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+-- Cài đặt web (admin toggle đăng ký mới)
+create table if not exists public.site_settings (
+  key text primary key,
+  value jsonb not null default '{}'::jsonb,
+  updated_at timestamptz default now(),
+  updated_by uuid
+);
+
+alter table public.site_settings enable row level security;
+
+drop policy if exists "site_settings read all" on public.site_settings;
+create policy "site_settings read all" on public.site_settings
+  for select to authenticated using (true);
+
+drop policy if exists "site_settings admin write" on public.site_settings;
+create policy "site_settings admin write" on public.site_settings
+  for all to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+insert into public.site_settings (key, value) values
+  ('registration_mode', '"approval"'::jsonb)
+on conflict (key) do nothing;
+
+-- Cho phép editor/admin insert vào subjects
+drop policy if exists "subjects editor write" on public.subjects;
+create policy "subjects editor write" on public.subjects
+  for all to authenticated
+  using (public.is_editor_or_admin())
+  with check (public.is_editor_or_admin());
+
+notify pgrst, 'reload schema';

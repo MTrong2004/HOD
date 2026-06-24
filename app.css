@@ -460,7 +460,7 @@ body:not(.hod-is-admin) #adminModal:not(.hidden){display:none!important}
 /* ===== ACCOUNT AVATAR CLEAN FINAL ===== */
 .hodAuthLanding,.hodFloatingAuth,#hodLoginScreen,#hodRoleBar,#hodUserDock,#hodFinalRoleBar,#hodFinalLogin{display:none!important;visibility:hidden!important;pointer-events:none!important}
 #authEmail,#authPassword,#authLogin,#authSignup,#authStatusBtn{display:none!important}
-body.hod-locked .tabs,body.hod-locked .content{display:none!important}
+body.hod-locked .tabs,body.hod-locked .content,body.hod-locked .subjectGate,body.hod-locked .hodAccountMenu{display:none!important}
 .hodLoginGate{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:22px;background:linear-gradient(145deg,#070605,#1b120d 58%,#080605);color:var(--fog)}
 .hodLoginGate.hidden{display:none!important}.hodLoginGatePanel{width:min(520px,94vw);border:1px solid rgba(200,169,110,.28);border-radius:30px;background:linear-gradient(145deg,rgba(255,255,255,.10),rgba(255,255,255,.025));box-shadow:0 30px 100px rgba(0,0,0,.62);padding:32px}.hodLogoClean{width:70px;height:70px;border-radius:22px;background:linear-gradient(135deg,var(--gold),var(--gold2));color:#15100b;display:grid;place-items:center;font:950 1.4rem var(--serif);margin-bottom:18px}.hodLoginGatePanel h1{font:950 2.8rem var(--serif);color:#fff;margin-bottom:12px}.hodLoginGatePanel p{color:var(--mist);line-height:1.6;margin-bottom:20px}.hodGoogleClean{border:0;border-radius:999px;background:#fff!important;color:#222!important;font-weight:950;padding:13px 18px;display:inline-flex;align-items:center;justify-content:center;gap:10px}.hodGoogleClean span{width:24px;height:24px;border-radius:50%;display:inline-grid;place-items:center;background:linear-gradient(135deg,#4285f4,#34a853,#fbbc05,#ea4335);color:white;font-weight:950}.hodAuthClean{max-width:min(500px,94vw)!important}.hodAuthClean .hodGoogleClean{width:100%;margin-top:12px}.hodBadge{display:inline-flex;border:1px solid rgba(200,169,110,.25);background:rgba(200,169,110,.10);color:var(--gold2);border-radius:999px;padding:5px 10px;font-weight:950;font-size:.74rem;letter-spacing:.08em}.hodTopAvatar{width:48px!important;height:48px!important;border-radius:50%!important;overflow:hidden!important;padding:0!important;display:grid!important;place-items:center!important;background:linear-gradient(135deg,var(--gold),var(--gold2))!important;color:#111!important;border:1px solid rgba(200,169,110,.45)!important;font-weight:950!important}.hodTopAvatar img{width:100%;height:100%;object-fit:cover}.hodAccountMenu{position:fixed;right:18px;top:74px;z-index:2147482999;width:min(330px,92vw);border:1px solid rgba(200,169,110,.28);border-radius:22px;background:linear-gradient(145deg,rgba(24,16,11,.98),rgba(8,6,5,.98));box-shadow:0 24px 80px rgba(0,0,0,.55);padding:16px;color:var(--fog)}.hodAccountMenu.hidden{display:none!important}.hodAccountHead{display:flex;gap:12px;align-items:center;margin-bottom:14px}.hodAvatarBig{width:54px;height:54px;border-radius:18px;display:grid;place-items:center;background:linear-gradient(135deg,var(--gold),var(--gold2));color:#111;font-weight:950;overflow:hidden}.hodAvatarBig img{width:100%;height:100%;object-fit:cover}.hodAccountHead b{display:block;color:#fff;word-break:break-word}.hodAccountHead span{display:block;color:var(--gold2);font-weight:800;margin-top:4px}.hodAccountMenu button{width:100%;margin-top:8px;border:1px solid rgba(200,169,110,.30);border-radius:999px;background:rgba(255,255,255,.055);color:var(--fog);font-weight:900;padding:11px 14px}.hodAccountMenu button#hodLogoutBtn{color:#ffd0ca;border-color:rgba(233,135,123,.35)}.hodAccountMenu button.hidden{display:none!important}body:not(.hod-is-admin-final) #adminOpenBtn,body:not(.hod-is-admin-final) #hodAccountDashboard{display:none!important}body:not(.hod-is-admin-final) #adminModal:not(.hidden){display:none!important}@media(max-width:820px){.hodLoginGatePanel{padding:22px}.hodGoogleClean{width:100%}.hodAccountMenu{right:10px;left:10px;top:70px;width:auto}}
 /* FINAL: kéo nội dung flashcard lên ngang cụm icon bên phải */
@@ -5482,4 +5482,46 @@ body.study-has-delete .compactCardRight{
   .addSubjectField.full{grid-column:1!important}
   .addSubjectActions{justify-content:stretch!important}
   .addSubjectActions .primary,.addSubjectActions .btn{flex:1!important}
+}
+
+/* === User AI Import Styles === */
+.userAddSubjectWrap{display:flex!important;flex-direction:column!important;gap:0!important}
+.userAiTabs{display:flex!important;gap:0!important;border-bottom:2px solid rgba(200,169,110,.18)!important;margin:16px 0 14px!important}
+.userAiTabs .aiTab{flex:1!important;padding:10px 14px!important;border:none!important;border-bottom:3px solid transparent!important;background:none!important;color:rgba(180,180,190,.6)!important;font-weight:800!important;font-size:13px!important;cursor:pointer!important;transition:color .2s,border-color .2s!important;border-radius:0!important}
+.userAiTabs .aiTab.active{color:rgba(232,212,168,.92)!important;border-bottom-color:rgba(200,169,110,.7)!important;background:rgba(200,169,110,.06)!important}
+.userAiTabs .aiTab:hover:not(.active){color:rgba(220,220,225,.7)!important;background:rgba(255,255,255,.03)!important}
+.aiTabContent{display:none!important}
+.aiTabContent.active{display:block!important}
+.aiStepCard{display:flex!important;gap:12px!important;align-items:flex-start!important;margin-bottom:14px!important}
+.aiStepNum{flex:0 0 32px!important;height:32px!important;border-radius:50%!important;background:linear-gradient(135deg,rgba(200,169,110,.9),rgba(232,212,168,.8))!important;color:#111!important;font-weight:900!important;font-size:14px!important;display:grid!important;place-items:center!important}
+.aiStepBody h4{margin:0 0 3px!important;font-size:14px!important;color:rgba(240,240,245,.88)!important;font-weight:800!important}
+.aiStepBody p{margin:0!important;font-size:12px!important;color:rgba(180,180,190,.6)!important;line-height:1.5!important}
+.aiPromptBox{position:relative!important;margin-bottom:16px!important;background:rgba(0,0,0,.28)!important;border:1px solid rgba(200,169,110,.18)!important;border-radius:14px!important;padding:12px!important}
+.aiPromptBox pre{white-space:pre-wrap!important;font-size:11.5px!important;line-height:1.55!important;color:rgba(240,240,245,.78)!important;max-height:180px!important;overflow:auto!important;margin:0 0 10px!important;font-family:'Cascadia Code','Fira Code','Consolas',monospace!important}
+.aiCopyBtn{width:100%!important;text-align:center!important;font-size:13px!important;padding:9px!important}
+.aiToolLinks{display:flex!important;gap:8px!important;margin-bottom:16px!important;flex-wrap:wrap!important}
+.aiToolBtn{flex:1!important;min-width:120px!important;display:flex!important;align-items:center!important;justify-content:center!important;gap:7px!important;padding:12px 14px!important;border-radius:14px!important;font-weight:800!important;font-size:13px!important;text-decoration:none!important;transition:transform .15s,box-shadow .15s!important;border:1px solid rgba(200,169,110,.2)!important}
+.aiToolBtn:hover{transform:translateY(-2px)!important;box-shadow:0 6px 20px rgba(0,0,0,.3)!important}
+.aiToolIcon{font-size:18px!important}
+.aiToolBtn.gemini{background:linear-gradient(135deg,rgba(66,133,244,.18),rgba(52,168,83,.12))!important;color:#8ab4f8!important}
+.aiToolBtn.chatgpt{background:linear-gradient(135deg,rgba(116,204,165,.18),rgba(16,163,127,.12))!important;color:#74cca5!important}
+.aiToolBtn.claude{background:linear-gradient(135deg,rgba(200,169,110,.18),rgba(232,212,168,.10))!important;color:rgba(232,212,168,.92)!important}
+.userImportForm .addSubjectField{margin-bottom:12px!important}
+.userFileInput{width:100%!important;padding:8px 12px!important;border-radius:12px!important;border:1px solid rgba(200,169,110,.20)!important;background:rgba(255,255,255,.04)!important;color:var(--fog)!important;font-size:.85rem!important}
+.userFileHint{margin:4px 0 0!important;font-size:11px!important;color:rgba(180,180,190,.5)!important}
+.userImportForm textarea{width:100%!important;padding:10px 14px!important;border-radius:12px!important;border:1px solid rgba(200,169,110,.20)!important;background:rgba(255,255,255,.04)!important;color:var(--fog)!important;font-size:12px!important;font-family:'Cascadia Code','Fira Code','Consolas',monospace!important;line-height:1.5!important;resize:vertical!important;min-height:140px!important}
+.userImportForm textarea:focus,.userFileInput:focus{border-color:rgba(232,212,168,.48)!important;background:rgba(255,255,255,.06)!important;outline:none!important}
+.aiImportPreview{margin-bottom:12px!important;border:1px solid rgba(200,169,110,.2)!important;border-radius:14px!important;overflow:hidden!important}
+.aiPreviewHeader{padding:8px 12px!important;background:rgba(200,169,110,.08)!important;border-bottom:1px solid rgba(200,169,110,.15)!important;font-size:13px!important;color:rgba(232,212,168,.92)!important}
+.aiPreviewList{max-height:200px!important;overflow:auto!important}
+.aiPreviewItem{display:flex!important;align-items:center!important;gap:8px!important;padding:7px 12px!important;border-bottom:1px solid rgba(255,255,255,.04)!important;font-size:12px!important}
+.aiPreviewItem:last-child{border-bottom:none!important}
+.aiPreviewNum{flex:0 0 auto!important;font-weight:900!important;color:rgba(232,212,168,.92)!important;font-size:11px!important;min-width:48px!important}
+.aiPreviewQ{flex:1!important;color:rgba(240,240,245,.78)!important;min-width:0!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}
+.aiPreviewA{flex:0 0 auto!important;color:rgba(114,197,140,.82)!important;font-weight:700!important;font-size:11px!important}
+.aiPreviewMore{padding:7px 12px!important;text-align:center!important;color:rgba(180,180,190,.5)!important;font-size:11px!important;font-style:italic!important}
+.userApprovalNote{margin-top:14px!important;padding:10px 14px!important;border-radius:12px!important;background:rgba(200,169,110,.08)!important;border:1px solid rgba(200,169,110,.18)!important;color:rgba(232,212,168,.82)!important;font-size:12px!important;font-weight:600!important;text-align:center!important}
+@media(max-width:560px){
+  .aiToolLinks{flex-direction:column!important}
+  .aiPreviewItem{flex-direction:column!important;align-items:flex-start!important;gap:3px!important}
 }

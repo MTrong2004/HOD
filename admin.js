@@ -83,7 +83,7 @@ function bind() {
   $('openStudy').onclick = () => open('index.html', '_blank');
   $('refreshBtn').onclick = loadAll;
   $('exportBtn').onclick = exportAll;
-  $('search').oninput = render;
+  $('search').oninput = function(){ render(); if(typeof renderApprovals === 'function' && document.getElementById('approvals')?.classList.contains('active')) renderApprovals(); };
   $('closeModal').onclick = closeModal;
   $('modal').addEventListener('mousedown', e => { if (e.target === $('modal')) closeModal(); });
   window.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
@@ -147,6 +147,7 @@ async function loadAll() {
       ? await safeLoad('admin_logs', client.from('admin_logs').select('*').order('created_at', { ascending: false }).limit(500))
       : [];
     render();
+    if(typeof loadSubjectRequests === 'function') loadSubjectRequests();
     toast('Đã tải');
   } finally {
     setBusy(false);
@@ -208,6 +209,9 @@ function renderStats() {
   $('statEditors').textContent = cache.profiles.filter(x => x.role === 'editor').length;
   $('statPending').textContent = pending.length;
   $('statBlocked').textContent = cache.profiles.filter(isBlocked).length;
+  const pendingApproval = cache.profiles.filter(p => p.approved === false).length;
+  const elPA = $('statPendingApproval');
+  if(elPA) elPA.textContent = pendingApproval;
   $('recentRequests').innerHTML = pending.slice(0, 5).map(reqHTML).join('') || '<p class=muted>Không có.</p>';
   $('recentLogs').innerHTML = isAdmin()
     ? (cache.logs.slice(0, 7).map(logHTML).join('') || '<p class=muted>Chưa có.</p>')
@@ -2621,7 +2625,7 @@ document.addEventListener('DOMContentLoaded', init);
       <button class="subjectTab ${STATE.subject==='all'?'active':''}" onclick="setQuestionSubjectFilter('all')">Tất cả <b>${subjectCount('all')}</b></button>
       ${subs.map(s=>`<button class="subjectTab ${STATE.subject===s?'active':''}" onclick="setQuestionSubjectFilter('${esc(s)}')">${esc(s)} <b>${subjectCount(s)}</b></button>`).join('')}
     </div>`;
-    const toolbar = `<div class="questionToolbar compactQuestionToolbar"><div>${tabs}</div><button class="act ok addQuestionBtn" onclick="openAddQuestionAdmin()">+ Thêm câu hỏi</button></div>`;
+    const toolbar = `<div class="questionToolbar compactQuestionToolbar"><div>${tabs}</div><div class="toolbarBtns"><button class="act addSubjectBtn" onclick="openAddSubjectAI()">+ Thêm môn</button></div></div>`;
     const arr = (cache.questions || [])
       .filter(q => STATE.subject === 'all' || (q.subject_code || 'HOD102') === STATE.subject)
       .filter(matchesQuestion)
@@ -2748,4 +2752,860 @@ document.addEventListener('DOMContentLoaded', init);
       b.addEventListener('click', () => setTimeout(loadTrash, 50));
     }
   });
+})();
+
+
+// ===== ACCESS_APPROVAL_ADMIN_20260624 =====
+(function(){
+  let approvalFilter = 'pending';
+
+  function pendingUsers(){
+    return (cache.profiles || []).filter(p => p.approved === false);
+  }
+  function approvedUsers(){
+    return (cache.profiles || []).filter(p => p.approved !== false);
+  }
+
+  function updateApprovalBadge(){
+    const count = pendingUsers().length;
+    const badge = document.getElementById('approvalBadge');
+    if(badge){
+      badge.textContent = count;
+      badge.classList.toggle('hidden', count === 0);
+    }
+    const statPending = document.getElementById('statPending');
+    if(statPending){
+      const reqPending = (cache.requests || []).filter(x => x.status === 'pending').length;
+      statPending.textContent = reqPending;
+    }
+  }
+
+  function renderApprovalCounts(){
+    const pend = pendingUsers().length;
+    const appr = approvedUsers().length;
+    const all = (cache.profiles || []).length;
+    const ep = document.getElementById('afPending');
+    const ea = document.getElementById('afApproved');
+    const eall = document.getElementById('afAll');
+    if(ep) ep.textContent = pend;
+    if(ea) ea.textContent = appr;
+    if(eall) eall.textContent = all;
+  }
+
+  window.filterApprovals = function(f){
+    approvalFilter = f;
+    document.querySelectorAll('.approvalFilter').forEach(b => {
+      b.classList.toggle('active', b.dataset.af === f);
+    });
+    renderApprovals();
+  };
+
+  window.renderApprovals = renderApprovals;
+  function renderApprovals(){
+    renderApprovalCounts();
+    updateApprovalBadge();
+
+    const el = document.getElementById('approvalList');
+    if(!el) return;
+
+    let arr = cache.profiles || [];
+    if(approvalFilter === 'pending') arr = arr.filter(p => p.approved === false);
+    else if(approvalFilter === 'approved') arr = arr.filter(p => p.approved !== false);
+
+    const k = (document.getElementById('search')?.value || '').trim().toLowerCase();
+    if(k) arr = arr.filter(p => `${p.email || ''} ${p.id || ''}`.toLowerCase().includes(k));
+
+    if(!arr.length){
+      el.innerHTML = '<p class="muted">' + (approvalFilter === 'pending' ? 'Không có tài khoản nào đang chờ duyệt.' : 'Không có.') + '</p>';
+      return;
+    }
+
+    el.innerHTML = arr.map(p => {
+      const isPending = p.approved === false;
+      const roleBadge = `<span class="badge ${esc(p.role || 'user')}">${esc(p.role || 'user')}</span>`;
+      const statusBadge = isPending
+        ? '<span class="badge rejected">Chờ duyệt</span>'
+        : '<span class="badge approved">Đã duyệt</span>';
+      const actions = isPending
+        ? `<button class="act ok" onclick="approveUser('${esc(p.id)}')">Phê duyệt</button><button class="act bad" onclick="rejectUser('${esc(p.id)}')">Từ chối & xóa</button>`
+        : `<button class="act warn" onclick="revokeApproval('${esc(p.id)}')">Thu hồi quyền</button>`;
+      return `<div class="approvalCard ${isPending ? 'isPending' : ''}">
+        <div class="approvalCardInfo">
+          <div class="mail">${esc(p.email || p.id)}</div>
+          <div class="meta">${roleBadge} ${statusBadge} · Đăng ký: ${esc(date(p.created_at))} · Login: ${esc(date(p.last_login || p.created_at))}</div>
+        </div>
+        <div class="approvalCardActions">${isAdmin() ? actions : '<span class="muted">Chỉ admin</span>'}</div>
+      </div>`;
+    }).join('');
+  }
+
+  window.approveUser = async function(uid){
+    if(!isAdmin()) return alert('Chỉ admin.');
+    const p = (cache.profiles || []).find(x => x.id === uid);
+    if(!p) return alert('Không tìm thấy user.');
+    if(!confirm('Phê duyệt tài khoản: ' + (p.email || uid) + '?')) return;
+    setBusy(true, 'Đang phê duyệt...');
+    try{
+      const r = await client.from('profiles').update({ approved: true }).eq('id', uid);
+      if(r.error) return alert('Lỗi: ' + r.error.message);
+      await logAction('approve_user', 'profiles', uid, { email: p.email });
+      p.approved = true;
+      renderApprovals();
+      toast('Đã phê duyệt ' + (p.email || uid));
+    }finally{ setBusy(false); }
+  };
+
+  window.rejectUser = async function(uid){
+    if(!isAdmin()) return alert('Chỉ admin.');
+    const p = (cache.profiles || []).find(x => x.id === uid);
+    if(!p) return alert('Không tìm thấy user.');
+    if(!confirm('Từ chối và XÓA tài khoản: ' + (p.email || uid) + '?\n\nUser sẽ phải đăng ký lại.')) return;
+    setBusy(true, 'Đang xử lý...');
+    try{
+      const r = await client.from('profiles').delete().eq('id', uid);
+      if(r.error) return alert('Lỗi: ' + r.error.message);
+      await logAction('reject_user', 'profiles', uid, { email: p.email });
+      cache.profiles = cache.profiles.filter(x => x.id !== uid);
+      renderApprovals();
+      toast('Đã từ chối ' + (p.email || uid));
+    }finally{ setBusy(false); }
+  };
+
+  window.revokeApproval = async function(uid){
+    if(!isAdmin()) return alert('Chỉ admin.');
+    const p = (cache.profiles || []).find(x => x.id === uid);
+    if(!p) return alert('Không tìm thấy user.');
+    if(p.role === 'admin') return alert('Không thể thu hồi quyền truy cập của admin.');
+    if(!confirm('Thu hồi quyền truy cập của: ' + (p.email || uid) + '?\n\nUser sẽ cần được phê duyệt lại.')) return;
+    setBusy(true, 'Đang thu hồi...');
+    try{
+      const r = await client.from('profiles').update({ approved: false }).eq('id', uid);
+      if(r.error) return alert('Lỗi: ' + r.error.message);
+      await logAction('revoke_approval', 'profiles', uid, { email: p.email });
+      p.approved = false;
+      renderApprovals();
+      toast('Đã thu hồi quyền ' + (p.email || uid));
+    }finally{ setBusy(false); }
+  };
+
+  // === Registration Gate Toggle ===
+  let registrationMode = 'approval';
+
+  async function loadRegistrationMode(){
+    try{
+      const {data} = await client.from('site_settings').select('value').eq('key','registration_mode').maybeSingle();
+      if(data && data.value) registrationMode = typeof data.value === 'string' ? data.value : JSON.stringify(data.value).replace(/"/g,'');
+    }catch(e){ console.warn('Load reg mode error:', e); }
+    updateRegistrationGateUI();
+  }
+
+  function updateRegistrationGateUI(){
+    const status = document.getElementById('registrationGateStatus');
+    const openBtn = document.getElementById('regGateOpen');
+    const approvalBtn = document.getElementById('regGateApproval');
+    const closedBtn = document.getElementById('regGateClosed');
+    if(status){
+      if(registrationMode === 'open') status.innerHTML = '<span style="color:#66bb6a;font-weight:900">MỞ</span> — Ai đăng ký cũng vào được ngay, không cần duyệt';
+      else if(registrationMode === 'closed') status.innerHTML = '<span style="color:#ef5350;font-weight:900">ĐÓNG</span> — Không ai đăng ký mới được';
+      else status.innerHTML = '<span style="color:#ffc107;font-weight:900">CẦN DUYỆT</span> — User mới phải chờ admin phê duyệt';
+    }
+    if(openBtn) openBtn.classList.toggle('active', registrationMode === 'open');
+    if(approvalBtn) approvalBtn.classList.toggle('active', registrationMode === 'approval');
+    if(closedBtn) closedBtn.classList.toggle('active', registrationMode === 'closed');
+  }
+
+  window.setRegistrationMode = async function(mode){
+    if(!isAdmin()) return alert('Chỉ admin.');
+    if(!confirm('Chuyển cổng đăng ký sang: ' + ({open:'MỞ — ai cũng vào được', approval:'CẦN DUYỆT — user mới phải chờ', closed:'ĐÓNG — chặn đăng ký mới'}[mode] || mode) + '?')) return;
+    setBusy(true, 'Đang cập nhật...');
+    try{
+      const {error} = await client.from('site_settings').upsert({
+        key: 'registration_mode',
+        value: JSON.stringify(mode),
+        updated_at: new Date().toISOString(),
+        updated_by: user?.id
+      });
+      if(error) return alert('Lỗi: ' + error.message);
+      registrationMode = mode;
+      updateRegistrationGateUI();
+      await logAction('set_registration_mode', 'site_settings', 'registration_mode', { mode });
+      toast('Đã chuyển cổng đăng ký: ' + mode);
+    }finally{ setBusy(false); }
+  };
+
+  const _origRenderStats = renderStats;
+  renderStats = function(){
+    _origRenderStats();
+    updateApprovalBadge();
+    renderApprovalCounts();
+    const statPA = document.getElementById('statPendingApproval');
+    if(statPA) statPA.textContent = pendingUsers().length;
+  };
+
+  document.querySelectorAll('.nav').forEach(b => {
+    if(b.dataset.page === 'approvals'){
+      b.addEventListener('click', () => { setTimeout(renderApprovals, 50); loadRegistrationMode(); });
+    }
+  });
+
+  const _origSetPage = setPage;
+  setPage = function(id, n){
+    _origSetPage(id, n);
+    if(id === 'approvals'){ renderApprovals(); loadRegistrationMode(); }
+  };
+
+  setTimeout(loadRegistrationMode, 500);
+})();
+
+
+// ===== AI_IMPORT_QUESTIONS_20260624 =====
+(function(){
+
+  const AI_PROMPT = `Bạn là trợ lý tạo ngân hàng câu hỏi trắc nghiệm. Hãy đọc tài liệu tôi gửi và tạo câu hỏi trắc nghiệm.
+
+YÊU CẦU:
+- Mỗi câu hỏi có 4 đáp án A, B, C, D (có thể thêm E nếu cần)
+- Đáp án đúng ghi chữ cái (VD: "A" hoặc "AC" nếu nhiều đáp án)
+- Câu hỏi phải rõ ràng, chính xác theo nội dung tài liệu
+- Giải thích ngắn gọn tại sao đáp án đó đúng
+- Nếu câu hỏi CÓ HÌNH ẢNH đi kèm (biểu đồ, sơ đồ, hình minh họa...), hãy thêm trường "images" chứa mô tả hình ảnh cần thiết
+- Trả về kết quả dưới dạng file .md hoặc .txt chứa JSON bên trong block code
+- Trả về ĐÚNG format JSON bên trong block \`\`\`json ... \`\`\`, không thêm text nào khác bên ngoài block
+
+FORMAT (trả về trong file .md hoặc .txt):
+\`\`\`json
+[
+  {
+    "num": 1,
+    "question": "Nội dung câu hỏi?",
+    "options": {
+      "A": "Lựa chọn A",
+      "B": "Lựa chọn B",
+      "C": "Lựa chọn C",
+      "D": "Lựa chọn D"
+    },
+    "answer": "A",
+    "answer_text": "Giải thích ngắn gọn",
+    "images": []
+  },
+  {
+    "num": 2,
+    "question": "Câu hỏi có hình ảnh minh họa (xem hình bên dưới)?",
+    "options": {
+      "A": "...",
+      "B": "...",
+      "C": "...",
+      "D": "..."
+    },
+    "answer": "B",
+    "answer_text": "Giải thích",
+    "images": [{"src": "URL_HÌNH_ẢNH_HOẶC_MÔ_TẢ", "alt": "Mô tả hình ảnh"}]
+  }
+]
+\`\`\`
+
+LƯU Ý VỀ HÌNH ẢNH:
+- Nếu tài liệu có hình ảnh liên quan đến câu hỏi, hãy thêm vào trường "images"
+- Trường "src" có thể là URL trực tiếp của hình hoặc mô tả để người dùng tự thêm sau
+- Trường "alt" là mô tả ngắn về nội dung hình ảnh
+- Nếu câu không có hình, để "images": []
+
+Hãy tạo càng nhiều câu hỏi càng tốt từ tài liệu, bao phủ tất cả các chủ đề quan trọng.`;
+
+  function getSubjects(){
+    const set = new Set((cache.questions || []).map(q => q.subject_code || 'HOD102').filter(Boolean));
+    if(!set.size){ set.add('HOD102'); set.add('MLN111'); }
+    return Array.from(set).sort();
+  }
+
+  function getImportHTML(){
+    const subjects = getSubjects();
+    return `<div class="aiImportWrap">
+
+      <div class="aiImportTabs">
+        <button class="aiTab active" onclick="switchImportTab('prompt')">1. Lấy Prompt</button>
+        <button class="aiTab" onclick="switchImportTab('import')">2. Import dữ liệu</button>
+      </div>
+
+      <div id="aiTabPrompt" class="aiTabContent active">
+        <div class="aiStepCard">
+          <div class="aiStepNum">1</div>
+          <div class="aiStepBody">
+            <h4>Copy prompt bên dưới</h4>
+            <p>Bấm nút copy để sao chép prompt tạo câu hỏi.</p>
+          </div>
+        </div>
+        <div class="aiPromptBox">
+          <pre id="aiPromptText">${esc(AI_PROMPT)}</pre>
+          <button class="act ok aiCopyBtn" onclick="copyAIPrompt()">📋 Copy Prompt</button>
+        </div>
+
+        <div class="aiStepCard">
+          <div class="aiStepNum">2</div>
+          <div class="aiStepBody">
+            <h4>Mở AI và gửi tài liệu</h4>
+            <p>Dán prompt vào một trong các AI bên dưới, sau đó upload/gửi tài liệu môn học kèm theo.</p>
+          </div>
+        </div>
+        <div class="aiToolLinks">
+          <a href="https://gemini.google.com" target="_blank" class="aiToolBtn gemini">
+            <span class="aiToolIcon">✦</span> Google Gemini
+          </a>
+          <a href="https://chatgpt.com" target="_blank" class="aiToolBtn chatgpt">
+            <span class="aiToolIcon">◉</span> ChatGPT
+          </a>
+          <a href="https://claude.ai" target="_blank" class="aiToolBtn claude">
+            <span class="aiToolIcon">◈</span> Claude
+          </a>
+        </div>
+
+        <div class="aiStepCard">
+          <div class="aiStepNum">3</div>
+          <div class="aiStepBody">
+            <h4>Tải file .md / .txt hoặc copy JSON</h4>
+            <p>Tải file AI trả về rồi import, hoặc copy JSON và dán vào tab <b>"Import dữ liệu"</b>.</p>
+          </div>
+        </div>
+        <div class="actions formActions">
+          <button class="act ok" onclick="switchImportTab('import')">Tiếp → Import dữ liệu</button>
+        </div>
+      </div>
+
+      <div id="aiTabImport" class="aiTabContent">
+        <div class="aiImportForm">
+          <div class="field">
+            <label>Môn học</label>
+            <div class="aiSubjectRow">
+              <select id="aiImportSubject">${subjects.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('')}</select>
+              <span>hoặc</span>
+              <input id="aiImportNewSubject" placeholder="Mã môn mới (VD: ENG101)" style="width:160px">
+            </div>
+          </div>
+          <div class="field">
+            <label>Import từ file .md / .txt</label>
+            <input type="file" id="aiImportFile" accept=".md,.txt,.json" style="width:100%;padding:8px;background:rgba(255,255,255,.035);border:1px solid var(--bd);border-radius:12px;color:var(--fog);">
+            <p style="margin:4px 0 0;font-size:12px;color:var(--mist);">Chọn file .md hoặc .txt mà AI đã trả về. Hệ thống sẽ tự trích xuất JSON từ file.</p>
+          </div>
+          <div class="field">
+            <label>Hoặc dán JSON trực tiếp</label>
+            <textarea id="aiImportData" rows="14" placeholder='Dán mảng JSON câu hỏi vào đây...&#10;&#10;[&#10;  {&#10;    "num": 1,&#10;    "question": "...",&#10;    "options": {"A":"...","B":"...","C":"...","D":"..."},&#10;    "answer": "A",&#10;    "answer_text": "...",&#10;    "images": []&#10;  }&#10;]'></textarea>
+          </div>
+          <div id="aiImportPreview" class="aiImportPreview hidden"></div>
+          <div class="actions formActions">
+            <button class="act" onclick="previewAIImport()">Xem trước</button>
+            <button class="act ok" id="aiImportBtn" onclick="executeAIImport()" disabled>Import câu hỏi</button>
+            <button class="act" onclick="closeModal()">Hủy</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  let parsedQuestions = [];
+
+  window.switchImportTab = function(tab){
+    document.querySelectorAll('.aiTab').forEach(b => b.classList.toggle('active', b.textContent.includes(tab === 'prompt' ? 'Prompt' : 'Import')));
+    document.getElementById('aiTabPrompt')?.classList.toggle('active', tab === 'prompt');
+    document.getElementById('aiTabImport')?.classList.toggle('active', tab === 'import');
+  };
+
+  window.copyAIPrompt = function(){
+    const text = AI_PROMPT;
+    navigator.clipboard.writeText(text).then(() => {
+      toast('Đã copy prompt!');
+    }).catch(() => {
+      const el = document.getElementById('aiPromptText');
+      if(el){
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        toast('Hãy bấm Ctrl+C để copy');
+      }
+    });
+  };
+
+  window.previewAIImport = function(){
+    const raw = (document.getElementById('aiImportData')?.value || '').trim();
+    const preview = document.getElementById('aiImportPreview');
+    const btn = document.getElementById('aiImportBtn');
+    if(!raw){ alert('Chưa dán dữ liệu JSON.'); return; }
+
+    let data;
+    try {
+      let cleaned = raw;
+      if(cleaned.startsWith('```json')) cleaned = cleaned.replace(/^```json\s*/, '').replace(/```\s*$/, '');
+      else if(cleaned.startsWith('```')) cleaned = cleaned.replace(/^```\s*/, '').replace(/```\s*$/, '');
+      data = JSON.parse(cleaned);
+    } catch(e){
+      alert('JSON không hợp lệ. Hãy kiểm tra lại format.\n\nLỗi: ' + e.message);
+      return;
+    }
+
+    if(!Array.isArray(data)){
+      if(data.questions && Array.isArray(data.questions)) data = data.questions;
+      else { alert('Dữ liệu phải là mảng JSON [...]'); return; }
+    }
+
+    const errors = [];
+    data.forEach((q, i) => {
+      if(!q.question) errors.push(`Câu ${i+1}: thiếu "question"`);
+      if(!q.options || typeof q.options !== 'object') errors.push(`Câu ${i+1}: thiếu "options"`);
+      if(!q.answer) errors.push(`Câu ${i+1}: thiếu "answer"`);
+    });
+    if(errors.length){
+      alert('Dữ liệu có lỗi:\n\n' + errors.slice(0, 10).join('\n') + (errors.length > 10 ? `\n...và ${errors.length-10} lỗi khác` : ''));
+      return;
+    }
+
+    parsedQuestions = data;
+    if(preview){
+      preview.classList.remove('hidden');
+      preview.innerHTML = `
+        <div class="aiPreviewHeader">
+          <b>Xem trước: ${data.length} câu hỏi</b>
+        </div>
+        <div class="aiPreviewList">${data.slice(0, 8).map((q, i) => `
+          <div class="aiPreviewItem">
+            <span class="aiPreviewNum">Câu ${q.num || (i+1)}</span>
+            <span class="aiPreviewQ">${esc((q.question || '').substring(0, 100))}${(q.question||'').length>100?'...':''}</span>
+            <span class="aiPreviewA">Đáp án: ${esc(q.answer || '?')}</span>
+          </div>
+        `).join('')}${data.length > 8 ? `<div class="aiPreviewMore">...và ${data.length - 8} câu khác</div>` : ''}</div>
+      `;
+    }
+    if(btn) btn.disabled = false;
+    toast('OK! ' + data.length + ' câu hỏi sẵn sàng import');
+  };
+
+  window.executeAIImport = async function(){
+    if(!parsedQuestions.length) return alert('Chưa có dữ liệu. Hãy dán JSON và bấm Xem trước.');
+    if(!isEditor()) return alert('Chỉ Admin/Editor mới import được.');
+
+    const subjectSelect = document.getElementById('aiImportSubject')?.value || '';
+    const newSubject = (document.getElementById('aiImportNewSubject')?.value || '').trim().toUpperCase();
+    const subject = newSubject || subjectSelect || 'HOD102';
+
+    if(!confirm(`Import ${parsedQuestions.length} câu hỏi vào môn "${subject}"?\n\nCâu trùng số sẽ bị lỗi và bỏ qua.`)) return;
+
+    setBusy(true, 'Đang import...');
+    let success = 0, errors = 0;
+    try{
+      const existingNums = new Set(
+        (cache.questions || [])
+          .filter(q => (q.subject_code || 'HOD102') === subject)
+          .map(q => Number(q.num))
+      );
+
+      let nextNum = existingNums.size ? Math.max(...existingNums) + 1 : 1;
+
+      for(const q of parsedQuestions){
+        let num = Number(q.num) || nextNum;
+        if(existingNums.has(num)){
+          num = nextNum;
+        }
+        existingNums.add(num);
+        nextNum = Math.max(nextNum, num) + 1;
+
+        const payload = {
+          subject_code: subject,
+          num,
+          question: q.question || '',
+          options: q.options || {},
+          answer: (q.answer || '').toUpperCase(),
+          answer_text: q.answer_text || '',
+          images: q.images || [],
+          is_active: true,
+          updated_at: new Date().toISOString()
+        };
+
+        const r = await client.from('questions').insert(payload);
+        if(r.error){
+          console.warn('Import lỗi câu ' + num + ':', r.error.message);
+          errors++;
+        } else {
+          success++;
+        }
+      }
+
+      await logAction('ai_import_questions', 'questions', subject, {
+        count: parsedQuestions.length,
+        success,
+        errors,
+        subject_code: subject
+      });
+
+      closeModal();
+      await loadAll();
+      toast(`Import xong: ${success} thành công${errors ? ', ' + errors + ' lỗi' : ''}`);
+      parsedQuestions = [];
+
+    }finally{
+      setBusy(false);
+    }
+  };
+
+  window.openAddSubjectAI = function(){
+    parsedQuestions = [];
+    openModal('Thêm môn học bằng AI', getImportHTML());
+    setTimeout(() => {
+      const fileInput = document.getElementById('aiImportFile');
+      if(fileInput){
+        fileInput.addEventListener('change', function(e){
+          const file = e.target.files?.[0];
+          if(!file) return;
+          const reader = new FileReader();
+          reader.onload = function(){
+            const text = reader.result;
+            let jsonStr = text;
+            const mdMatch = text.match(/```json\s*([\s\S]*?)```/);
+            if(mdMatch) jsonStr = mdMatch[1];
+            else {
+              const jsonMatch = text.match(/```\s*([\s\S]*?)```/);
+              if(jsonMatch) jsonStr = jsonMatch[1];
+            }
+            const ta = document.getElementById('aiImportData');
+            if(ta) ta.value = jsonStr.trim();
+            toast('Đã đọc file ' + file.name);
+            previewAIImport();
+          };
+          reader.readAsText(file);
+        });
+      }
+    }, 100);
+  };
+})();
+
+
+// ===== SUBJECT_MANAGEMENT_20260625 =====
+(function(){
+  const $ = id => document.getElementById(id);
+
+  // --- Admin xóa môn học (chuyển vào thùng rác) ---
+  window.deleteSubjectAdmin = async function(code){
+    if(!isAdmin()) return alert('Chỉ admin mới được xóa môn.');
+    if(!confirm('Xóa môn "'+code+'"?\n\nMôn học và tất cả câu hỏi sẽ được chuyển vào Thùng rác.')) return;
+
+    setBusy(true, 'Đang xóa môn...');
+    try{
+      const {data:subjectData} = await client.from('subjects').select('*').eq('code', code).maybeSingle();
+      const {data:questionsData} = await client.from('questions').select('*').eq('subject_code', code);
+
+      const backup = {
+        subject: subjectData,
+        questions: questionsData || [],
+        deleted_at: new Date().toISOString()
+      };
+
+      await client.from('deleted_subjects').insert({
+        original_data: backup,
+        deleted_by: user?.id,
+        deleted_by_email: user?.email || profile?.email
+      });
+
+      if(questionsData && questionsData.length){
+        for(const q of questionsData){
+          await client.from('questions').delete().eq('id', q.id);
+        }
+      }
+
+      await client.from('subjects').delete().eq('code', code);
+
+      await logAction('delete_subject', 'subjects', code, {
+        subject_code: code,
+        questions_count: (questionsData||[]).length
+      });
+
+      await loadAll();
+      toast('Đã chuyển môn '+code+' vào Thùng rác');
+    } catch(e){
+      console.warn('Delete subject error:', e);
+      alert('Lỗi khi xóa môn: '+(e.message||e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // --- Subject request approval (phê duyệt yêu cầu thêm môn từ user) ---
+  let subjectRequests = [];
+
+  window.loadSubjectRequests = async function(){
+    if(!isEditor()) return;
+    const {data, error} = await client.from('subject_requests').select('*').order('created_at',{ascending:false});
+    if(error){ console.warn('Load subject requests error:', error); return; }
+    subjectRequests = data || [];
+    renderSubjectRequests();
+    updateSubjectRequestBadge();
+  };
+
+  function updateSubjectRequestBadge(){
+    const badge = $('subjectRequestBadge');
+    const pending = subjectRequests.filter(r => r.status === 'pending').length;
+    if(badge){
+      badge.textContent = pending;
+      badge.classList.toggle('hidden', !pending);
+    }
+  }
+
+  window.filterSubjectRequests = function(status){
+    document.querySelectorAll('.subjectReqFilter').forEach(b => b.classList.toggle('active', b.dataset.srf === status));
+    renderSubjectRequests(status);
+  };
+
+  function renderSubjectRequests(filter){
+    filter = filter || 'pending';
+    const el = $('subjectRequestList');
+    if(!el) return;
+
+    const filtered = filter === 'all' ? subjectRequests : subjectRequests.filter(r => r.status === filter);
+    const pendingCount = subjectRequests.filter(r => r.status === 'pending').length;
+    const approvedCount = subjectRequests.filter(r => r.status === 'approved').length;
+    const rejectedCount = subjectRequests.filter(r => r.status === 'rejected').length;
+
+    if($('srfPending')) $('srfPending').textContent = pendingCount;
+    if($('srfApproved')) $('srfApproved').textContent = approvedCount;
+    if($('srfRejected')) $('srfRejected').textContent = rejectedCount;
+    if($('srfAll')) $('srfAll').textContent = subjectRequests.length;
+
+    if(!filtered.length){
+      el.innerHTML = '<p class="muted">Không có yêu cầu nào.</p>';
+      return;
+    }
+
+    el.innerHTML = filtered.map(r => {
+      const questionsCount = Array.isArray(r.questions_data) ? r.questions_data.length : 0;
+      const statusBadge = r.status === 'pending' ? '<span class="badge pending">Chờ duyệt</span>' :
+                          r.status === 'approved' ? '<span class="badge approved">Đã duyệt</span>' :
+                          '<span class="badge rejected">Từ chối</span>';
+      return `<div class="item subjectRequestItem">
+        <div class="head">
+          <div>
+            <b>${esc(r.code)}</b> - ${esc(r.name)} ${statusBadge}
+            <br><span class="muted">${esc(r.user_email || '?')} · ${new Date(r.created_at).toLocaleString('vi-VN')}</span>
+            ${r.description ? '<br><span class="muted">Mô tả: '+esc(r.description)+'</span>' : ''}
+            <br><span class="muted">${questionsCount} câu hỏi đính kèm</span>
+            ${r.admin_note ? '<br><span class="muted">Ghi chú: '+esc(r.admin_note)+'</span>' : ''}
+          </div>
+        </div>
+        <div class="actions">
+          ${questionsCount ? `<button class="act" onclick="previewSubjectRequestQuestions(${r.id})">Xem câu hỏi</button>` : ''}
+          ${r.status === 'pending' ? `
+            <button class="act ok" onclick="approveSubjectRequest(${r.id})">Duyệt</button>
+            <button class="act bad" onclick="rejectSubjectRequest(${r.id})">Từ chối</button>
+          ` : ''}
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  window.previewSubjectRequestQuestions = function(id){
+    const r = subjectRequests.find(x => x.id === id);
+    if(!r || !r.questions_data) return;
+    const qs = r.questions_data;
+    const html = qs.slice(0, 20).map((q, i) => {
+      const hasImg = q.images && q.images.length;
+      return `<div class="item">
+        <b>Câu ${q.num||(i+1)}</b>: ${esc((q.question||'').substring(0,150))}
+        <br><span class="muted">Đáp án: ${esc(q.answer||'?')} ${hasImg ? '🖼 có hình ảnh' : ''}</span>
+      </div>`;
+    }).join('');
+    const more = qs.length > 20 ? '<p class="muted">...và '+(qs.length-20)+' câu khác</p>' : '';
+    openModal('Xem trước câu hỏi - '+esc(r.code), '<div>'+html+more+'</div>');
+  };
+
+  window.approveSubjectRequest = async function(id){
+    if(!isEditor()) return alert('Chỉ Admin/Editor mới duyệt được.');
+    const r = subjectRequests.find(x => x.id === id);
+    if(!r) return alert('Không tìm thấy yêu cầu.');
+    if(!confirm('Duyệt yêu cầu thêm môn "'+r.code+'" từ '+r.user_email+'?')) return;
+
+    setBusy(true, 'Đang duyệt...');
+    try{
+      const {data:existing} = await client.from('subjects').select('code').eq('code', r.code).maybeSingle();
+      if(existing){
+        alert('Mã môn '+r.code+' đã tồn tại. Hãy từ chối yêu cầu hoặc xóa môn cũ trước.');
+        return;
+      }
+
+      const maxOrder = await client.from('subjects').select('sort_order').order('sort_order',{ascending:false}).limit(1);
+      const nextOrder = ((maxOrder.data?.[0]?.sort_order)||0)+1;
+
+      const {error:subError} = await client.from('subjects').insert({
+        code: r.code, name: r.name, description: r.description || null,
+        is_active: true, sort_order: nextOrder
+      });
+      if(subError){ alert('Lỗi tạo môn: '+subError.message); return; }
+
+      if(Array.isArray(r.questions_data) && r.questions_data.length){
+        let success=0, errors=0;
+        for(let i=0; i<r.questions_data.length; i++){
+          const q = r.questions_data[i];
+          const payload = {
+            subject_code: r.code,
+            num: q.num || (i+1),
+            question: q.question || '',
+            options: q.options || {},
+            answer: (q.answer || '').toUpperCase(),
+            answer_text: q.answer_text || '',
+            images: q.images || [],
+            is_active: true,
+            updated_at: new Date().toISOString()
+          };
+          const res = await client.from('questions').insert(payload);
+          if(res.error) errors++; else success++;
+        }
+        toast('Đã thêm '+success+' câu hỏi'+(errors?' ('+errors+' lỗi)':''));
+      }
+
+      await client.from('subject_requests').update({
+        status: 'approved',
+        reviewed_at: new Date().toISOString(),
+        reviewed_by: user?.id
+      }).eq('id', id);
+
+      await logAction('approve_subject_request', 'subject_requests', id, {
+        code: r.code, name: r.name, questions: (r.questions_data||[]).length
+      });
+
+      await loadAll();
+      await loadSubjectRequests();
+      toast('Đã duyệt môn '+r.code);
+    } catch(e){
+      console.warn('Approve subject request error:', e);
+      alert('Lỗi: '+(e.message||e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  window.rejectSubjectRequest = async function(id){
+    if(!isEditor()) return alert('Chỉ Admin/Editor mới từ chối được.');
+    const r = subjectRequests.find(x => x.id === id);
+    if(!r) return alert('Không tìm thấy yêu cầu.');
+    const note = prompt('Lý do từ chối (có thể bỏ trống):');
+    if(note === null) return;
+
+    setBusy(true, 'Đang từ chối...');
+    try{
+      await client.from('subject_requests').update({
+        status: 'rejected',
+        admin_note: note || '',
+        reviewed_at: new Date().toISOString(),
+        reviewed_by: user?.id
+      }).eq('id', id);
+
+      await logAction('reject_subject_request', 'subject_requests', id, {
+        code: r.code, reason: note
+      });
+
+      await loadSubjectRequests();
+      toast('Đã từ chối yêu cầu '+r.code);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // --- Restore deleted subject ---
+  window.restoreSubject = async function(id){
+    if(!isAdmin()) return alert('Chỉ admin mới khôi phục được.');
+    const {data:item} = await client.from('deleted_subjects').select('*').eq('id', id).maybeSingle();
+    if(!item) return alert('Không tìm thấy.');
+    if(!confirm('Khôi phục môn học này?')) return;
+
+    setBusy(true, 'Đang khôi phục...');
+    try{
+      const backup = item.original_data;
+      if(backup.subject){
+        const {error} = await client.from('subjects').insert(backup.subject);
+        if(error && !error.message?.includes('duplicate')){ alert('Lỗi khôi phục môn: '+error.message); return; }
+      }
+      if(backup.questions && backup.questions.length){
+        for(const q of backup.questions){
+          await client.from('questions').insert(q).catch(()=>{});
+        }
+      }
+      await client.from('deleted_subjects').delete().eq('id', id);
+      await logAction('restore_subject', 'subjects', backup.subject?.code, {questions: backup.questions?.length});
+      await loadAll();
+      await loadTrash();
+      toast('Đã khôi phục môn '+(backup.subject?.code||''));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Load subject requests when navigating to the page
+  const origSetPage = setPage;
+  setPage = function(id, n){
+    origSetPage(id, n);
+    if(id === 'subjectRequests') loadSubjectRequests();
+  };
+
+  function injectDeleteIcons(){
+    if(!isAdmin()) return;
+    document.querySelectorAll('.subjectTab[onclick*="setQuestionSubjectFilter"]').forEach(btn => {
+      const match = (btn.getAttribute('onclick')||'').match(/setQuestionSubjectFilter\('([^']+)'\)/);
+      const code = match ? match[1] : '';
+      if(code && code !== 'all' && !btn.querySelector('.deleteSubjectIcon')){
+        const del = document.createElement('span');
+        del.className = 'deleteSubjectIcon';
+        del.textContent = '×';
+        del.title = 'Xóa môn '+code;
+        del.onclick = function(e){
+          e.stopPropagation();
+          deleteSubjectAdmin(code);
+        };
+        btn.appendChild(del);
+      }
+    });
+  }
+  setInterval(injectDeleteIcons, 800);
+})();
+
+
+// ===== TRASH_SUBJECTS_PATCH_20260625 =====
+(function(){
+  const origLoadTrash = window.loadTrash;
+  window.loadTrash = async function(){
+    if(typeof origLoadTrash === 'function') await origLoadTrash();
+    if(!isAdmin()) return;
+
+    const el = document.getElementById('trashList');
+    if(!el) return;
+
+    const {data, error} = await client.from('deleted_subjects').select('*').order('deleted_at',{ascending:false});
+    if(error || !data || !data.length) return;
+
+    const subjectTrashHTML = data.map(t => {
+      const backup = t.original_data || {};
+      const sub = backup.subject || {};
+      const qCount = (backup.questions || []).length;
+      return `<div class="item trashItem">
+        <div class="head">
+          <div><b>MÔN: ${esc(sub.code||'?')} - ${esc(sub.name||'')}</b>
+          <span class="badge deleted">Đã xóa</span></div>
+          <span class="muted">${qCount} câu hỏi · Xóa bởi ${esc(t.deleted_by_email||'?')} · ${new Date(t.deleted_at).toLocaleString('vi-VN')}</span>
+        </div>
+        <div class="actions">
+          <button class="act ok" onclick="restoreSubject(${t.id})">Khôi phục môn</button>
+          <button class="act bad" onclick="permanentDeleteSubject(${t.id})">Xóa vĩnh viễn</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    el.innerHTML = '<h4 style="margin:16px 0 8px;color:var(--gold2);">Môn học đã xóa</h4>' + subjectTrashHTML + '<hr style="border-color:rgba(255,255,255,.06);margin:16px 0;">' + '<h4 style="margin:0 0 8px;color:var(--gold2);">Câu hỏi đã xóa</h4>' + el.innerHTML;
+  };
+
+  window.permanentDeleteSubject = async function(id){
+    if(!isAdmin()) return alert('Chỉ admin.');
+    if(!confirm('Xóa VĨNH VIỄN môn học này?\n\nKhông thể khôi phục sau thao tác này!')) return;
+    setBusy(true,'Đang xóa vĩnh viễn...');
+    try{
+      await client.from('deleted_subjects').delete().eq('id',id);
+      await logAction('permanent_delete_subject','deleted_subjects',id,{});
+      await loadTrash();
+      toast('Đã xóa vĩnh viễn');
+    }finally{ setBusy(false); }
+  };
 })();

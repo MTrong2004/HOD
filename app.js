@@ -1,6 +1,18 @@
 window.HOD_DATA=[];
 (function(){var s=document.createElement('script');s.type='application/json';s.id='data';s.textContent='[]';document.head.appendChild(s);})();
 
+// === LOCAL DEV BYPASS: skip login when opened from file:// ===
+if(location.protocol === 'file:'){
+  window.__LOCAL_DEV_MODE = true;
+  document.addEventListener('DOMContentLoaded', function(){
+    document.getElementById('hodLoginGate')?.classList.add('hidden');
+    document.getElementById('hodPendingApproval')?.classList.add('hidden');
+    document.body?.classList.remove('hod-locked');
+    var sg = document.getElementById('subjectGate');
+    if(sg){ sg.classList.remove('hidden'); sg.setAttribute('aria-hidden','false'); document.body.classList.add('has-subject-gate'); }
+  });
+}
+
 /* ===== merged app logic ===== */
 
 ﻿'use strict';const dataEl=document.getElementById('data'),BASE=[],STORE='hod102_user_edits_v1';let edits={};try{edits=JSON.parse(localStorage.getItem(STORE)||'{}')}catch(e){}function clone(x){return JSON.parse(JSON.stringify(x))}
@@ -201,7 +213,7 @@ window.HODSupabase = (() => {
         if(setting && setting.value){
           regMode = typeof setting.value === 'string' ? setting.value.replace(/"/g,'') : String(setting.value);
         }
-      }catch(e){}
+      }catch(e){ console.warn('Không đọc được registration_mode, mặc định approval:', e); }
 
       if(regMode === 'closed'){
         alert('Hệ thống hiện không cho phép đăng ký mới. Vui lòng liên hệ admin.');
@@ -518,7 +530,7 @@ window.HODSupabase = (() => {
   function avatarHTML(){const u=meta().avatar_url || meta().picture || ''; const e=email(); const l=(e||'U').trim().charAt(0).toUpperCase(); return u ? '<img src="'+esc(u)+'" alt="avatar">' : l}
   function ensureAvatar(){const actions=document.querySelector('.globalTop .actions')||document.querySelector('#fc .actions')||document.querySelector('.actions'); if(!actions||$('hodTopAvatar'))return; const btn=document.createElement('button'); btn.id='hodTopAvatar'; btn.className='hodTopAvatar'; btn.type='button'; btn.onclick=toggleMenu; actions.appendChild(btn)}
   function toggleMenu(){ if(!user()) return showLogin(); updateMenu(); $('hodAccountMenu')?.classList.toggle('hidden') }
-  function showLogin(){ document.body?.classList.add('hod-locked'); $('hodLoginGate')?.classList.remove('hidden'); $('hodAccountMenu')?.classList.add('hidden'); $('hodPendingApproval')?.classList.add('hidden'); }
+  function showLogin(){ if(window.__LOCAL_DEV_MODE) return; document.body?.classList.add('hod-locked'); $('hodLoginGate')?.classList.remove('hidden'); $('hodAccountMenu')?.classList.add('hidden'); $('hodPendingApproval')?.classList.add('hidden'); }
   function hideLogin(){ document.body?.classList.remove('hod-locked'); $('hodLoginGate')?.classList.add('hidden'); }
   function login(){const api=window.HODSupabase;if(!api){alert('Supabase chưa sẵn sàng, hãy tải lại trang.');return} if(api.signInGoogle){api.signInGoogle();return} api.openAuth?.()}
   async function logout(){ await window.HODSupabase?.signOut?.(); showLogin(); updateAll() }
@@ -560,16 +572,34 @@ window.HODSupabase = (() => {
   function showErr(msg){ const e=$('subjectError'); if(e){ e.textContent=msg; e.classList.remove('hidden'); } }
   function clearErr(){ $('subjectError')?.classList.add('hidden'); }
   function showLoading(on,msg='Đang tải danh sách môn học...'){ const e=$('subjectLoading'); if(e){ e.textContent=msg; e.classList.toggle('hidden',!on);} }
-  function fallbackSubjects(){ return [{code:'HOD102', name:'HOD102 Learning', description:'Môn mặc định để bắt đầu học.', cover:'', is_active:true},{code:'MLN111', name:'MLN111 Learning', description:'Bộ câu hỏi và tài liệu MLN111.', cover:'', is_active:true}]; }
-  async function getSubjects(){ const supa=c(); if(!supa||!logged()) return fallbackSubjects(); const {data,error}=await supa.from('subjects').select('*').eq('is_active', true).order('sort_order',{ascending:true}).order('code',{ascending:true}); if(error || !data || !data.length){ console.warn(error||'No subjects'); showErr('Không tải được danh sách môn học. Đang dùng môn mặc định.'); return fallbackSubjects(); } return data; }
+  function fallbackSubjects(){ return [{code:'HOD102', name:'HOD102 Learning', description:'Môn mặc định để bắt đầu học.', cover:'', is_active:true, question_count:0},{code:'MLN111', name:'MLN111 Learning', description:'Bộ câu hỏi và tài liệu MLN111.', cover:'', is_active:true, question_count:0}]; }
+  async function addQuestionCounts(subjects){
+    const supa=c();
+    if(!supa||!logged()||!subjects?.length) return subjects;
+    const codes=subjects.map(s=>s.code).filter(Boolean);
+    if(!codes.length) return subjects;
+    try{
+      const {data,error}=await supa.from('questions').select('subject_code').eq('is_active', true).in('subject_code', codes);
+      if(error) throw error;
+      const counts={};
+      (data||[]).forEach(q=>{ const code=q.subject_code; if(code) counts[code]=(counts[code]||0)+1; });
+      return subjects.map(s=>({...s, question_count: counts[s.code]||0}));
+    }catch(e){
+      console.warn('Không tải được số câu từng môn:', e);
+      return subjects;
+    }
+  }
+  async function getSubjects(){ const supa=c(); if(!supa||!logged()) return fallbackSubjects(); const {data,error}=await supa.from('subjects').select('*').eq('is_active', true).order('sort_order',{ascending:true}).order('code',{ascending:true}); if(error || !data || !data.length){ console.warn(error||'No subjects'); showErr('Không tải được danh sách môn học. Đang dùng môn mặc định.'); return fallbackSubjects(); } return await addQuestionCounts(data); }
   function card(s){
     const code = esc2(s.code || '');
     const name = esc2(s.name || s.code || 'Chưa có tên môn');
     const desc = esc2(s.description || 'Môn học chưa có mô tả.');
-    const status = s.is_active===false ? 'Tạm ẩn' : 'Sẵn sàng học';
+    const rawCount = Number(s.question_count ?? s.questions_count ?? s.count);
+    const countText = Number.isFinite(rawCount) ? `${rawCount} câu` : '— câu';
+    const status = s.is_active===false ? 'Tạm ẩn' : countText;
     const chosen = pickedCode===s.code;
-    return `<button class="subjectCard ${chosen?'active':''}" data-code="${code}" type="button" title="${code} - ${name}">
-      <span class="subjectCardCode">${code}</span>
+    return `<button class="subjectCard ${chosen?'active':''}" data-code="${code}" type="button" title="${code} - ${name} - ${countText}">
+      <span class="subjectCardCode"><span>${code}</span></span>
       <span class="subjectCardTitle">${name}</span>
       <span class="subjectCardDesc">${desc}</span>
       <span class="subjectMeta">
@@ -768,48 +798,32 @@ window.HODSupabase = (() => {
     if(tabBtn) tabBtn.style.display = allowed ? 'block' : 'none';
   }
 
-  const AI_PROMPT = `Bạn là trợ lý tạo ngân hàng câu hỏi trắc nghiệm. Hãy đọc tài liệu tôi gửi và tạo câu hỏi trắc nghiệm.
+  const AI_PROMPT = `Bạn là trợ lý tạo ngân hàng câu hỏi trắc nghiệm. Đọc tài liệu tôi gửi và tạo câu hỏi trắc nghiệm theo đúng format bên dưới.
+
+QUY TẮC BATCH (QUAN TRỌNG):
+- Tạo TỐI ĐA số câu có thể trong MỖI lần trả lời (mục tiêu 40-50 câu/batch).
+- Để tiết kiệm token: "answer_text" chỉ viết 1 dòng ngắn, KHÔNG giải thích dài.
+- Nếu chưa hết tài liệu, DỪNG ở cuối batch và nói: "Gõ 'tiếp' để tôi tạo phần tiếp (câu X-Y)."
+- Khi tôi gõ "tiếp", tiếp tục batch sau, đánh số "num" liên tục, CÙNG format.
+- Mỗi batch là mảng JSON hoàn chỉnh, parse được độc lập.
+- KHÔNG thêm text giải thích bên ngoài block JSON.
 
 YÊU CẦU:
-- Mỗi câu hỏi có 4 đáp án A, B, C, D (có thể thêm E nếu cần)
-- Đáp án đúng ghi chữ cái (VD: "A" hoặc "AC" nếu nhiều đáp án)
-- Câu hỏi phải rõ ràng, chính xác theo nội dung tài liệu
-- Giải thích ngắn gọn tại sao đáp án đó đúng
-- Nếu câu hỏi CÓ HÌNH ẢNH đi kèm (biểu đồ, sơ đồ, hình minh họa...), hãy thêm trường "images" chứa mô tả hình ảnh cần thiết
-- Trả về kết quả dưới dạng file .md hoặc .txt chứa JSON bên trong block code
-- Trả về ĐÚNG format JSON bên trong block \`\`\`json ... \`\`\`, không thêm text nào khác bên ngoài block
+- 4 đáp án A-D (thêm E nếu cần). Đáp án đúng = chữ cái (VD: "A" hoặc "AC").
+- Câu hỏi rõ ràng, chính xác theo tài liệu.
+- "answer_text": giải thích TỐI ĐA 1 câu ngắn.
+- "has_image": true/false — câu CẦN hình ảnh (biểu đồ, sơ đồ...) hay không.
+- "error_risk": "low" | "medium" | "high"
+- "error_risk_reason": lý do ngắn gọn (tối đa 10 từ).
 
-FORMAT (trả về trong file .md hoặc .txt):
+FORMAT:
 \`\`\`json
 [
-  {
-    "num": 1,
-    "question": "Nội dung câu hỏi?",
-    "options": {
-      "A": "Lựa chọn A",
-      "B": "Lựa chọn B",
-      "C": "Lựa chọn C",
-      "D": "Lựa chọn D"
-    },
-    "answer": "A",
-    "answer_text": "Giải thích ngắn gọn",
-    "images": []
-  },
-  {
-    "num": 2,
-    "question": "Câu hỏi có hình ảnh minh họa (xem hình bên dưới)?",
-    "options": {
-      "A": "...",
-      "B": "...",
-      "C": "...",
-      "D": "..."
-    },
-    "answer": "B",
-    "answer_text": "Giải thích",
-    "images": [{"src": "URL_HÌNH_ẢNH_HOẶC_MÔ_TẢ", "alt": "Mô tả hình ảnh"}]
-  }
+  {"num":1,"question":"...?","options":{"A":"...","B":"...","C":"...","D":"..."},"answer":"A","answer_text":"Giải thích ngắn","images":[],"has_image":false,"error_risk":"low","error_risk_reason":"Định nghĩa rõ ràng"}
 ]
-\`\`\`;`;
+\`\`\`
+
+Bắt đầu ngay, tạo nhiều câu nhất có thể. Khi hết token thì dừng và nhắc tôi gõ "tiếp".`;
 
   window.__ADD_SUBJECT_AI_PROMPT = AI_PROMPT;
   let parsedQuestions = [];
@@ -942,23 +956,6 @@ FORMAT (trả về trong file .md hoặc .txt):
     }
   };
 
-  // Nâng cấp nút Copy hiển thị trạng thái "Đã copy"
-  window.__copyUserAIPrompt = function(){
-    navigator.clipboard.writeText(AI_PROMPT).then(() => {
-      const btn = document.getElementById('btnCopyPrompt');
-      if(btn) {
-        const oldText = btn.innerHTML;
-        btn.innerHTML = '✅ Đã Copy';
-        btn.style.color = '#111';
-        btn.style.background = '#e8d4a8';
-        setTimeout(() => {
-          btn.innerHTML = oldText;
-          btn.style = ''; // Trả về css mặc định
-        }, 2000);
-      }
-      notify('Đã copy prompt!');
-    });
-  };
 
   function handleFileImport(e){
     const file = e.target.files?.[0];
@@ -999,10 +996,20 @@ FORMAT (trả về trong file .md hoặc .txt):
 
     let data;
     try {
-      let cleaned = raw;
-      if(cleaned.startsWith('```json')) cleaned = cleaned.replace(/^```json\s*/, '').replace(/```\s*$/, '');
-      else if(cleaned.startsWith('```')) cleaned = cleaned.replace(/^```\s*/, '').replace(/```\s*$/, '');
-      data = JSON.parse(cleaned);
+      var jsonBlocks = raw.match(/```json\s*([\s\S]*?)```/g);
+      if(jsonBlocks && jsonBlocks.length > 0){
+        data = [];
+        jsonBlocks.forEach(function(block){
+          var cleaned = block.replace(/^```json\s*/, '').replace(/```\s*$/, '');
+          var parsed = JSON.parse(cleaned);
+          if(Array.isArray(parsed)) data = data.concat(parsed);
+          else if(parsed.questions && Array.isArray(parsed.questions)) data = data.concat(parsed.questions);
+        });
+      } else {
+        var cleaned = raw;
+        if(cleaned.startsWith('```')) cleaned = cleaned.replace(/^```\w*\s*/, '').replace(/```\s*$/, '');
+        data = JSON.parse(cleaned);
+      }
     } catch(e){
       alert('JSON không hợp lệ. Hãy kiểm tra lại format.\n\nLỗi: ' + e.message);
       return;
@@ -1033,99 +1040,8 @@ FORMAT (trả về trong file .md hoặc .txt):
     notify('OK! ' + data.length + ' câu hỏi sẵn sàng');
   };
 
-  window.__openImportPreviewModal = function(data){
-    data = data || parsedQuestions || [];
-    let modal = document.getElementById('importPreviewModal');
-    if(!modal){
-      modal = document.createElement('div');
-      modal.id = 'importPreviewModal';
-      modal.className = 'modal importPreviewModal hidden';
-      modal.innerHTML = `<div class="box importPreviewModalBox">
-        <button class="modalX" type="button" onclick="window.__closeImportPreviewModal()">×</button>
-        <div class="importPreviewHead">
-          <div>
-            <span class="importPreviewLabel">XEM TRƯỚC IMPORT</span>
-            <h2>Kiểm tra câu hỏi</h2>
-            <p>Chọn đáp án thử rồi bấm “Check” để kiểm tra đáp án đúng trước khi lưu môn học.</p>
-          </div>
-          <button class="primary importPreviewSaveTop" type="button" onclick="window.__closeImportPreviewModal(); window.__submitSubjectRequest();">Lưu Môn Học</button>
-        </div>
-        <div id="importPreviewStats" class="importPreviewStats"></div>
-        <div id="importPreviewList" class="importPreviewList"></div>
-      </div>`;
-      modal.addEventListener('mousedown', e => { if(e.target === modal) window.__closeImportPreviewModal(); });
-      document.body.appendChild(modal);
-    }
-    const imgCount = data.filter(q => q.images && q.images.length > 0).length;
-    const stats = document.getElementById('importPreviewStats');
-    if(stats) stats.textContent = `${data.length} câu hỏi${imgCount ? ' · '+imgCount+' câu có hình ảnh' : ''}`;
-    const list = document.getElementById('importPreviewList');
-    if(list){
-      list.innerHTML = data.map((q, i) => {
-        const opts = Object.entries(q.options || {}).map(([k,v]) => `
-          <button class="previewAnswerOption" type="button" data-pi="${i}" data-k="${esc2(k)}" onclick="window.__selectPreviewAnswer(${i}, '${esc2(k)}')">
-            <b>${esc2(k)}</b><span>${esc2(v)}</span>
-          </button>
-        `).join('');
-        const imgs = (q.images || []).map(im => {
-          const src = typeof im === 'string' ? im : (im.src || im.url || '');
-          return src ? `<img src="${esc2(src)}" alt="Ảnh câu ${i+1}" loading="lazy">` : '';
-        }).join('');
-        return `<article class="previewQuestionCard" data-pcard="${i}">
-          <div class="previewQuestionTop">
-            <b>Câu ${esc2(q.num || (i+1))}</b>
-            <span>Đáp án đúng: ${esc2(q.answer || '?')}</span>
-          </div>
-          <div class="previewQuestionText">${esc2(q.question || '')}</div>
-          ${imgs ? `<div class="previewQuestionImages">${imgs}</div>` : ''}
-          <div class="previewAnswerGrid">${opts}</div>
-          <div class="previewCheckRow">
-            <button class="btn" type="button" onclick="window.__checkPreviewAnswer(${i})">Check đáp án</button>
-            <span class="previewCheckResult" id="previewCheckResult_${i}"></span>
-          </div>
-        </article>`;
-      }).join('');
-    }
-    modal.classList.remove('hidden');
-  };
-
   window.__closeImportPreviewModal = function(){
     document.getElementById('importPreviewModal')?.classList.add('hidden');
-  };
-
-  window.__selectPreviewAnswer = function(i, k){
-    const q = (parsedQuestions || [])[i];
-    if(!q) return;
-    const multi = String(q.answer || '').length > 1;
-    window.__previewSelections = window.__previewSelections || {};
-    let current = String(window.__previewSelections[i] || '');
-    if(multi){
-      const set = new Set(current.split('').filter(Boolean));
-      set.has(k) ? set.delete(k) : set.add(k);
-      current = Array.from(set).sort().join('');
-    }else current = k;
-    window.__previewSelections[i] = current;
-    document.querySelectorAll(`[data-pi="${i}"]`).forEach(btn => btn.classList.toggle('selected', current.includes(btn.dataset.k)));
-    const res = document.getElementById('previewCheckResult_'+i);
-    if(res){ res.textContent = ''; res.className = 'previewCheckResult'; }
-  };
-
-  window.__checkPreviewAnswer = function(i){
-    const q = (parsedQuestions || [])[i];
-    if(!q) return;
-    const selected = String((window.__previewSelections || {})[i] || '').split('').sort().join('');
-    const answer = String(q.answer || '').toUpperCase().split('').sort().join('');
-    const res = document.getElementById('previewCheckResult_'+i);
-    document.querySelectorAll(`[data-pi="${i}"]`).forEach(btn => {
-      const k = btn.dataset.k;
-      btn.classList.toggle('correct', answer.includes(k));
-      btn.classList.toggle('wrong', selected.includes(k) && !answer.includes(k));
-    });
-    if(res){
-      const ok = selected && selected === answer;
-      res.textContent = ok ? '✅ Đúng' : `❌ Chưa đúng · Đáp án: ${answer}`;
-      res.className = 'previewCheckResult ' + (ok ? 'ok' : 'bad');
-    }
   };
 
   
@@ -3581,147 +3497,6 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c){const r
   document.addEventListener('click',()=>setTimeout(()=>{ cleanPromptTip(); patchPromptModal(); },0),true);
 })();
 
-// ===== IMPORT_PREVIEW_SHOW_ANSWER_EDIT_DARK_20260625 =====
-// Xem trước import: hiện luôn đáp án đúng + cho sửa câu hỏi/lựa chọn/đáp án.
-(function(){
-  function escHtml(s){
-    return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  }
-  function optionText(q,k){ return q?.options?.[k] || ''; }
-  function answerLabel(q){
-    const ans = String(q?.answer || '').toUpperCase();
-    if(!ans) return '?';
-    const parts = ans.split('').filter(Boolean).map(k => optionText(q,k) ? `${k}. ${optionText(q,k)}` : k);
-    return parts.join(' ; ');
-  }
-  function renderPreview(data){
-    data = data || window.__previewImportData || [];
-    window.__previewImportData = data;
-    let modal = document.getElementById('importPreviewModal');
-    if(!modal){
-      modal = document.createElement('div');
-      modal.id = 'importPreviewModal';
-      modal.className = 'modal importPreviewModal hidden';
-      modal.innerHTML = `<div class="box importPreviewModalBox">
-        <button class="modalX" type="button" onclick="window.__closeImportPreviewModal()">×</button>
-        <div class="importPreviewHead">
-          <div>
-            <span class="importPreviewLabel">XEM TRƯỚC IMPORT</span>
-            <h2>Kiểm tra câu hỏi</h2>
-            <p>Đáp án đúng đã được hiển thị sẵn. Bấm “Sửa” nếu cần chỉnh câu hỏi, câu trả lời hoặc đáp án.</p>
-          </div>
-          <button class="primary importPreviewSaveTop" type="button" onclick="window.__closeImportPreviewModal(); window.__submitSubjectRequest();">Lưu Môn Học</button>
-        </div>
-        <div id="importPreviewStats" class="importPreviewStats"></div>
-        <div id="importPreviewList" class="importPreviewList"></div>
-      </div>`;
-      modal.addEventListener('mousedown', e => { if(e.target === modal) window.__closeImportPreviewModal(); });
-      document.body.appendChild(modal);
-    }
-    const imgCount = data.filter(q => q.images && q.images.length > 0).length;
-    const stats = document.getElementById('importPreviewStats');
-    if(stats) stats.textContent = `${data.length} câu hỏi${imgCount ? ' · '+imgCount+' câu có hình ảnh' : ''}`;
-    const list = document.getElementById('importPreviewList');
-    if(list){
-      list.innerHTML = data.map((q, i) => {
-        const answer = String(q.answer || '').toUpperCase();
-        const opts = Object.entries(q.options || {}).map(([k,v]) => {
-          const key = String(k).toUpperCase();
-          const isCorrect = answer.includes(key);
-          return `<div class="previewAnswerOption ${isCorrect ? 'correct' : ''}" data-pi="${i}" data-k="${escHtml(key)}">
-            <b>${escHtml(key)}</b><span>${escHtml(v)}</span>
-          </div>`;
-        }).join('');
-        const imgs = (q.images || []).map(im => {
-          const src = typeof im === 'string' ? im : (im.src || im.url || '');
-          return src ? `<img src="${escHtml(src)}" alt="Ảnh câu ${i+1}" loading="lazy">` : '';
-        }).join('');
-        return `<article class="previewQuestionCard" data-pcard="${i}">
-          <div class="previewQuestionTop">
-            <b>Câu ${escHtml(q.num || (i+1))}</b>
-            <div class="previewTopActions">
-              <span>Đáp án đúng: ${escHtml(answer || '?')}</span>
-              <button class="previewEditBtn" type="button" onclick="window.__editImportPreviewQuestion(${i})">Sửa</button>
-            </div>
-          </div>
-          <div class="previewQuestionText">${escHtml(q.question || '')}</div>
-          <div class="previewAnswerAlways">${escHtml(answerLabel(q))}</div>
-          ${imgs ? `<div class="previewQuestionImages">${imgs}</div>` : ''}
-          <div class="previewAnswerGrid">${opts}</div>
-        </article>`;
-      }).join('');
-    }
-    modal.classList.remove('hidden');
-  }
-  window.__openImportPreviewModal = renderPreview;
-
-  window.__editImportPreviewQuestion = function(i){
-    const data = window.__previewImportData || [];
-    const q = data[i];
-    if(!q) return;
-    let modal = document.getElementById('previewEditModal');
-    if(!modal){
-      modal = document.createElement('div');
-      modal.id = 'previewEditModal';
-      modal.className = 'previewEditModal hidden';
-      modal.innerHTML = `<div class="previewEditBox">
-        <button class="modalX" type="button" onclick="window.__closePreviewEditModal()">×</button>
-        <h2 id="previewEditTitle">Sửa câu hỏi</h2>
-        <div class="previewEditGrid">
-          <div class="previewEditField full"><label>Câu hỏi</label><textarea id="peQuestion"></textarea></div>
-          <div class="previewEditField"><label>Đáp án A</label><textarea id="peOptA"></textarea></div>
-          <div class="previewEditField"><label>Đáp án B</label><textarea id="peOptB"></textarea></div>
-          <div class="previewEditField"><label>Đáp án C</label><textarea id="peOptC"></textarea></div>
-          <div class="previewEditField"><label>Đáp án D</label><textarea id="peOptD"></textarea></div>
-          <div class="previewEditField"><label>Đáp án E</label><textarea id="peOptE"></textarea></div>
-          <div class="previewEditField"><label>Đáp án đúng</label><input id="peAnswer" placeholder="VD: A hoặc AC"></div>
-          <div class="previewEditField"><label>Giải thích</label><textarea id="peAnswerText"></textarea></div>
-        </div>
-        <div class="previewEditActions">
-          <button class="btn" type="button" onclick="window.__closePreviewEditModal()">Hủy</button>
-          <button class="primary" type="button" onclick="window.__saveImportPreviewQuestion()">Lưu sửa</button>
-        </div>
-      </div>`;
-      modal.addEventListener('mousedown', e => { if(e.target === modal) window.__closePreviewEditModal(); });
-      document.body.appendChild(modal);
-    }
-    window.__editingPreviewIndex = i;
-    document.getElementById('previewEditTitle').textContent = 'Sửa câu ' + (q.num || (i+1));
-    document.getElementById('peQuestion').value = q.question || '';
-    ['A','B','C','D','E'].forEach(k => { const el = document.getElementById('peOpt'+k); if(el) el.value = q.options?.[k] || ''; });
-    document.getElementById('peAnswer').value = String(q.answer || '').toUpperCase();
-    document.getElementById('peAnswerText').value = q.answer_text || q.answerText || '';
-    modal.classList.remove('hidden');
-  };
-
-  window.__closePreviewEditModal = function(){
-    document.getElementById('previewEditModal')?.classList.add('hidden');
-  };
-
-  window.__saveImportPreviewQuestion = function(){
-    const i = window.__editingPreviewIndex;
-    const data = window.__previewImportData || [];
-    const q = data[i];
-    if(!q) return;
-    const question = (document.getElementById('peQuestion')?.value || '').trim();
-    const answer = (document.getElementById('peAnswer')?.value || '').trim().toUpperCase();
-    if(!question) return alert('Câu hỏi không được để trống.');
-    if(!answer) return alert('Đáp án đúng không được để trống.');
-    const options = {};
-    ['A','B','C','D','E'].forEach(k => {
-      const v = (document.getElementById('peOpt'+k)?.value || '').trim();
-      if(v) options[k] = v;
-    });
-    if(!Object.keys(options).length) return alert('Cần có ít nhất một đáp án lựa chọn.');
-    q.question = question;
-    q.options = options;
-    q.answer = answer;
-    q.answer_text = (document.getElementById('peAnswerText')?.value || '').trim();
-    window.__closePreviewEditModal();
-    renderPreview(data);
-    if(typeof notify === 'function') notify('Đã cập nhật câu hỏi');
-  };
-})();
 
 // ===== IMPORT_PREVIEW_INLINE_EDIT_20260625 =====
 // Sửa trực tiếp ngay trên card xem trước, không mở modal riêng.
@@ -3735,239 +3510,361 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c){const r
     return arr;
   }
   function opt(q,k){ return q?.options?.[k] || ''; }
+  window.__previewQualityFilter = 'all';
+
+  function autoDetectQuality(q){
+    const hasImg = !!(q.has_image || (q.images && q.images.length > 0));
+    let risk = q.error_risk || '';
+    let reason = q.error_risk_reason || '';
+    if(!risk){
+      if(hasImg && (!q.images || !q.images.length || q.images.some(im => {
+        const src = typeof im === 'string' ? im : (im.src || im.url || '');
+        return !src || src.includes('URL_') || src.includes('MÔ_TẢ');
+      }))){
+        risk = 'high'; reason = reason || 'Câu cần hình ảnh nhưng chưa có ảnh thực tế';
+      } else if(String(q.answer||'').length > 1){
+        risk = 'medium'; reason = reason || 'Câu có nhiều đáp án đúng, cần kiểm tra kỹ';
+      } else { risk = 'low'; }
+    }
+    q.has_image = hasImg;
+    q.error_risk = risk;
+    q.error_risk_reason = reason;
+  }
+  function riskLabel(r){ return {low:'Thấp',medium:'Trung bình',high:'Cao'}[r]||r; }
+  function riskColor(r){ return {low:'#27ae60',medium:'#f39c12',high:'#e74c3c'}[r]||'#999'; }
+
+  function renderQualityStats(data){
+    var stats = document.getElementById('importPreviewStats');
+    if(!stats) return;
+    var imgCount = data.filter(function(q){ return q.has_image; }).length;
+    var highCount = data.filter(function(q){ return q.error_risk === 'high'; }).length;
+    var medCount = data.filter(function(q){ return q.error_risk === 'medium'; }).length;
+    var lowCount = data.filter(function(q){ return q.error_risk === 'low'; }).length;
+    var f = window.__previewQualityFilter;
+    stats.textContent = '';
+    var statRow = document.createElement('div');
+    statRow.className = 'previewStatRow';
+    var statItems = [
+      {text: data.length + ' câu', color: ''},
+      {text: imgCount + ' có ảnh', color: '#3498db'},
+      {text: highCount + ' rủi ro cao', color: '#e74c3c'},
+      {text: medCount + ' trung bình', color: '#f39c12'},
+      {text: lowCount + ' thấp', color: '#27ae60'}
+    ];
+    statItems.forEach(function(item){
+      var span = document.createElement('span');
+      span.className = 'previewStatItem';
+      span.textContent = item.text;
+      if(item.color) span.style.color = item.color;
+      statRow.appendChild(span);
+    });
+    var filterRow = document.createElement('div');
+    filterRow.className = 'previewFilterRow';
+    var filters = [
+      {key: 'all', label: 'Tất cả', border: ''},
+      {key: 'has_image', label: '📷 Có ảnh', border: ''},
+      {key: 'high', label: 'Rủi ro cao', border: '#e74c3c'},
+      {key: 'medium', label: 'Trung bình', border: '#f39c12'},
+      {key: 'low', label: 'Thấp', border: '#27ae60'}
+    ];
+    filters.forEach(function(fl){
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'previewFilterBtn' + (f === fl.key ? ' active' : '');
+      btn.textContent = fl.label;
+      if(fl.border) btn.style.borderColor = fl.border;
+      btn.addEventListener('click', function(){ window.__setQualityFilter(fl.key); });
+      filterRow.appendChild(btn);
+    });
+    stats.appendChild(statRow);
+    stats.appendChild(filterRow);
+  }
+
+  window.__setQualityFilter = function(f){
+    window.__previewQualityFilter = f;
+    const data = getPreviewData();
+    renderQualityStats(data);
+    renderQualityList(data);
+  };
+
+  window.__toggleQualityImage = function(i, val){
+    const data = getPreviewData();
+    if(data[i]){ data[i].has_image = val; renderQualityStats(data); }
+  };
+
+  window.__setQualityRisk = function(i, val){
+    const data = getPreviewData();
+    if(data[i]){
+      data[i].error_risk = val;
+      renderQualityStats(data);
+      const card = document.querySelector(`[data-pcard=”${i}”]`);
+      if(card){
+        card.style.borderLeftColor = riskColor(val);
+        card.style.background = {low:'rgba(39,174,96,0.08)',medium:'rgba(243,156,18,0.08)',high:'rgba(231,76,60,0.08)'}[val]||'';
+        const badge = card.querySelector('.riskBadge');
+        if(badge){ badge.style.background = riskColor(val); badge.textContent = riskLabel(val); }
+      }
+    }
+  };
+
+  function renderQualityList(data){
+    var list = document.getElementById('importPreviewList');
+    if(!list) return;
+    var f = window.__previewQualityFilter;
+    var filtered = data.filter(function(q){
+      if(f==='all') return true;
+      if(f==='has_image') return q.has_image;
+      return q.error_risk === f;
+    });
+    list.textContent = '';
+    if(!filtered.length){
+      var empty = document.createElement('div');
+      empty.style.cssText = 'text-align:center;padding:30px;opacity:.6';
+      empty.textContent = 'Không có câu hỏi nào phù hợp bộ lọc.';
+      list.appendChild(empty);
+      return;
+    }
+    filtered.forEach(function(q){
+      var i = data.indexOf(q);
+      list.appendChild(buildCard(q, i));
+    });
+  }
+
   function renderPreviewInline(data){
     data = getPreviewData(data);
+    data.forEach(autoDetectQuality);
+    window.__previewQualityFilter = 'all';
     let modal = document.getElementById('importPreviewModal');
-    if(!modal){
-      modal = document.createElement('div');
-      modal.id = 'importPreviewModal';
-      modal.className = 'modal importPreviewModal hidden';
-      modal.innerHTML = `<div class="box importPreviewModalBox">
-        <button class="modalX" type="button" onclick="window.__closeImportPreviewModal()">×</button>
-        <div class="importPreviewHead">
-          <div>
-            <span class="importPreviewLabel">XEM TRƯỚC IMPORT</span>
-            <h2>Kiểm tra câu hỏi</h2>
-            <p>Đáp án đúng đã hiển thị sẵn. Bấm “Sửa” để chỉnh ngay trên câu đó.</p>
-          </div>
-          <button class="primary importPreviewSaveTop" type="button" onclick="window.__closeImportPreviewModal(); window.__submitSubjectRequest();">Lưu Môn Học</button>
-        </div>
-        <div id="importPreviewStats" class="importPreviewStats"></div>
-        <div id="importPreviewList" class="importPreviewList"></div>
-      </div>`;
-      modal.addEventListener('mousedown', e => { if(e.target === modal) window.__closeImportPreviewModal(); });
-      document.body.appendChild(modal);
-    }
-    const imgCount = data.filter(q => q.images && q.images.length > 0).length;
-    const stats = document.getElementById('importPreviewStats');
-    if(stats) stats.textContent = `${data.length} câu hỏi${imgCount ? ' · '+imgCount+' câu có hình ảnh' : ''}`;
-    const list = document.getElementById('importPreviewList');
-    if(list){
-      list.innerHTML = data.map((q,i)=>cardHTML(q,i)).join('');
-    }
+    if(modal){ modal.remove(); modal = null; }
+    modal = document.createElement('div');
+    modal.id = 'importPreviewModal';
+    modal.className = 'modal importPreviewModal';
+    var box = document.createElement('div');
+    box.className = 'box importPreviewModalBox';
+    var closeBtn = document.createElement('button');
+    closeBtn.className = 'modalX';
+    closeBtn.type = 'button';
+    closeBtn.textContent = '×';
+    closeBtn.onclick = function(){ window.__closeImportPreviewModal(); };
+    var head = document.createElement('div');
+    head.className = 'importPreviewHead';
+    var headLeft = document.createElement('div');
+    var label = document.createElement('span');
+    label.className = 'importPreviewLabel';
+    label.textContent = 'XEM TRƯỚC IMPORT';
+    var h2 = document.createElement('h2');
+    h2.textContent = 'Kiểm tra câu hỏi';
+    var desc = document.createElement('p');
+    desc.textContent = 'Đáp án đúng đã hiển thị sẵn. Đánh dấu câu có ảnh và mức rủi ro, bấm “Sửa” để chỉnh nội dung.';
+    headLeft.appendChild(label);
+    headLeft.appendChild(h2);
+    headLeft.appendChild(desc);
+    var saveBtn = document.createElement('button');
+    saveBtn.className = 'primary importPreviewSaveTop';
+    saveBtn.type = 'button';
+    saveBtn.textContent = 'Lưu Môn Học';
+    saveBtn.onclick = function(){ window.__closeImportPreviewModal(); window.__submitSubjectRequest(); };
+    head.appendChild(headLeft);
+    head.appendChild(saveBtn);
+    var stats = document.createElement('div');
+    stats.id = 'importPreviewStats';
+    stats.className = 'importPreviewStats';
+    var list = document.createElement('div');
+    list.id = 'importPreviewList';
+    list.className = 'importPreviewList';
+    box.appendChild(closeBtn);
+    box.appendChild(head);
+    box.appendChild(stats);
+    box.appendChild(list);
+    modal.appendChild(box);
+    modal.addEventListener('mousedown', function(e){ if(e.target === modal) window.__closeImportPreviewModal(); });
+    document.body.appendChild(modal);
+    renderQualityStats(data);
+    renderQualityList(data);
     modal.classList.remove('hidden');
   }
-  function cardHTML(q,i){
-    const answer = String(q.answer || '').toUpperCase();
-    const opts = Object.entries(q.options || {}).map(([k,v])=>{
-      const key = String(k).toUpperCase();
-      const isCorrect = answer.includes(key);
-      return `<div class="previewAnswerOption ${isCorrect ? 'correct' : ''}" data-pi="${i}" data-k="${escHtml(key)}">
-        <b>${escHtml(key)}</b><span>${escHtml(v)}</span>
-      </div>`;
-    }).join('');
-    const imgs = (q.images || []).map(im=>{
-      const src = typeof im === 'string' ? im : (im.src || im.url || '');
-      return src ? `<img src="${escHtml(src)}" alt="Ảnh câu ${i+1}" loading="lazy">` : '';
-    }).join('');
-    return `<article class="previewQuestionCard" data-pcard="${i}">
-      <div class="previewQuestionTop">
-        <b>Câu ${escHtml(q.num || (i+1))}</b>
-        <div class="previewTopActions">
-          <span class="previewAnswerBadge">Đáp án đúng: ${escHtml(answer || '?')}</span>
-          <button class="previewEditBtn" type="button" onclick="window.__editImportPreviewQuestion(${i})">Sửa</button>
-        </div>
-      </div>
-      <div class="previewQuestionText">${escHtml(q.question || '')}</div>
-      ${imgs ? `<div class="previewQuestionImages">${imgs}</div>` : ''}
-      <div class="previewAnswerGrid">${opts}</div>
-    </article>`;
+  function buildCard(q, i){
+    var answer = String(q.answer || '').toUpperCase();
+    var risk = q.error_risk || 'low';
+    var riskBg = {low:'rgba(39,174,96,0.08)',medium:'rgba(243,156,18,0.08)',high:'rgba(231,76,60,0.08)'}[risk]||'';
+    var card = document.createElement('article');
+    card.className = 'previewQuestionCard';
+    card.dataset.pcard = i;
+    card.style.borderLeft = '4px solid ' + riskColor(risk);
+    card.style.background = riskBg;
+    // Header
+    var top = document.createElement('div');
+    top.className = 'previewQuestionTop';
+    var numB = document.createElement('b');
+    numB.textContent = 'Câu ' + (q.num || (i+1));
+    var actions = document.createElement('div');
+    actions.className = 'previewTopActions';
+    if(q.has_image){
+      var imgBadge = document.createElement('span');
+      imgBadge.className = 'previewBadge imgBadge';
+      imgBadge.textContent = '📷 Có ảnh';
+      actions.appendChild(imgBadge);
+    }
+    var rBadge = document.createElement('span');
+    rBadge.className = 'previewBadge riskBadge';
+    rBadge.style.background = riskColor(risk);
+    rBadge.style.color = '#fff';
+    rBadge.textContent = riskLabel(risk);
+    actions.appendChild(rBadge);
+    var ansBadge = document.createElement('span');
+    ansBadge.className = 'previewAnswerBadge';
+    ansBadge.textContent = 'Đáp án: ' + (answer || '?');
+    actions.appendChild(ansBadge);
+    var editBtn = document.createElement('button');
+    editBtn.className = 'previewEditBtn';
+    editBtn.type = 'button';
+    editBtn.textContent = 'Sửa';
+    editBtn.addEventListener('click', function(){ window.__editImportPreviewQuestion(i); });
+    actions.appendChild(editBtn);
+    top.appendChild(numB);
+    top.appendChild(actions);
+    card.appendChild(top);
+    // Risk reason
+    if(q.error_risk_reason){
+      var reasonDiv = document.createElement('div');
+      reasonDiv.className = 'previewRiskReason';
+      reasonDiv.textContent = '⚠ ' + q.error_risk_reason;
+      card.appendChild(reasonDiv);
+    }
+    // Question text
+    var qText = document.createElement('div');
+    qText.className = 'previewQuestionText';
+    qText.textContent = q.question || '';
+    card.appendChild(qText);
+    // Images area (always show for upload)
+    var imgArea = document.createElement('div');
+    imgArea.className = 'previewImgArea';
+    imgArea.dataset.imgIdx = i;
+    function renderImgThumbs(){
+      imgArea.textContent = '';
+      var imgs = q.images || [];
+      if(imgs.length){
+        var thumbRow = document.createElement('div');
+        thumbRow.className = 'previewQuestionImages';
+        imgs.forEach(function(im, idx){
+          var src = typeof im === 'string' ? im : (im.src || im.url || '');
+          if(!src) return;
+          var wrap = document.createElement('div');
+          wrap.className = 'previewImgThumb';
+          var img = document.createElement('img');
+          img.src = src;
+          img.alt = 'Ảnh ' + (idx+1);
+          img.loading = 'lazy';
+          var rmBtn = document.createElement('button');
+          rmBtn.className = 'previewImgRm';
+          rmBtn.type = 'button';
+          rmBtn.textContent = '×';
+          rmBtn.addEventListener('click', function(){
+            q.images.splice(idx, 1);
+            renderImgThumbs();
+            renderQualityStats(getPreviewData());
+          });
+          wrap.appendChild(rmBtn);
+          wrap.appendChild(img);
+          thumbRow.appendChild(wrap);
+        });
+        imgArea.appendChild(thumbRow);
+      }
+      var uploadRow = document.createElement('div');
+      uploadRow.className = 'previewImgUploadRow';
+      var fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.accept = 'image/*';
+      fileInput.multiple = true;
+      fileInput.className = 'previewImgFileInput';
+      fileInput.addEventListener('change', function(e){
+        var files = e.target.files || [];
+        Array.prototype.forEach.call(files, function(file){
+          var fr = new FileReader();
+          fr.onload = function(){
+            if(!q.images) q.images = [];
+            q.images.push({id:'prev_'+Date.now()+'_'+Math.random().toString(16).slice(2), src:fr.result, source:'user-upload', name:file.name});
+            if(!q.has_image){ q.has_image = true; }
+            renderImgThumbs();
+            renderQualityStats(getPreviewData());
+          };
+          fr.readAsDataURL(file);
+        });
+        e.target.value = '';
+      });
+      var uploadBtn = document.createElement('button');
+      uploadBtn.className = 'previewImgUploadBtn';
+      uploadBtn.type = 'button';
+      uploadBtn.textContent = '📷 Thêm ảnh';
+      uploadBtn.addEventListener('click', function(){ fileInput.click(); });
+      uploadRow.appendChild(fileInput);
+      uploadRow.appendChild(uploadBtn);
+      if(q.images && q.images.length){
+        var countSpan = document.createElement('span');
+        countSpan.className = 'previewImgCount';
+        countSpan.textContent = q.images.length + ' ảnh';
+        uploadRow.appendChild(countSpan);
+      }
+      imgArea.appendChild(uploadRow);
+    }
+    renderImgThumbs();
+    card.appendChild(imgArea);
+    // Options grid
+    var grid = document.createElement('div');
+    grid.className = 'previewAnswerGrid';
+    Object.entries(q.options || {}).forEach(function(entry){
+      var k = entry[0], v = entry[1];
+      var key = String(k).toUpperCase();
+      var isCorrect = answer.includes(key);
+      var optDiv = document.createElement('div');
+      optDiv.className = 'previewAnswerOption' + (isCorrect ? ' correct' : '');
+      optDiv.dataset.pi = i;
+      optDiv.dataset.k = key;
+      var b = document.createElement('b');
+      b.textContent = key;
+      var s = document.createElement('span');
+      s.textContent = v;
+      optDiv.appendChild(b);
+      optDiv.appendChild(s);
+      grid.appendChild(optDiv);
+    });
+    card.appendChild(grid);
+    // Quality controls
+    var controls = document.createElement('div');
+    controls.className = 'previewQualityControls';
+    var toggleLabel = document.createElement('label');
+    toggleLabel.className = 'previewToggle';
+    var cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = !!q.has_image;
+    cb.addEventListener('change', function(){ window.__toggleQualityImage(i, this.checked); });
+    var cbText = document.createElement('span');
+    cbText.textContent = 'Có ảnh';
+    toggleLabel.appendChild(cb);
+    toggleLabel.appendChild(cbText);
+    var riskDiv = document.createElement('div');
+    riskDiv.className = 'previewRiskSelect';
+    var riskSpan = document.createElement('span');
+    riskSpan.textContent = 'Rủi ro:';
+    var sel = document.createElement('select');
+    ['low','medium','high'].forEach(function(val){
+      var opt = document.createElement('option');
+      opt.value = val;
+      opt.textContent = {low:'Thấp',medium:'Trung bình',high:'Cao'}[val];
+      if(risk === val) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener('change', function(){ window.__setQualityRisk(i, this.value); });
+    riskDiv.appendChild(riskSpan);
+    riskDiv.appendChild(sel);
+    controls.appendChild(toggleLabel);
+    controls.appendChild(riskDiv);
+    card.appendChild(controls);
+    return card;
   }
   window.__openImportPreviewModal = renderPreviewInline;
-  window.__editImportPreviewQuestion = function(i){
-    const data = getPreviewData();
-    const q = data[i];
-    const card = document.querySelector(`[data-pcard="${i}"]`);
-    if(!q || !card) return;
-    const answer = String(q.answer || '').toUpperCase();
-    card.classList.add('editing');
-    card.innerHTML = `
-      <div class="previewQuestionTop">
-        <b>Sửa câu ${escHtml(q.num || (i+1))}</b>
-        <div class="previewTopActions"><span class="previewAnswerBadge">Đáp án đúng: ${escHtml(answer || '?')}</span></div>
-      </div>
-      <div class="inlinePreviewEdit">
-        <div class="inlinePreviewEditGrid">
-          <div class="inlinePreviewEditField full"><label>Câu hỏi</label><textarea id="ipeQuestion_${i}">${escHtml(q.question || '')}</textarea></div>
-          <div class="inlinePreviewEditField"><label>Đáp án A</label><textarea id="ipeOptA_${i}">${escHtml(opt(q,'A'))}</textarea></div>
-          <div class="inlinePreviewEditField"><label>Đáp án B</label><textarea id="ipeOptB_${i}">${escHtml(opt(q,'B'))}</textarea></div>
-          <div class="inlinePreviewEditField"><label>Đáp án C</label><textarea id="ipeOptC_${i}">${escHtml(opt(q,'C'))}</textarea></div>
-          <div class="inlinePreviewEditField"><label>Đáp án D</label><textarea id="ipeOptD_${i}">${escHtml(opt(q,'D'))}</textarea></div>
-          <div class="inlinePreviewEditField"><label>Đáp án E</label><textarea id="ipeOptE_${i}">${escHtml(opt(q,'E'))}</textarea></div>
-          <div class="inlinePreviewEditField"><label>Đáp án đúng</label><input id="ipeAnswer_${i}" value="${escHtml(answer)}" placeholder="VD: A hoặc AC"></div>
-          <div class="inlinePreviewEditField"><label>Giải thích</label><textarea id="ipeAnswerText_${i}">${escHtml(q.answer_text || q.answerText || '')}</textarea></div>
-        </div>
-        <div class="inlinePreviewEditActions">
-          <button class="btn" type="button" onclick="window.__cancelInlinePreviewEdit(${i})">Hủy</button>
-          <button class="primary" type="button" onclick="window.__saveInlinePreviewEdit(${i})">Lưu sửa</button>
-        </div>
-      </div>`;
-  };
-  window.__cancelInlinePreviewEdit = function(i){
-    const data = getPreviewData();
-    const card = document.querySelector(`[data-pcard="${i}"]`);
-    if(card) card.outerHTML = cardHTML(data[i], i);
-  };
-  window.__saveInlinePreviewEdit = function(i){
-    const data = getPreviewData();
-    const q = data[i];
-    if(!q) return;
-    const question = (document.getElementById(`ipeQuestion_${i}`)?.value || '').trim();
-    const answer = (document.getElementById(`ipeAnswer_${i}`)?.value || '').trim().toUpperCase();
-    if(!question) return alert('Câu hỏi không được để trống.');
-    if(!answer) return alert('Đáp án đúng không được để trống.');
-    const options = {};
-    ['A','B','C','D','E'].forEach(k=>{
-      const v = (document.getElementById(`ipeOpt${k}_${i}`)?.value || '').trim();
-      if(v) options[k] = v;
-    });
-    if(!Object.keys(options).length) return alert('Cần có ít nhất một đáp án lựa chọn.');
-    q.question = question;
-    q.options = options;
-    q.answer = answer;
-    q.answer_text = (document.getElementById(`ipeAnswerText_${i}`)?.value || '').trim();
-    const card = document.querySelector(`[data-pcard="${i}"]`);
-    if(card) card.outerHTML = cardHTML(q, i);
-    if(typeof notify === 'function') notify('Đã cập nhật câu hỏi');
-  };
 })();
 
-// ===== IMPORT_PREVIEW_SAME_LAYOUT_EDIT_20260625 =====
-// Sửa ngay trên layout đang hiển thị của câu; nút + nhỏ để thêm đáp án.
-(function(){
-  const LETTERS = ['A','B','C','D','E','F','G'];
-  function escHtml(s){
-    return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  }
-  function data(){ return window.__previewImportData || []; }
-  function opt(q,k){ return q?.options?.[k] || ''; }
-  function optionKeys(q){
-    const keys = Object.keys(q.options || {}).map(k=>String(k).toUpperCase());
-    return LETTERS.filter(k => keys.includes(k));
-  }
-  function cardHTML(q,i){
-    const answer = String(q.answer || '').toUpperCase();
-    const keys = optionKeys(q).length ? optionKeys(q) : ['A','B','C','D'];
-    const opts = keys.map(k=>{
-      const isCorrect = answer.includes(k);
-      return `<div class="previewAnswerOption ${isCorrect ? 'correct' : ''}" data-pi="${i}" data-k="${escHtml(k)}">
-        <b>${escHtml(k)}</b><span>${escHtml(opt(q,k))}</span>
-      </div>`;
-    }).join('');
-    const imgs = (q.images || []).map(im=>{
-      const src = typeof im === 'string' ? im : (im.src || im.url || '');
-      return src ? `<img src="${escHtml(src)}" alt="Ảnh câu ${i+1}" loading="lazy">` : '';
-    }).join('');
-    return `<article class="previewQuestionCard" data-pcard="${i}">
-      <div class="previewQuestionTop">
-        <b>Câu ${escHtml(q.num || (i+1))}</b>
-        <div class="previewTopActions">
-          <span class="previewAnswerBadge">Đáp án đúng: ${escHtml(answer || '?')}</span>
-          <button class="previewEditBtn" type="button" onclick="window.__editImportPreviewQuestion(${i})">Sửa</button>
-        </div>
-      </div>
-      <div class="previewQuestionText">${escHtml(q.question || '')}</div>
-      ${imgs ? `<div class="previewQuestionImages">${imgs}</div>` : ''}
-      <div class="previewAnswerGrid">${opts}</div>
-    </article>`;
-  }
-  function rerenderOne(i){
-    const q = data()[i];
-    const card = document.querySelector(`[data-pcard="${i}"]`);
-    if(card && q) card.outerHTML = cardHTML(q,i);
-  }
-  function currentEditKeys(i){
-    return Array.from(document.querySelectorAll(`[data-edit-opt-for="${i}"]`)).map(el=>el.dataset.k);
-  }
-  function nextKey(keys){ return LETTERS.find(k=>!keys.includes(k)); }
-
-  window.__editImportPreviewQuestion = function(i){
-    const q = data()[i];
-    const card = document.querySelector(`[data-pcard="${i}"]`);
-    if(!q || !card) return;
-    const answer = String(q.answer || '').toUpperCase();
-    const keys = optionKeys(q).length ? optionKeys(q) : ['A','B','C','D'];
-    const rows = keys.map(k=>editOptionRow(i,k,opt(q,k),answer.includes(k))).join('');
-    const imgs = (q.images || []).map(im=>{
-      const src = typeof im === 'string' ? im : (im.src || im.url || '');
-      return src ? `<img src="${escHtml(src)}" alt="Ảnh câu ${i+1}" loading="lazy">` : '';
-    }).join('');
-    card.classList.add('sameLayoutEditing');
-    card.innerHTML = `
-      <div class="previewQuestionTop">
-        <b>Sửa câu ${escHtml(q.num || (i+1))}</b>
-        <div class="previewTopActions">
-          <span class="inlineAnswerBadgeEdit">Đáp án đúng <input id="sameAnswer_${i}" value="${escHtml(answer)}" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z]/g,'')"></span>
-        </div>
-      </div>
-      <div class="previewQuestionText"><textarea class="inlineQuestionEdit" id="sameQuestion_${i}">${escHtml(q.question || '')}</textarea></div>
-      ${imgs ? `<div class="previewQuestionImages">${imgs}</div>` : ''}
-      <div class="previewAnswerGrid" id="sameOptions_${i}">${rows}</div>
-      <button class="previewAddOptionMini" type="button" title="Thêm đáp án" onclick="window.__addInlinePreviewOption(${i})">+</button>
-      <div class="sameLayoutEditActions">
-        <button class="btn" type="button" onclick="window.__cancelSameLayoutEdit(${i})">Hủy</button>
-        <button class="primary" type="button" onclick="window.__saveSameLayoutEdit(${i})">Lưu sửa</button>
-      </div>`;
-  };
-
-  function editOptionRow(i,k,value,isCorrect){
-    return `<div class="previewOptionEditRow ${isCorrect ? 'isCorrect' : ''}" data-edit-opt-for="${i}" data-k="${escHtml(k)}">
-      <div class="optLetter">${escHtml(k)}</div>
-      <textarea id="sameOpt_${i}_${escHtml(k)}" placeholder="Nhập đáp án ${escHtml(k)}">${escHtml(value || '')}</textarea>
-    </div>`;
-  }
-
-  window.__addInlinePreviewOption = function(i){
-    const keys = currentEditKeys(i);
-    const k = nextKey(keys);
-    if(!k) return alert('Đã đủ số lựa chọn.');
-    const box = document.getElementById(`sameOptions_${i}`);
-    if(box) box.insertAdjacentHTML('beforeend', editOptionRow(i,k,'',false));
-  };
-
-  window.__cancelSameLayoutEdit = function(i){ rerenderOne(i); };
-
-  window.__saveSameLayoutEdit = function(i){
-    const q = data()[i];
-    if(!q) return;
-    const question = (document.getElementById(`sameQuestion_${i}`)?.value || '').trim();
-    const answer = (document.getElementById(`sameAnswer_${i}`)?.value || '').trim().toUpperCase();
-    if(!question) return alert('Câu hỏi không được để trống.');
-    if(!answer) return alert('Đáp án đúng không được để trống.');
-    const options = {};
-    currentEditKeys(i).forEach(k=>{
-      const v = (document.getElementById(`sameOpt_${i}_${k}`)?.value || '').trim();
-      if(v) options[k] = v;
-    });
-    if(!Object.keys(options).length) return alert('Cần có ít nhất một đáp án lựa chọn.');
-    q.question = question;
-    q.options = options;
-    q.answer = answer;
-    // Giữ giải thích cũ nếu có, vì layout hiện tại chỉ hiển thị câu hỏi và đáp án.
-    rerenderOne(i);
-    if(typeof notify === 'function') notify('Đã cập nhật câu hỏi');
-  };
-})();
 
 // ===== FINAL_INLINE_EDIT_KEEP_EXISTING_CARD_20260625 =====
 // Sửa tại chỗ trên đúng layout card hiện tại, không thay card thành form nên không bị co/bung.
@@ -4125,4 +4022,187 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c){const r
     if(typeof oldAdd === 'function') oldAdd.apply(this, arguments);
     setTimeout(() => ensureDeleteButtons(document.querySelector(`[data-pcard="${i}"]`)), 0);
   };
+})();
+
+
+// ===== IMPORT PREVIEW COMPACT UX PATCH 20260626 =====
+(function(){
+  const STORE='learninghub_import_preview_compact_v1';
+  function applyCompact(modal, compact){
+    if(!modal)return;
+    modal.classList.toggle('compactMode',!!compact);
+    const btn=modal.querySelector('.previewCompactToggle');
+    if(btn){btn.classList.toggle('active',!!compact);btn.textContent=compact?'Chi tiết':'Danh sách nhanh';btn.title=compact?'Bấm để xem đầy đủ đáp án và công cụ':'Bấm để xem nhiều câu hơn';}
+  }
+  function enhanceImportPreview(){
+    const modal=document.getElementById('importPreviewModal');
+    if(!modal||modal.dataset.compactEnhanced==='1')return;
+    const save=modal.querySelector('.importPreviewSaveTop');
+    if(!save||!save.parentNode)return;
+    modal.dataset.compactEnhanced='1';
+    let compact=localStorage.getItem(STORE); compact=compact===null?true:compact==='1';
+    const actions=document.createElement('div'); actions.className='importPreviewHeadActions';
+    const toggle=document.createElement('button'); toggle.type='button'; toggle.className='previewCompactToggle';
+    toggle.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();compact=!modal.classList.contains('compactMode');localStorage.setItem(STORE,compact?'1':'0');applyCompact(modal,compact);});
+    save.parentNode.insertBefore(actions,save); actions.appendChild(toggle); actions.appendChild(save); applyCompact(modal,compact);
+  }
+  function start(){enhanceImportPreview(); if(window.MutationObserver&&document.body){new MutationObserver(enhanceImportPreview).observe(document.body,{childList:true,subtree:true});} setInterval(enhanceImportPreview,700);}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
+})();
+
+
+// SIMPLE_IMPORT_PREVIEW_ANSWER_ONLY_FINAL_20260626
+(function(){
+  const LETTERS=['A','B','C','D','E','F','G','H'];
+  function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+  function getData(data){const arr=data||window.__previewImportData||[];window.__previewImportData=arr;return arr;}
+  function normAns(q){return String(q?.answer||'').toUpperCase().replace(/[^A-Z]/g,'');}
+  function correctText(q){const ans=normAns(q);if(!ans)return 'Chưa có đáp án';return ans.split('').map(k=>k+'. '+(q.options?.[k]||'')).join(' | ');}
+  function nextKey(opts){const used=new Set(Object.keys(opts||{}).map(k=>String(k).toUpperCase()));return LETTERS.find(k=>!used.has(k));}
+  function renderCard(q,i){const ans=normAns(q)||'?';return `<article class="simplePreviewCard" data-simple-card="${i}"><div class="simplePreviewRow"><div class="simplePreviewNum">Câu ${esc(q.num||i+1)}</div><div class="simplePreviewMain"><div class="simplePreviewQuestion">${esc(q.question||'')}</div><div class="simplePreviewCorrect"><b>Đáp án: ${esc(ans)}</b><span>${esc(correctText(q))}</span></div></div><button class="simplePreviewEditBtn" type="button" data-simple-edit="${i}">Sửa</button></div></article>`;}
+  function renderEditCard(q,i){const opts=q.options||{};const optionRows=Object.keys(opts).sort().map(k=>`<div class="simpleEditOption" data-opt-row="${esc(k)}"><div class="simpleEditKey">${esc(k)}</div><input value="${esc(opts[k]||'')}" data-edit-opt="${esc(k)}"><button class="simpleEditDel" type="button" data-del-opt="${esc(k)}">×</button></div>`).join('');return `<article class="simplePreviewCard simpleEditCard" data-simple-card="${i}"><div class="simpleEditHead"><div class="simpleEditTitle">Sửa toàn bộ Câu ${esc(q.num||i+1)}</div></div><div class="simpleEditGrid"><div class="simpleEditField"><label>Câu hỏi</label><textarea data-edit-question>${esc(q.question||'')}</textarea></div><div class="simpleEditField"><label>Đáp án đúng</label><input data-edit-answer value="${esc(normAns(q))}" placeholder="VD: A hoặc AC"></div></div><div class="simpleEditField" style="margin-top:10px"><label>Các đáp án</label><div class="simpleEditOptions">${optionRows}</div></div><div class="simpleEditBottom"><button class="btn" type="button" data-add-opt="${i}">+ Thêm đáp án</button><div class="simpleEditMiniActions"><button class="btn" type="button" data-cancel-simple="${i}">Hủy</button><button class="primary" type="button" data-save-simple="${i}">Lưu sửa</button></div></div></article>`;}
+  function renderList(data){const list=document.getElementById('simplePreviewList');if(list)list.innerHTML=data.map(renderCard).join('');}
+  function openSimplePreview(data){data=getData(data);let modal=document.getElementById('importPreviewModal');if(modal)modal.remove();modal=document.createElement('div');modal.id='importPreviewModal';modal.className='modal simpleImportPreviewModal';modal.innerHTML=`<div class="box simpleImportPreviewBox"><button class="modalX" type="button" data-simple-close>×</button><div class="simplePreviewHead"><div><span class="simplePreviewLabel">XEM TRƯỚC IMPORT</span><h2>Kiểm tra câu hỏi</h2><p class="simplePreviewHint">Chỉ hiện câu hỏi và đáp án đúng. Bấm “Sửa” để chỉnh toàn bộ câu và các đáp án.</p></div><div class="simplePreviewActions"><button class="primary simplePreviewSave" type="button" data-simple-save>Lưu Môn Học</button></div></div><div class="simplePreviewCount">${data.length} câu hỏi</div><div id="simplePreviewList" class="simplePreviewList"></div></div>`;document.body.appendChild(modal);renderList(data);}
+  function saveEdit(i){const data=getData();const q=data[i];const card=document.querySelector(`[data-simple-card="${i}"]`);if(!q||!card)return;const question=(card.querySelector('[data-edit-question]')?.value||'').trim();const answer=(card.querySelector('[data-edit-answer]')?.value||'').trim().toUpperCase().replace(/[^A-Z]/g,'');if(!question)return alert('Câu hỏi không được để trống.');if(!answer)return alert('Đáp án đúng không được để trống.');const options={};card.querySelectorAll('[data-edit-opt]').forEach(inp=>{const k=String(inp.dataset.editOpt||'').toUpperCase();const v=(inp.value||'').trim();if(k&&v)options[k]=v;});if(!Object.keys(options).length)return alert('Cần ít nhất 1 đáp án.');for(const k of answer.split('')){if(!options[k])return alert('Đáp án đúng '+k+' chưa có nội dung.');}q.question=question;q.answer=answer;q.options=options;q.answer_text=answer.split('').map(k=>k+'. '+(options[k]||'')).join('; ');renderList(data);if(typeof notify==='function')notify('Đã lưu sửa câu '+(q.num||i+1));}
+  document.addEventListener('click',function(e){if(e.target.closest('[data-simple-close]')){document.getElementById('importPreviewModal')?.classList.add('hidden');return;}if(e.target.closest('[data-simple-save]')){document.getElementById('importPreviewModal')?.classList.add('hidden');window.__submitSubjectRequest?.();return;}const edit=e.target.closest('[data-simple-edit]');if(edit){const i=+edit.dataset.simpleEdit;const data=getData();const card=document.querySelector(`[data-simple-card="${i}"]`);if(card&&data[i]){card.outerHTML=renderEditCard(data[i],i);document.querySelector(`[data-simple-card="${i}"] textarea`)?.focus();}return;}const cancel=e.target.closest('[data-cancel-simple]');if(cancel){renderList(getData());return;}const save=e.target.closest('[data-save-simple]');if(save){saveEdit(+save.dataset.saveSimple);return;}const add=e.target.closest('[data-add-opt]');if(add){const i=+add.dataset.addOpt;const data=getData();const q=data[i];const k=nextKey(q.options||{});if(!k)return alert('Đã đủ số đáp án.');q.options=q.options||{};q.options[k]='';const card=document.querySelector(`[data-simple-card="${i}"]`);if(card){card.outerHTML=renderEditCard(q,i);document.querySelector(`[data-simple-card="${i}"] [data-edit-opt="${k}"]`)?.focus();}return;}const del=e.target.closest('[data-del-opt]');if(del){const card=del.closest('[data-simple-card]');const i=+(card?.dataset.simpleCard||0);const q=getData()[i];const k=del.dataset.delOpt;if(q?.options&&k){delete q.options[k];card.outerHTML=renderEditCard(q,i);}return;}});
+  window.__openImportPreviewModal=openSimplePreview;
+  window.__editImportPreviewQuestion=function(i){const data=getData();const card=document.querySelector(`[data-simple-card="${i}"]`);if(card&&data[i])card.outerHTML=renderEditCard(data[i],i);};
+})();
+
+
+// FILTERED_ANSWER_ONLY_PREVIEW_20260626
+(function(){
+  const LETTERS=['A','B','C','D','E','F','G','H'];
+  let currentFilter='all';
+  function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+  function getData(data){const arr=data||window.__previewImportData||[];window.__previewImportData=arr;arr.forEach(detect);return arr;}
+  function normAns(q){return String(q?.answer||'').toUpperCase().replace(/[^A-Z]/g,'');}
+  function detect(q){
+    q.has_image=!!(q.has_image||(q.images&&q.images.length));
+    if(!q.error_risk) q.error_risk=normAns(q).length>1?'medium':'low';
+    return q;
+  }
+  function correctText(q){const ans=normAns(q);if(!ans)return 'Chưa có đáp án';return ans.split('').map(k=>k+'. '+(q.options?.[k]||'')).join(' | ');}
+  function riskColor(r){return {high:'#e74c3c',medium:'#f39c12',low:'#27ae60'}[r]||'#999';}
+  function riskLabel(r){return {high:'Cao',medium:'Trung bình',low:'Thấp'}[r]||r;}
+  function nextKey(opts){const used=new Set(Object.keys(opts||{}).map(k=>String(k).toUpperCase()));return LETTERS.find(k=>!used.has(k));}
+  function pass(q){if(currentFilter==='all')return true;if(currentFilter==='has_image')return !!q.has_image;return q.error_risk===currentFilter;}
+  function stat(data){return {total:data.length,img:data.filter(q=>q.has_image).length,high:data.filter(q=>q.error_risk==='high').length,medium:data.filter(q=>q.error_risk==='medium').length,low:data.filter(q=>q.error_risk==='low').length};}
+  function renderStats(data){
+    const s=stat(data); const box=document.getElementById('simplePreviewStats'); if(!box)return;
+    const filters=[['all','Tất cả'],['has_image','📷 Có ảnh'],['high','Rủi ro cao'],['medium','Trung bình'],['low','Thấp']];
+    box.innerHTML=`<div class="simplePreviewStatLine"><span class="simplePreviewStatItem">${s.total} câu</span><span class="simplePreviewStatItem" style="color:#3498db">${s.img} có ảnh</span><span class="simplePreviewStatItem" style="color:#e74c3c">${s.high} rủi ro cao</span><span class="simplePreviewStatItem" style="color:#f39c12">${s.medium} trung bình</span><span class="simplePreviewStatItem" style="color:#27ae60">${s.low} thấp</span></div><div class="simplePreviewFilterLine">${filters.map(f=>`<button type="button" class="simpleFilterBtn ${currentFilter===f[0]?'active':''}" data-filter="${f[0]}">${f[1]}</button>`).join('')}</div>`;
+  }
+  function renderCard(q,i){const ans=normAns(q)||'?';return `<article class="simplePreviewCard" data-simple-card="${i}" style="border-left-color:${riskColor(q.error_risk)}!important"><div class="simplePreviewRow"><div class="simplePreviewNum">Câu ${esc(q.num||i+1)}</div><div class="simplePreviewMain"><div class="simplePreviewQuestion">${esc(q.question||'')}</div><div class="simplePreviewCorrect"><b>Đáp án: ${esc(ans)}</b><span>${esc(correctText(q))}</span></div></div><div class="simplePreviewMetaMini"><span class="simplePreviewRiskDot" style="background:${riskColor(q.error_risk)}" title="Rủi ro: ${esc(riskLabel(q.error_risk))}"></span>${q.has_image?'<span class="simplePreviewImgMark">📷</span>':''}<button class="simplePreviewEditBtn" type="button" data-simple-edit="${i}">Sửa</button></div></div></article>`;}
+  function renderEditCard(q,i){const opts=q.options||{};const optionRows=Object.keys(opts).sort().map(k=>`<div class="simpleEditOption" data-opt-row="${esc(k)}"><div class="simpleEditKey">${esc(k)}</div><input value="${esc(opts[k]||'')}" data-edit-opt="${esc(k)}"><button class="simpleEditDel" type="button" data-del-opt="${esc(k)}">×</button></div>`).join('');return `<article class="simplePreviewCard simpleEditCard" data-simple-card="${i}"><div class="simpleEditHead"><div class="simpleEditTitle">Sửa toàn bộ Câu ${esc(q.num||i+1)}</div></div><div class="simpleEditGrid"><div class="simpleEditField"><label>Câu hỏi</label><textarea data-edit-question>${esc(q.question||'')}</textarea></div><div class="simpleEditField"><label>Đáp án đúng</label><input data-edit-answer value="${esc(normAns(q))}" placeholder="VD: A hoặc AC"></div></div><div class="simpleEditField" style="margin-top:10px"><label>Các đáp án</label><div class="simpleEditOptions">${optionRows}</div></div><div class="simpleEditBottom"><button class="btn" type="button" data-add-opt="${i}">+ Thêm đáp án</button><div class="simpleEditMiniActions"><button class="btn" type="button" data-cancel-simple="${i}">Hủy</button><button class="primary" type="button" data-save-simple="${i}">Lưu sửa</button></div></div></article>`;}
+  function renderList(data){const list=document.getElementById('simplePreviewList');if(!list)return;const filtered=data.map((q,i)=>({q,i})).filter(x=>pass(x.q));list.innerHTML=filtered.length?filtered.map(x=>renderCard(x.q,x.i)).join(''):'<div class="simplePreviewEmpty">Không có câu nào phù hợp bộ lọc.</div>';renderStats(data);}
+  function openSimplePreview(data){data=getData(data);let modal=document.getElementById('importPreviewModal');if(modal)modal.remove();modal=document.createElement('div');modal.id='importPreviewModal';modal.className='modal simpleImportPreviewModal';modal.innerHTML=`<div class="box simpleImportPreviewBox"><button class="modalX" type="button" data-simple-close>×</button><div class="simplePreviewHead"><div><span class="simplePreviewLabel">XEM TRƯỚC IMPORT</span><h2>Kiểm tra câu hỏi</h2><p class="simplePreviewHint">Chỉ hiện câu hỏi và đáp án đúng. Dùng bộ lọc để xem câu có ảnh hoặc câu dễ sai.</p></div><div class="simplePreviewActions"><button class="primary simplePreviewSave" type="button" data-simple-save>Lưu Môn Học</button></div></div><div id="simplePreviewStats" class="simplePreviewStats"></div><div id="simplePreviewList" class="simplePreviewList"></div></div>`;document.body.appendChild(modal);renderList(data);}
+  function saveEdit(i){const data=getData();const q=data[i];const card=document.querySelector(`[data-simple-card="${i}"]`);if(!q||!card)return;const question=(card.querySelector('[data-edit-question]')?.value||'').trim();const answer=(card.querySelector('[data-edit-answer]')?.value||'').trim().toUpperCase().replace(/[^A-Z]/g,'');if(!question)return alert('Câu hỏi không được để trống.');if(!answer)return alert('Đáp án đúng không được để trống.');const options={};card.querySelectorAll('[data-edit-opt]').forEach(inp=>{const k=String(inp.dataset.editOpt||'').toUpperCase();const v=(inp.value||'').trim();if(k&&v)options[k]=v;});if(!Object.keys(options).length)return alert('Cần ít nhất 1 đáp án.');for(const k of answer.split('')){if(!options[k])return alert('Đáp án đúng '+k+' chưa có nội dung.');}q.question=question;q.answer=answer;q.options=options;q.answer_text=answer.split('').map(k=>k+'. '+(options[k]||'')).join('; ');renderList(data);if(typeof notify==='function')notify('Đã lưu sửa câu '+(q.num||i+1));}
+  document.addEventListener('click',function(e){const filter=e.target.closest('.simpleFilterBtn');if(filter){currentFilter=filter.dataset.filter||'all';renderList(getData());return;}if(e.target.closest('[data-simple-close]')){document.getElementById('importPreviewModal')?.classList.add('hidden');return;}if(e.target.closest('[data-simple-save]')){document.getElementById('importPreviewModal')?.classList.add('hidden');window.__submitSubjectRequest?.();return;}const edit=e.target.closest('[data-simple-edit]');if(edit){const i=+edit.dataset.simpleEdit;const data=getData();const card=document.querySelector(`[data-simple-card="${i}"]`);if(card&&data[i]){card.outerHTML=renderEditCard(data[i],i);document.querySelector(`[data-simple-card="${i}"] textarea`)?.focus();}return;}const cancel=e.target.closest('[data-cancel-simple]');if(cancel){renderList(getData());return;}const save=e.target.closest('[data-save-simple]');if(save){saveEdit(+save.dataset.saveSimple);return;}const add=e.target.closest('[data-add-opt]');if(add){const i=+add.dataset.addOpt;const data=getData();const q=data[i];const k=nextKey(q.options||{});if(!k)return alert('Đã đủ số đáp án.');q.options=q.options||{};q.options[k]='';const card=document.querySelector(`[data-simple-card="${i}"]`);if(card){card.outerHTML=renderEditCard(q,i);document.querySelector(`[data-simple-card="${i}"] [data-edit-opt="${k}"]`)?.focus();}return;}const del=e.target.closest('[data-del-opt]');if(del){const card=del.closest('[data-simple-card]');const i=+(card?.dataset.simpleCard||0);const q=getData()[i];const k=del.dataset.delOpt;if(q?.options&&k){delete q.options[k];card.outerHTML=renderEditCard(q,i);}return;}});
+  window.__openImportPreviewModal=openSimplePreview;
+  window.__editImportPreviewQuestion=function(i){const data=getData();const card=document.querySelector(`[data-simple-card="${i}"]`);if(card&&data[i])card.outerHTML=renderEditCard(data[i],i);};
+})();
+
+
+// IMAGE_THUMB_PREVIEW_TOP_EDIT_ACTIONS_20260626
+(function(){
+  const LETTERS=['A','B','C','D','E','F','G','H'];
+  let currentFilter='all';
+  function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+  function getData(data){const arr=data||window.__previewImportData||[];window.__previewImportData=arr;arr.forEach(detect);return arr;}
+  function normAns(q){return String(q?.answer||'').toUpperCase().replace(/[^A-Z]/g,'');}
+  function detect(q){q.images=q.images||[];q.has_image=!!(q.has_image||(q.images&&q.images.length));if(!q.error_risk)q.error_risk=normAns(q).length>1?'medium':'low';return q;}
+  function correctText(q){const ans=normAns(q);if(!ans)return 'Chưa có đáp án';return ans.split('').map(k=>k+'. '+(q.options?.[k]||'')).join(' | ');}
+  function riskColor(r){return {high:'#e74c3c',medium:'#f39c12',low:'#27ae60'}[r]||'#999';}
+  function riskLabel(r){return {high:'Cao',medium:'Trung bình',low:'Thấp'}[r]||r;}
+  function nextKey(opts){const used=new Set(Object.keys(opts||{}).map(k=>String(k).toUpperCase()));return LETTERS.find(k=>!used.has(k));}
+  function imgSrc(im){return typeof im==='string'?im:(im?.src||im?.url||'');}
+  function pass(q){if(currentFilter==='all')return true;if(currentFilter==='has_image')return !!q.has_image;return q.error_risk===currentFilter;}
+  function stat(data){return {total:data.length,img:data.filter(q=>q.has_image).length,high:data.filter(q=>q.error_risk==='high').length,medium:data.filter(q=>q.error_risk==='medium').length,low:data.filter(q=>q.error_risk==='low').length};}
+  function renderStats(data){const s=stat(data),box=document.getElementById('simplePreviewStats');if(!box)return;const filters=[['all','Tất cả'],['has_image','📷 Có ảnh'],['high','Rủi ro cao'],['medium','Trung bình'],['low','Thấp']];box.innerHTML=`<div class="simplePreviewStatLine"><span class="simplePreviewStatItem">${s.total} câu</span><span class="simplePreviewStatItem" style="color:#3498db">${s.img} có ảnh</span><span class="simplePreviewStatItem" style="color:#e74c3c">${s.high} rủi ro cao</span><span class="simplePreviewStatItem" style="color:#f39c12">${s.medium} trung bình</span><span class="simplePreviewStatItem" style="color:#27ae60">${s.low} thấp</span></div><div class="simplePreviewFilterLine">${filters.map(f=>`<button type="button" class="imagePreviewFilterBtn ${currentFilter===f[0]?'active':''}" data-imgui-filter="${f[0]}">${f[1]}</button>`).join('')}</div>`;}
+  function miniImages(q){const imgs=(q.images||[]).map(imgSrc).filter(Boolean);if(!imgs.length)return '<div class="imageMiniPreview"></div>';return `<div class="imageMiniPreview"><img src="${esc(imgs[0])}" alt="Ảnh preview">${imgs.length>1?`<span class="imageMiniCount">+${imgs.length-1}</span>`:''}</div>`;}
+  function renderCard(q,i){const ans=normAns(q)||'?';return `<article class="simplePreviewCard" data-imgui-card="${i}" style="border-left-color:${riskColor(q.error_risk)}!important"><div class="imagePreviewListRow"><div class="simplePreviewNum">Câu ${esc(q.num||i+1)}</div><div class="simplePreviewMain"><div class="simplePreviewQuestion">${esc(q.question||'')}</div><div class="simplePreviewCorrect"><b>Đáp án: ${esc(ans)}</b><span>${esc(correctText(q))}</span></div></div>${miniImages(q)}<div class="simplePreviewMetaMini"><span class="simplePreviewRiskDot" style="background:${riskColor(q.error_risk)}" title="Rủi ro: ${esc(riskLabel(q.error_risk))}"></span><button class="simplePreviewEditBtn" type="button" data-imgui-edit="${i}">Sửa</button></div></div></article>`;}
+  function renderImages(q,i){const imgs=q.images||[];return `<div class="simpleEditImages"><div class="simpleEditImagesHead"><span>Ảnh của câu hỏi</span><button class="simpleImageUploadBtn" type="button" data-imgui-pick-img="${i}">+ Thêm ảnh</button><input class="simpleImgHiddenInput" type="file" accept="image/*" multiple data-imgui-input="${i}"></div><div class="simpleImageThumbs">${imgs.length?imgs.map((im,idx)=>`<div class="simpleImageThumb"><button class="simpleImageRemove" type="button" data-imgui-rm-img="${idx}">×</button><img src="${esc(imgSrc(im))}" alt="Ảnh ${idx+1}"></div>`).join(''):'<div class="simpleNoImage">Chưa có ảnh. Bấm “+ Thêm ảnh” nếu câu này cần hình.</div>'}</div></div>`;}
+  function renderEditCard(q,i){const opts=q.options||{};const optionRows=Object.keys(opts).sort().map(k=>`<div class="simpleEditOption" data-opt-row="${esc(k)}"><div class="simpleEditKey">${esc(k)}</div><input value="${esc(opts[k]||'')}" data-imgui-opt="${esc(k)}"><button class="simpleEditDel" type="button" data-imgui-del-opt="${esc(k)}">×</button></div>`).join('');return `<article class="simplePreviewCard simpleEditCard" data-imgui-card="${i}"><div class="simpleEditHead imageEditHeadTop"><div class="simpleEditTitle">Sửa toàn bộ Câu ${esc(q.num||i+1)}</div><div class="imageEditHeadActions"><button class="btn" type="button" data-imgui-cancel="${i}">Hủy</button><button class="primary" type="button" data-imgui-save="${i}">Lưu sửa</button></div></div><div class="simpleEditGrid"><div class="simpleEditField"><label>Câu hỏi</label><textarea data-imgui-question>${esc(q.question||'')}</textarea></div><div class="simpleEditField"><label>Đáp án đúng</label><input data-imgui-answer value="${esc(normAns(q))}" placeholder="VD: A hoặc AC"></div></div><div class="simpleEditField" style="margin-top:10px"><label>Các đáp án</label><div class="simpleEditOptions">${optionRows}</div></div>${renderImages(q,i)}<div class="simpleEditBottom imageEditBottomOnlyAdd"><button class="btn" type="button" data-imgui-add-opt="${i}">+ Thêm đáp án</button></div></article>`;}
+  function renderList(data){const list=document.getElementById('simplePreviewList');if(!list)return;const filtered=data.map((q,i)=>({q,i})).filter(x=>pass(x.q));list.innerHTML=filtered.length?filtered.map(x=>renderCard(x.q,x.i)).join(''):'<div class="simplePreviewEmpty">Không có câu nào phù hợp bộ lọc.</div>';renderStats(data);}
+  function openPreview(data){data=getData(data);let modal=document.getElementById('importPreviewModal');if(modal)modal.remove();modal=document.createElement('div');modal.id='importPreviewModal';modal.className='modal simpleImportPreviewModal';modal.innerHTML=`<div class="box simpleImportPreviewBox"><button class="modalX" type="button" data-imgui-close>×</button><div class="simplePreviewHead"><div><span class="simplePreviewLabel">XEM TRƯỚC IMPORT</span><h2>Kiểm tra câu hỏi</h2><p class="simplePreviewHint">Chỉ hiện câu hỏi và đáp án đúng. Câu có ảnh sẽ hiện preview nhỏ.</p></div><div class="simplePreviewActions"><button class="primary simplePreviewSave" type="button" data-imgui-submit>Lưu Môn Học</button></div></div><div id="simplePreviewStats" class="simplePreviewStats"></div><div id="simplePreviewList" class="simplePreviewList"></div></div>`;document.body.appendChild(modal);renderList(data);}
+  function saveEdit(i){const data=getData();const q=data[i];const card=document.querySelector(`[data-imgui-card="${i}"]`);if(!q||!card)return;const question=(card.querySelector('[data-imgui-question]')?.value||'').trim();const answer=(card.querySelector('[data-imgui-answer]')?.value||'').trim().toUpperCase().replace(/[^A-Z]/g,'');if(!question)return alert('Câu hỏi không được để trống.');if(!answer)return alert('Đáp án đúng không được để trống.');const options={};card.querySelectorAll('[data-imgui-opt]').forEach(inp=>{const k=String(inp.dataset.imguiOpt||'').toUpperCase();const v=(inp.value||'').trim();if(k&&v)options[k]=v;});if(!Object.keys(options).length)return alert('Cần ít nhất 1 đáp án.');for(const k of answer.split('')){if(!options[k])return alert('Đáp án đúng '+k+' chưa có nội dung.');}q.question=question;q.answer=answer;q.options=options;q.answer_text=answer.split('').map(k=>k+'. '+(options[k]||'')).join('; ');q.has_image=!!(q.images&&q.images.length);renderList(data);if(typeof notify==='function')notify('Đã lưu sửa câu '+(q.num||i+1));}
+  document.addEventListener('click',function(e){const filter=e.target.closest('[data-imgui-filter]');if(filter){currentFilter=filter.dataset.imguiFilter||'all';renderList(getData());return;}if(e.target.closest('[data-imgui-close]')){document.getElementById('importPreviewModal')?.classList.add('hidden');return;}if(e.target.closest('[data-imgui-submit]')){document.getElementById('importPreviewModal')?.classList.add('hidden');window.__submitSubjectRequest?.();return;}const edit=e.target.closest('[data-imgui-edit]');if(edit){const i=+edit.dataset.imguiEdit;const data=getData();const card=document.querySelector(`[data-imgui-card="${i}"]`);if(card&&data[i]){card.outerHTML=renderEditCard(data[i],i);document.querySelector(`[data-imgui-card="${i}"] textarea`)?.focus();}return;}const cancel=e.target.closest('[data-imgui-cancel]');if(cancel){renderList(getData());return;}const save=e.target.closest('[data-imgui-save]');if(save){saveEdit(+save.dataset.imguiSave);return;}const pick=e.target.closest('[data-imgui-pick-img]');if(pick){document.querySelector(`[data-imgui-input="${pick.dataset.imguiPickImg}"]`)?.click();return;}const rm=e.target.closest('[data-imgui-rm-img]');if(rm){const card=rm.closest('[data-imgui-card]');const i=+(card?.dataset.imguiCard||0);const q=getData()[i];if(q?.images){q.images.splice(+rm.dataset.imguiRmImg,1);q.has_image=!!q.images.length;card.outerHTML=renderEditCard(q,i);}return;}const add=e.target.closest('[data-imgui-add-opt]');if(add){const i=+add.dataset.imguiAddOpt;const data=getData();const q=data[i];const k=nextKey(q.options||{});if(!k)return alert('Đã đủ số đáp án.');q.options=q.options||{};q.options[k]='';const card=document.querySelector(`[data-imgui-card="${i}"]`);if(card){card.outerHTML=renderEditCard(q,i);document.querySelector(`[data-imgui-card="${i}"] [data-imgui-opt="${k}"]`)?.focus();}return;}const del=e.target.closest('[data-imgui-del-opt]');if(del){const card=del.closest('[data-imgui-card]');const i=+(card?.dataset.imguiCard||0);const q=getData()[i];const k=del.dataset.imguiDelOpt;if(q?.options&&k){delete q.options[k];card.outerHTML=renderEditCard(q,i);}return;}});
+  document.addEventListener('change',function(e){const inp=e.target.closest('[data-imgui-input]');if(!inp)return;const i=+inp.dataset.imguiInput;const q=getData()[i];if(!q)return;q.images=q.images||[];Array.from(inp.files||[]).forEach(file=>{const fr=new FileReader();fr.onload=function(){q.images.push({id:'import_'+Date.now()+'_'+Math.random().toString(16).slice(2),src:fr.result,source:'user-upload',name:file.name});q.has_image=true;const card=document.querySelector(`[data-imgui-card="${i}"]`);if(card)card.outerHTML=renderEditCard(q,i);};fr.readAsDataURL(file);});inp.value='';});
+  window.__openImportPreviewModal=openPreview;
+  window.__editImportPreviewQuestion=function(i){const data=getData();const card=document.querySelector(`[data-imgui-card="${i}"]`);if(card&&data[i])card.outerHTML=renderEditCard(data[i],i);};
+})();
+
+
+// FINAL_CLEAN_IMPORT_PREVIEW_V7_20260626
+(function(){
+  const LETTERS=['A','B','C','D','E','F','G','H'];
+  let currentFilter='all';
+  function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+  function getData(data){const arr=data||window.__previewImportData||[];window.__previewImportData=arr;arr.forEach(detect);return arr;}
+  function normAns(q){return String(q?.answer||'').toUpperCase().replace(/[^A-Z]/g,'');}
+  function detect(q){q.images=q.images||[];q.has_image=!!(q.has_image||(q.images&&q.images.length));if(!q.error_risk)q.error_risk=normAns(q).length>1?'medium':'low';return q;}
+  function correctText(q){const ans=normAns(q);if(!ans)return 'Chưa có đáp án';return ans.split('').map(k=>k+'. '+(q.options?.[k]||'')).join(' | ');}
+  function riskColor(r){return {high:'#e74c3c',medium:'#f39c12',low:'#27ae60'}[r]||'#999';}
+  function riskLabel(r){return {high:'Cao',medium:'Trung bình',low:'Thấp'}[r]||r;}
+  function nextKey(opts){const used=new Set(Object.keys(opts||{}).map(k=>String(k).toUpperCase()));return LETTERS.find(k=>!used.has(k));}
+  function imgSrc(im){return typeof im==='string'?im:(im?.src||im?.url||'');}
+  function pass(q){if(currentFilter==='all')return true;if(currentFilter==='has_image')return !!q.has_image;return q.error_risk===currentFilter;}
+  function stats(data){return {total:data.length,img:data.filter(q=>q.has_image).length,high:data.filter(q=>q.error_risk==='high').length,medium:data.filter(q=>q.error_risk==='medium').length,low:data.filter(q=>q.error_risk==='low').length};}
+  function renderStats(data){const s=stats(data),box=document.getElementById('v7Stats');if(!box)return;const filters=[['all','Tất cả'],['has_image','📷 Có ảnh'],['high','Rủi ro cao'],['medium','Trung bình'],['low','Thấp']];box.innerHTML=`<div class="v7StatLine"><span class="v7StatItem">${s.total} câu</span><span class="v7StatItem" style="color:#3498db">${s.img} có ảnh</span><span class="v7StatItem" style="color:#e74c3c">${s.high} rủi ro cao</span><span class="v7StatItem" style="color:#f39c12">${s.medium} trung bình</span><span class="v7StatItem" style="color:#27ae60">${s.low} thấp</span></div><div class="v7FilterLine">${filters.map(f=>`<button type="button" class="v7FilterBtn ${currentFilter===f[0]?'active':''}" data-v7-filter="${f[0]}">${f[1]}</button>`).join('')}</div>`;}
+  function miniImages(q){const imgs=(q.images||[]).map(imgSrc).filter(Boolean);if(!imgs.length)return '<div class="v7MiniImgs"></div>';return `<div class="v7MiniImgs"><img src="${esc(imgs[0])}" alt="Ảnh preview">${imgs.length>1?`<span class="v7ImgCount">+${imgs.length-1}</span>`:''}</div>`;}
+  function renderCard(q,i){const ans=normAns(q)||'?';return `<article class="v7Card" data-v7-card="${i}" style="border-left-color:${riskColor(q.error_risk)}!important"><div class="v7Row"><div class="v7Num">Câu ${esc(q.num||i+1)}</div><div class="v7Main"><div class="v7Question">${esc(q.question||'')}</div><div class="v7Answer"><b>Đáp án: ${esc(ans)}</b><span>${esc(correctText(q))}</span></div></div>${miniImages(q)}<div class="v7Meta"><span class="v7RiskDot" style="background:${riskColor(q.error_risk)}" title="Rủi ro: ${esc(riskLabel(q.error_risk))}"></span><button class="v7EditBtn" type="button" data-v7-edit="${i}">Sửa</button></div></div></article>`;}
+  function renderImages(q,i){const imgs=q.images||[];return `<div class="v7Images"><div class="v7ImagesHead"><span>Ảnh của câu hỏi</span><button class="v7UploadBtn" type="button" data-v7-pick-img="${i}">+ Thêm ảnh</button><input class="v7HiddenInput" type="file" accept="image/*" multiple data-v7-input="${i}"></div><div class="v7Thumbs">${imgs.length?imgs.map((im,idx)=>`<div class="v7Thumb"><button class="v7RemoveImg" type="button" data-v7-rm-img="${idx}">×</button><img src="${esc(imgSrc(im))}" alt="Ảnh ${idx+1}"></div>`).join(''):'<div class="v7NoImage">Chưa có ảnh. Bấm “+ Thêm ảnh” nếu câu này cần hình.</div>'}</div></div>`;}
+  function renderEditCard(q,i){const opts=q.options||{};const optionRows=Object.keys(opts).sort().map(k=>`<div class="v7OptRow"><div class="v7Key">${esc(k)}</div><input value="${esc(opts[k]||'')}" data-v7-opt="${esc(k)}"><button class="v7DelOpt" type="button" data-v7-del-opt="${esc(k)}">×</button></div>`).join('');return `<article class="v7Card" data-v7-card="${i}"><div class="v7EditHead"><div class="v7EditTitle">Sửa toàn bộ Câu ${esc(q.num||i+1)}</div><div class="v7EditHeadActions"><button class="btn" type="button" data-v7-cancel="${i}">Hủy</button><button class="primary" type="button" data-v7-save="${i}">Lưu sửa</button></div></div><div class="v7EditGrid"><div class="v7Field"><label>Câu hỏi</label><textarea data-v7-question>${esc(q.question||'')}</textarea></div><div class="v7Field"><label>Đáp án đúng</label><input data-v7-answer value="${esc(normAns(q))}" placeholder="VD: A hoặc AC"></div></div><div class="v7Field" style="margin-top:10px"><label>Các đáp án</label><div class="v7Options">${optionRows}</div></div>${renderImages(q,i)}<div class="v7Bottom"><button class="btn" type="button" data-v7-add-opt="${i}">+ Thêm đáp án</button></div></article>`;}
+  function renderList(data){const list=document.getElementById('v7List');if(!list)return;const filtered=data.map((q,i)=>({q,i})).filter(x=>pass(x.q));list.innerHTML=filtered.length?filtered.map(x=>renderCard(x.q,x.i)).join(''):'<div class="v7Empty">Không có câu nào phù hợp bộ lọc.</div>';renderStats(data);}
+  function openPreview(data){data=getData(data);let modal=document.getElementById('importPreviewModal');if(modal)modal.remove();modal=document.createElement('div');modal.id='importPreviewModal';modal.className='modal v7ImportModal';modal.innerHTML=`<div class="box v7ImportBox"><button class="modalX" type="button" data-v7-close>×</button><div class="v7Head"><div><span class="v7Label">XEM TRƯỚC IMPORT</span><h2>Kiểm tra câu hỏi</h2><p class="v7Hint">Chỉ hiện câu hỏi và đáp án đúng. Câu có ảnh sẽ hiện preview nhỏ.</p></div><div class="v7TopActions"><button class="primary v7SaveTop" type="button" data-v7-submit>Lưu Môn Học</button></div></div><div id="v7Stats" class="v7Stats"></div><div id="v7List" class="v7List"></div></div>`;document.body.appendChild(modal);renderList(data);}
+  function saveEdit(i){const data=getData();const q=data[i];const card=document.querySelector(`[data-v7-card="${i}"]`);if(!q||!card)return;const question=(card.querySelector('[data-v7-question]')?.value||'').trim();const answer=(card.querySelector('[data-v7-answer]')?.value||'').trim().toUpperCase().replace(/[^A-Z]/g,'');if(!question)return alert('Câu hỏi không được để trống.');if(!answer)return alert('Đáp án đúng không được để trống.');const options={};card.querySelectorAll('[data-v7-opt]').forEach(inp=>{const k=String(inp.dataset.v7Opt||'').toUpperCase();const v=(inp.value||'').trim();if(k&&v)options[k]=v;});if(!Object.keys(options).length)return alert('Cần ít nhất 1 đáp án.');for(const k of answer.split('')){if(!options[k])return alert('Đáp án đúng '+k+' chưa có nội dung.');}q.question=question;q.answer=answer;q.options=options;q.answer_text=answer.split('').map(k=>k+'. '+(options[k]||'')).join('; ');q.has_image=!!(q.images&&q.images.length);renderList(data);if(typeof notify==='function')notify('Đã lưu sửa câu '+(q.num||i+1));}
+  document.addEventListener('click',function(e){const filter=e.target.closest('[data-v7-filter]');if(filter){currentFilter=filter.dataset.v7Filter||'all';renderList(getData());return;}if(e.target.closest('[data-v7-close]')){document.getElementById('importPreviewModal')?.classList.add('hidden');return;}if(e.target.closest('[data-v7-submit]')){document.getElementById('importPreviewModal')?.classList.add('hidden');window.__submitSubjectRequest?.();return;}const edit=e.target.closest('[data-v7-edit]');if(edit){const i=+edit.dataset.v7Edit;const data=getData();const card=document.querySelector(`[data-v7-card="${i}"]`);if(card&&data[i]){card.outerHTML=renderEditCard(data[i],i);document.querySelector(`[data-v7-card="${i}"] textarea`)?.focus();}return;}const cancel=e.target.closest('[data-v7-cancel]');if(cancel){renderList(getData());return;}const save=e.target.closest('[data-v7-save]');if(save){saveEdit(+save.dataset.v7Save);return;}const pick=e.target.closest('[data-v7-pick-img]');if(pick){document.querySelector(`[data-v7-input="${pick.dataset.v7PickImg}"]`)?.click();return;}const rm=e.target.closest('[data-v7-rm-img]');if(rm){const card=rm.closest('[data-v7-card]');const i=+(card?.dataset.v7Card||0);const q=getData()[i];if(q?.images){q.images.splice(+rm.dataset.v7RmImg,1);q.has_image=!!q.images.length;card.outerHTML=renderEditCard(q,i);}return;}const add=e.target.closest('[data-v7-add-opt]');if(add){const i=+add.dataset.v7AddOpt;const data=getData();const q=data[i];const k=nextKey(q.options||{});if(!k)return alert('Đã đủ số đáp án.');q.options=q.options||{};q.options[k]='';const card=document.querySelector(`[data-v7-card="${i}"]`);if(card){card.outerHTML=renderEditCard(q,i);document.querySelector(`[data-v7-card="${i}"] [data-v7-opt="${k}"]`)?.focus();}return;}const del=e.target.closest('[data-v7-del-opt]');if(del){const card=del.closest('[data-v7-card]');const i=+(card?.dataset.v7Card||0);const q=getData()[i];const k=del.dataset.v7DelOpt;if(q?.options&&k){delete q.options[k];card.outerHTML=renderEditCard(q,i);}return;}});
+  document.addEventListener('change',function(e){const inp=e.target.closest('[data-v7-input]');if(!inp)return;const i=+inp.dataset.v7Input;const q=getData()[i];if(!q)return;q.images=q.images||[];Array.from(inp.files||[]).forEach(file=>{const fr=new FileReader();fr.onload=function(){q.images.push({id:'import_'+Date.now()+'_'+Math.random().toString(16).slice(2),src:fr.result,source:'user-upload',name:file.name});q.has_image=true;const card=document.querySelector(`[data-v7-card="${i}"]`);if(card)card.outerHTML=renderEditCard(q,i);};fr.readAsDataURL(file);});inp.value='';});
+  window.__openImportPreviewModal=openPreview;
+  window.__editImportPreviewQuestion=function(i){const data=getData();const card=document.querySelector(`[data-v7-card="${i}"]`);if(card&&data[i])card.outerHTML=renderEditCard(data[i],i);};
+})();
+
+
+// IMAGE_LIGHTBOX_PREVIEW_CLICK_20260626
+(function(){
+  function ensureLightbox(){
+    let lb=document.getElementById('v7ImageLightbox');
+    if(lb) return lb;
+    lb=document.createElement('div');
+    lb.id='v7ImageLightbox';
+    lb.className='v7Lightbox hidden';
+    lb.innerHTML='<div class="v7LightboxInner"><button class="v7LightboxClose" type="button" aria-label="Đóng">×</button><img class="v7LightboxImg" alt="Ảnh phóng to"></div>';
+    document.body.appendChild(lb);
+    return lb;
+  }
+  function openImg(src){
+    if(!src) return;
+    const lb=ensureLightbox();
+    const img=lb.querySelector('.v7LightboxImg');
+    if(img) img.src=src;
+    lb.classList.remove('hidden');
+  }
+  function closeImg(){
+    const lb=document.getElementById('v7ImageLightbox');
+    if(!lb) return;
+    lb.classList.add('hidden');
+    const img=lb.querySelector('.v7LightboxImg');
+    if(img) img.removeAttribute('src');
+  }
+  document.addEventListener('click',function(e){
+    const thumb=e.target.closest('.v7MiniImgs img, .v7Thumb img');
+    if(thumb){
+      e.preventDefault();
+      e.stopPropagation();
+      openImg(thumb.currentSrc || thumb.src);
+      return;
+    }
+    if(e.target.closest('.v7LightboxClose') || e.target.id==='v7ImageLightbox'){
+      closeImg();
+    }
+  }, true);
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape') closeImg();
+  });
 })();

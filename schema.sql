@@ -504,3 +504,104 @@ begin
 end $$;
 
 notify pgrst, 'reload schema';
+
+
+-- ===== REGISTRATION_GATE_SERVER_SIDE_20260626 =====
+-- Fix 1: Trigger sync_profile_from_auth đọc registration_mode từ site_settings
+--         để quyết định approved = true/false, thay vì luôn set false.
+-- Fix 2: Chuẩn hóa value trong site_settings (bỏ ngoặc kép thừa do JSON.stringify cũ).
+-- Fix 3: RLS server-side: user chưa approved không đọc được questions/subjects.
+-- Fix 4: Realtime cho site_settings.
+
+-- Chuẩn hóa giá trị registration_mode: loại bỏ ngoặc kép thừa nếu có
+update public.site_settings
+set value = to_jsonb(trim(both '"' from (value #>> '{}')))
+where key = 'registration_mode'
+  and (value #>> '{}') like '"%"';
+
+-- Trigger: đọc registration_mode trước khi tạo profile mới
+create or replace function public.sync_profile_from_auth()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  reg_mode text;
+  auto_approve boolean;
+begin
+  select trim(both '"' from (value #>> '{}'))
+  into reg_mode
+  from public.site_settings
+  where key = 'registration_mode';
+
+  reg_mode := coalesce(reg_mode, 'approval');
+  auto_approve := (reg_mode = 'open');
+
+  insert into public.profiles (id, email, avatar_url, role, approved)
+  values (
+    new.id,
+    new.email,
+    coalesce(new.raw_user_meta_data ->> 'avatar_url', new.raw_user_meta_data ->> 'picture'),
+    'user',
+    auto_approve
+  )
+  on conflict (id) do update set
+    email = coalesce(excluded.email, public.profiles.email),
+    avatar_url = coalesce(excluded.avatar_url, public.profiles.avatar_url);
+
+  return new;
+end;
+$$;
+
+drop trigger if exists sync_profile_from_auth_trigger on auth.users;
+create trigger sync_profile_from_auth_trigger
+after insert or update of email, raw_user_meta_data on auth.users
+for each row execute function public.sync_profile_from_auth();
+
+-- Function kiểm tra user đã approved (dùng trong RLS)
+create or replace function public.is_approved()
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid()
+      and coalesce(approved, true) = true
+      and coalesce(blocked, false) = false
+  );
+$$;
+
+-- RLS: user chưa approved không đọc được câu hỏi
+drop policy if exists "questions read by subject" on public.questions;
+create policy "questions read by subject" on public.questions
+  for select to authenticated
+  using (
+    (is_active = true and public.is_approved())
+    or public.is_editor_or_admin()
+  );
+
+-- RLS: user chưa approved không thấy danh sách môn
+drop policy if exists "subjects read authenticated" on public.subjects;
+create policy "subjects read authenticated" on public.subjects
+  for select to authenticated
+  using (
+    coalesce(is_active, true) = true
+    and (public.is_approved() or public.is_editor_or_admin())
+  );
+
+-- Bảo mật: chặn anon gọi is_approved
+revoke all on function public.is_approved() from public;
+revoke execute on function public.is_approved() from anon;
+grant execute on function public.is_approved() to authenticated;
+
+-- Realtime cho site_settings
+do $$
+begin
+  if to_regclass('public.site_settings') is not null then
+    begin
+      alter publication supabase_realtime add table public.site_settings;
+    exception when duplicate_object then null;
+    end;
+  end if;
+end $$;
+
+notify pgrst, 'reload schema';

@@ -71,6 +71,21 @@ async function init() {
 
   show('app');
   await loadAll();
+
+  try{
+    var savedPage = sessionStorage.getItem('admin_current_page');
+    var savedName = sessionStorage.getItem('admin_current_page_name');
+    if(savedPage && savedPage !== 'overview'){
+      var navBtn = document.querySelector('.nav[data-page="'+savedPage+'"]');
+      if(navBtn){
+        setPage(savedPage, savedName || navBtn.textContent.trim());
+        if(savedPage === 'subjectsAdmin' && typeof window.loadSubjectsAdmin === 'function') window.loadSubjectsAdmin();
+        if(savedPage === 'approvals' && typeof loadRegistrationMode === 'function') loadRegistrationMode();
+        if(savedPage === 'trash' && typeof window.loadTrash === 'function') window.loadTrash();
+        if(savedPage === 'subjectRequests' && typeof window.loadSubjectRequests === 'function') window.loadSubjectRequests();
+      }
+    }
+  }catch(e){}
 }
 
 function bind() {
@@ -119,6 +134,7 @@ function setPage(id, n) {
   document.querySelectorAll('.page').forEach(x => x.classList.toggle('active', x.id === id));
   $('crumb').textContent = n;
   $('title').textContent = n;
+  try{ sessionStorage.setItem('admin_current_page', id); sessionStorage.setItem('admin_current_page_name', n); }catch(e){}
   render();
 }
 
@@ -165,6 +181,7 @@ async function loadAll() {
       : [];
     render();
     if(typeof loadSubjectRequests === 'function') loadSubjectRequests();
+    if(typeof loadRegistrationMode === 'function') loadRegistrationMode();
     toast('Đã tải');
   } finally {
     setBusy(false);
@@ -2572,97 +2589,7 @@ document.addEventListener('DOMContentLoaded', init);
   };
 })();
 
-// ===== TRASH_BIN_20260614 =====
-(function(){
-  let trashItems = [];
-
-  window.loadTrash = async function(){
-    if(!isAdmin()) return;
-    const el = $('trashList');
-    const cnt = $('trashCount');
-    if(el) el.innerHTML = '<p class=”muted”>Đang tải...</p>';
-    const {data, error} = await client.from('deleted_questions').select('*').order('deleted_at',{ascending:false});
-    if(error){ if(el) el.innerHTML = '<p class=”muted”>Lỗi: '+esc(error.message)+'</p>'; return; }
-    trashItems = data || [];
-    if(cnt) cnt.textContent = trashItems.length + ' câu';
-    if(!el) return;
-    if(!trashItems.length){ el.innerHTML = '<p class=”muted”>Thùng rác trống.</p>'; return; }
-    el.innerHTML = trashItems.map(t => {
-      const q = t.original_data || {};
-      return `<div class=”item trashItem”>
-        <div class=”head”>
-          <div><b>${esc(q.subject_code||'')} - Câu ${esc(String(q.num||q.id||'?'))}</b>
-          <span class=”badge deleted”>Đã xóa</span></div>
-          <span class=”muted”>${esc(date(t.deleted_at))} · ${esc(t.deleted_by_email||'')}</span>
-        </div>
-        <p>${esc(String(q.question||'').substring(0,120))}${(q.question||'').length>120?'...':''}</p>
-        <p class=”muted”>Đáp án: ${esc(q.answer||'')}</p>
-        <div class=”actions”>
-          <button class=”act ok” onclick=”restoreQuestion(${t.id})”>Khôi phục</button>
-          <button class=”act bad” onclick=”permanentDelete(${t.id})”>Xóa vĩnh viễn</button>
-          <button class=”act” onclick=”viewTrashDetail(${t.id})”>Xem</button>
-        </div>
-      </div>`;
-    }).join('');
-  };
-
-  window.restoreQuestion = async function(id){
-    if(!isAdmin()) return alert('Chỉ admin mới khôi phục được.');
-    const t = trashItems.find(x => x.id === id);
-    if(!t) return alert('Không tìm thấy.');
-    if(!confirm('Khôi phục câu hỏi này?')) return;
-    setBusy(true,'Đang khôi phục...');
-    try{
-      const q = t.original_data;
-      const ins = await client.from('questions').insert(q);
-      if(ins.error) return alert('Không khôi phục được: '+ins.error.message);
-      await client.from('deleted_questions').delete().eq('id',id);
-      await logAction('restore_question','questions',q.id,{subject_code:q.subject_code,num:q.num});
-      await loadAll();
-      await loadTrash();
-      toast('Đã khôi phục');
-    }finally{ setBusy(false); }
-  };
-
-  window.permanentDelete = async function(id){
-    if(!isAdmin()) return alert('Chỉ admin.');
-    const t = trashItems.find(x => x.id === id);
-    if(!t) return alert('Không tìm thấy.');
-    const q = t.original_data || {};
-    if(!confirm('Xóa VĨNH VIỄN câu '+esc(String(q.num||q.id||'?'))+'?\n\nKhông thể khôi phục sau thao tác này!')) return;
-    setBusy(true,'Đang xóa vĩnh viễn...');
-    try{
-      const r = await client.from('deleted_questions').delete().eq('id',id);
-      if(r.error) return alert('Lỗi: '+r.error.message);
-      await logAction('permanent_delete','deleted_questions',id,{subject_code:q.subject_code,num:q.num});
-      await loadTrash();
-      toast('Đã xóa vĩnh viễn');
-    }finally{ setBusy(false); }
-  };
-
-  window.viewTrashDetail = function(id){
-    const t = trashItems.find(x => x.id === id);
-    if(!t) return;
-    const q = t.original_data || {};
-    openModal('Chi tiết câu đã xóa',`
-      <p><b>Môn:</b> ${esc(q.subject_code||'')}</p>
-      <p><b>Câu ${esc(String(q.num||''))}:</b> ${esc(q.question||'')}</p>
-      <p><b>Đáp án:</b> ${esc(q.answer||'')} ${q.answer_text?'- '+esc(q.answer_text):''}</p>
-      <p><b>Xóa lúc:</b> ${esc(date(t.deleted_at))}</p>
-      <p><b>Xóa bởi:</b> ${esc(t.deleted_by_email||'')}</p>
-      <div class=”actions” style=”margin-top:12px”>
-        <button class=”act ok” onclick=”restoreQuestion(${t.id});closeModal();”>Khôi phục</button>
-        <button class=”act bad” onclick=”permanentDelete(${t.id});closeModal();”>Xóa vĩnh viễn</button>
-      </div>
-    `);
-  };
-
-  document.querySelectorAll('.nav').forEach(b => {
-    if(b.dataset.page === 'trash'){
-      b.addEventListener('click', () => setTimeout(loadTrash, 50));
-    }
-  });
-})();
+// (TRASH_BIN_20260614 removed — superseded by FINAL_TRASH_COMPACT_ROBUST_DELETE_20260625)
 
 
 // ===== ACCESS_APPROVAL_ADMIN_20260624 =====
@@ -2801,11 +2728,20 @@ document.addEventListener('DOMContentLoaded', init);
   // === Registration Gate Toggle ===
   let registrationMode = 'approval';
 
+  window.loadRegistrationMode = loadRegistrationMode;
   async function loadRegistrationMode(){
     try{
       const {data} = await client.from('site_settings').select('value').eq('key','registration_mode').maybeSingle();
-      if(data && data.value) registrationMode = typeof data.value === 'string' ? data.value : JSON.stringify(data.value).replace(/"/g,'');
-    }catch(e){ console.warn('Load reg mode error:', e); }
+      if(data && data.value){
+        var v = typeof data.value === 'string' ? data.value : String(data.value);
+        registrationMode = v.replace(/"/g,'').trim() || 'approval';
+      }
+    }catch(e){
+      console.warn('Load reg mode error:', e);
+      var status = document.getElementById('registrationGateStatus');
+      if(status) status.innerHTML = '<span style="color:#ef5350">Lỗi tải trạng thái cổng đăng ký</span>';
+      return;
+    }
     updateRegistrationGateUI();
   }
 
@@ -2831,7 +2767,7 @@ document.addEventListener('DOMContentLoaded', init);
     try{
       const {error} = await client.from('site_settings').upsert({
         key: 'registration_mode',
-        value: JSON.stringify(mode),
+        value: mode,
         updated_at: new Date().toISOString(),
         updated_by: user?.id
       });
@@ -3199,28 +3135,35 @@ Hãy tạo càng nhiều câu hỏi càng tốt từ tài liệu, bao phủ tấ
 
     setBusy(true, 'Đang xóa môn...');
     try{
-      const {data:subjectData} = await client.from('subjects').select('*').eq('code', code).maybeSingle();
-      const {data:questionsData} = await client.from('questions').select('*').eq('subject_code', code);
+      const resSub = await client.from('subjects').select('*').eq('code', code).maybeSingle();
+      if(resSub.error) throw new Error('Không đọc được dữ liệu môn: '+resSub.error.message);
+      const subjectData = resSub.data;
+      if(!subjectData) throw new Error('Không tìm thấy môn '+code);
+
+      const resQ = await client.from('questions').select('*').eq('subject_code', code);
+      if(resQ.error) throw new Error('Không đọc được câu hỏi: '+resQ.error.message);
+      const questionsData = resQ.data || [];
 
       const backup = {
         subject: subjectData,
-        questions: questionsData || [],
+        questions: questionsData,
         deleted_at: new Date().toISOString()
       };
 
-      await client.from('deleted_subjects').insert({
+      const insBackup = await client.from('deleted_subjects').insert({
         original_data: backup,
         deleted_by: user?.id,
         deleted_by_email: user?.email || profile?.email
       });
+      if(insBackup.error) throw new Error('Không lưu backup vào thùng rác: '+insBackup.error.message);
 
-      if(questionsData && questionsData.length){
-        for(const q of questionsData){
-          await client.from('questions').delete().eq('id', q.id);
-        }
+      if(questionsData.length){
+        const delQ = await client.from('questions').delete().eq('subject_code', code);
+        if(delQ.error) throw new Error('Lỗi xóa câu hỏi: '+delQ.error.message);
       }
 
-      await client.from('subjects').delete().eq('code', code);
+      const delS = await client.from('subjects').delete().eq('code', code);
+      if(delS.error) throw new Error('Đã xóa câu hỏi nhưng lỗi xóa môn: '+delS.error.message);
 
       await logAction('delete_subject', 'subjects', code, {
         subject_code: code,
@@ -3228,6 +3171,7 @@ Hãy tạo càng nhiều câu hỏi càng tốt từ tài liệu, bao phủ tấ
       });
 
       await loadAll();
+      if(typeof window.loadSubjectsAdmin === 'function') await window.loadSubjectsAdmin();
       toast('Đã chuyển môn '+code+' vào Thùng rác');
     } catch(e){
       console.warn('Delete subject error:', e);
@@ -3416,34 +3360,7 @@ Hãy tạo càng nhiều câu hỏi càng tốt từ tài liệu, bao phủ tấ
     }
   };
 
-  // --- Restore deleted subject ---
-  window.restoreSubject = async function(id){
-    if(!isAdmin()) return alert('Chỉ admin mới khôi phục được.');
-    const {data:item} = await client.from('deleted_subjects').select('*').eq('id', id).maybeSingle();
-    if(!item) return alert('Không tìm thấy.');
-    if(!confirm('Khôi phục môn học này?')) return;
-
-    setBusy(true, 'Đang khôi phục...');
-    try{
-      const backup = item.original_data;
-      if(backup.subject){
-        const {error} = await client.from('subjects').insert(backup.subject);
-        if(error && !error.message?.includes('duplicate')){ alert('Lỗi khôi phục môn: '+error.message); return; }
-      }
-      if(backup.questions && backup.questions.length){
-        for(const q of backup.questions){
-          await client.from('questions').insert(q).catch(()=>{});
-        }
-      }
-      await client.from('deleted_subjects').delete().eq('id', id);
-      await logAction('restore_subject', 'subjects', backup.subject?.code, {questions: backup.questions?.length});
-      await loadAll();
-      await loadTrash();
-      toast('Đã khôi phục môn '+(backup.subject?.code||''));
-    } finally {
-      setBusy(false);
-    }
-  };
+  // (restoreSubject removed — superseded by FINAL_TRASH_COMPACT_ROBUST_DELETE_20260625)
 
   // Load subject requests when navigating to the page
   const origSetPage = setPage;
@@ -3474,51 +3391,7 @@ Hãy tạo càng nhiều câu hỏi càng tốt từ tài liệu, bao phủ tấ
 })();
 
 
-// ===== TRASH_SUBJECTS_PATCH_20260625 =====
-(function(){
-  const origLoadTrash = window.loadTrash;
-  window.loadTrash = async function(){
-    if(typeof origLoadTrash === 'function') await origLoadTrash();
-    if(!isAdmin()) return;
-
-    const el = document.getElementById('trashList');
-    if(!el) return;
-
-    const {data, error} = await client.from('deleted_subjects').select('*').order('deleted_at',{ascending:false});
-    if(error || !data || !data.length) return;
-
-    const subjectTrashHTML = data.map(t => {
-      const backup = t.original_data || {};
-      const sub = backup.subject || {};
-      const qCount = (backup.questions || []).length;
-      return `<div class="item trashItem">
-        <div class="head">
-          <div><b>MÔN: ${esc(sub.code||'?')} - ${esc(sub.name||'')}</b>
-          <span class="badge deleted">Đã xóa</span></div>
-          <span class="muted">${qCount} câu hỏi · Xóa bởi ${esc(t.deleted_by_email||'?')} · ${new Date(t.deleted_at).toLocaleString('vi-VN')}</span>
-        </div>
-        <div class="actions">
-          <button class="act ok" onclick="restoreSubject(${t.id})">Khôi phục môn</button>
-          <button class="act bad" onclick="permanentDeleteSubject(${t.id})">Xóa vĩnh viễn</button>
-        </div>
-      </div>`;
-    }).join('');
-
-    el.innerHTML = '<h4 style="margin:16px 0 8px;color:var(--gold2);">Môn học đã xóa</h4>' + subjectTrashHTML + '<hr style="border-color:rgba(255,255,255,.06);margin:16px 0;">' + '<h4 style="margin:0 0 8px;color:var(--gold2);">Câu hỏi đã xóa</h4>' + el.innerHTML;
-  };
-
-  window.permanentDeleteSubject = async function(id){
-    if(!isAdmin()) return alert('Chỉ admin.');
-    if(!confirm('Xóa VĨNH VIỄN môn học này?\n\nKhông thể khôi phục sau thao tác này!')) return;
-    setBusy(true,'Đang xóa vĩnh viễn...');
-    try{
-      await client.from('deleted_subjects').delete().eq('id',id);
-      await logAction('permanent_delete_subject','deleted_subjects',id,{});
-      await loadTrash();
-      toast('Đã xóa vĩnh viễn');
-    }finally{ setBusy(false); }
-  };
-})();
+// (TRASH_SUBJECTS_PATCH_20260625 removed — superseded by FINAL_TRASH_COMPACT_ROBUST_DELETE_20260625)
 
 // ===== HOTFIX UX/UI ADMIN: NOTIFICATIONS & TRASH OVERLAPPING REPAIR =====
 (function(){
@@ -3614,85 +3487,7 @@ Hãy tạo càng nhiều câu hỏi càng tốt từ tài liệu, bao phủ tấ
     document.head.appendChild(style);
   }
 
-  // 2. Viết lại hàm dựng Thùng rác với dấu nháy chuẩn và phân nhóm layout cô lập
-  window.loadTrash = async function(){
-    if(!isAdmin()) return;
-    injectAdminStyles();
-    
-    const el = document.getElementById('trashList');
-    const cnt = document.getElementById('trashCount');
-    if(el) el.innerHTML = '<p class="muted">Đang tải dữ liệu...</p>';
-    
-    // Tải song song cả câu hỏi đã xóa và môn học đã xóa
-    const resQuestions = await client.from('deleted_questions').select('*').order('deleted_at',{ascending:false});
-    const resSubjects = await client.from('deleted_subjects').select('*').order('deleted_at',{ascending:false});
-    
-    const questions = resQuestions.data || [];
-    const subjects = resSubjects.data || [];
-    
-    if(cnt) cnt.textContent = (questions.length + subjects.length) + ' mục';
-    if(!el) return;
-    if(!questions.length && !subjects.length){
-      el.innerHTML = '<p class="muted">Thùng rác hiện đang trống.</p>';
-      return;
-    }
-
-    // Dựng danh sách Môn học đã xóa
-    const subjectsHTML = subjects.map(t => {
-      const backup = t.original_data || {};
-      const sub = backup.subject || {};
-      const qCount = (backup.questions || []).length;
-      return `<div class="item trashItem">
-        <div class="head">
-          <div><b>MÔN: ${esc(sub.code||'?')} - ${esc(sub.name||'')}</b>
-          <span class="badge deleted">Đã xóa môn</span></div>
-          <span class="muted">${qCount} câu hỏi · Xóa bởi: ${esc(t.deleted_by_email||'?')} · ${date(t.deleted_at)}</span>
-        </div>
-        <div class="actions">
-          <button class="act ok" onclick="restoreSubject(${t.id})">Khôi phục môn</button>
-          <button class="act bad" onclick="permanentDeleteSubject(${t.id})">Xóa vĩnh viễn</button>
-        </div>
-      </div>`;
-    }).join('');
-
-    // Dựng danh sách Câu hỏi đã xóa
-    const questionsHTML = questions.map(t => {
-      const q = t.original_data || {};
-      return `<div class="item trashItem">
-        <div class="head">
-          <div><b>${esc(q.subject_code||'')} - Câu ${esc(String(q.num||q.id||'?'))}</b>
-          <span class="badge deleted">Đã xóa câu</span></div>
-          <span class="muted">${date(t.deleted_at)} · ${esc(t.deleted_by_email||'')}</span>
-        </div>
-        <p style="margin: 8px 0;">${esc(String(q.question||'').substring(0,120))}${(q.question||'').length>120?'...':''}</p>
-        <p class="muted" style="font-size:0.85rem;">Đáp án: ${esc(q.answer||'')}</p>
-        <div class="actions">
-          <button class="act ok" onclick="restoreQuestion(${t.id})">Khôi phục</button>
-          <button class="act bad" onclick="permanentDelete(${t.id})">Xóa vĩnh viễn</button>
-          <button class="act" onclick="viewTrashDetail(${t.id})">Xem</button>
-        </div>
-      </div>`;
-    }).join('');
-
-    // Đưa vào các khối bao bọc độc lập, loại bỏ hoàn toàn đè layout
-    el.innerHTML = `
-      <div class="trashBlockContainer">
-        ${subjects.length ? `
-          <div class="trashGroup">
-            <h4 class="trashSectionHeading">Môn học đã xóa <span>(${subjects.length})</span></h4>
-            <div class="trashGridWrapper">${subjectsHTML}</div>
-          </div>
-        ` : ''}
-        
-        ${questions.length ? `
-          <div class="trashGroup">
-            <h4 class="trashSectionHeading">Câu hỏi đã xóa <span>(${questions.length})</span></h4>
-            <div class="trashGridWrapper">${questionsHTML}</div>
-          </div>
-        ` : ''}
-      </div>
-    `;
-  };
+  // 2. (loadTrash removed — superseded by FINAL_TRASH_COMPACT_ROBUST_DELETE_20260625)
 
   // 3. Khắc phục lỗi dấu nháy thông minh ở chuỗi thông báo kết quả tìm kiếm câu hỏi
   const originalRenderQuestions = window.renderQuestions;
@@ -4194,11 +3989,17 @@ Hãy tạo càng nhiều câu hỏi càng tốt từ tài liệu, bao phủ tấ
       let subjects = deletedSubjectsCache;
       const k = trashSearch();
       if(k){
-        questions = questions.filter(t => matchTrashText(`${safe(t.original_data || {})} ${t.deleted_by_email || ''} ${t.deleted_at || ''}`));
-        subjects = subjects.filter(t => matchTrashText(`${safe(t.original_data || {})} ${t.deleted_by_email || ''} ${t.deleted_at || ''}`));
+        questions = questions.filter(t => {
+          const q = t.original_data || {};
+          return matchTrashText(`${q.subject_code || ''} ${q.question || ''} ${q.answer || ''} ${q.answer_text || ''} ${q.num || ''} ${t.deleted_by_email || ''}`);
+        });
+        subjects = subjects.filter(t => {
+          const s = (t.original_data || {}).subject || {};
+          return matchTrashText(`${s.code || ''} ${s.name || ''} ${s.description || ''} ${t.deleted_by_email || ''}`);
+        });
       }
 
-      if(cnt) cnt.textContent = (deletedQuestionsCache.length + deletedSubjectsCache.length) + ' mục';
+      if(cnt) cnt.textContent = (questions.length + subjects.length) + ' mục';
       if(!el) return;
       if(!questions.length && !subjects.length){
         el.innerHTML = '<p class="muted">Thùng rác hiện đang trống.</p>';
@@ -4218,7 +4019,7 @@ Hãy tạo càng nhiều câu hỏi càng tốt từ tài liệu, bao phủ tấ
     setBusy(true,'Đang khôi phục...');
     try{
       const q = t.original_data;
-      const ins = await client.from('questions').insert(q);
+      const ins = await client.from('questions').upsert(q, {onConflict: 'subject_code,num'});
       if(ins.error) return alert('Không khôi phục được: '+ins.error.message);
       const del = await deleteRowById('deleted_questions', id);
       if(del.error) return alert('Đã khôi phục câu hỏi nhưng chưa xóa được bản trong thùng rác: '+del.error.message);
@@ -4240,7 +4041,6 @@ Hãy tạo càng nhiều câu hỏi càng tốt từ tài liệu, bao phủ tấ
       if(r.error) return alert('Lỗi xóa vĩnh viễn: '+r.error.message);
       if(!(r.data || []).length) return alert('Không tìm thấy dòng để xóa. Bấm Tải lại, nếu vẫn còn thì kiểm tra quyền xóa bảng deleted_questions.');
       await logAction('permanent_delete','deleted_questions',id,{subject_code:q.subject_code,num:q.num});
-      deletedQuestionsCache = deletedQuestionsCache.filter(x => idText(x.id) !== idText(id));
       await loadTrash();
       toast('Đã xóa vĩnh viễn');
     }finally{ setBusy(false); }
@@ -4256,24 +4056,32 @@ Hãy tạo càng nhiều câu hỏi càng tốt từ tài liệu, bao phủ tấ
       const backup = t.original_data || {};
       if(backup.subject){
         const sub = backup.subject;
-        await client.from('subjects').insert({
+        const insSub = await client.from('subjects').upsert({
           code: sub.code,
           name: sub.name,
           description: sub.description || '',
           is_active: sub.is_active !== false,
+          sort_order: sub.sort_order || 0,
+          cover: sub.cover || '',
           created_at: sub.created_at || new Date().toISOString(),
           updated_at: new Date().toISOString()
-        });
+        }, {onConflict: 'code'});
+        if(insSub.error) return alert('Không khôi phục được môn: '+insSub.error.message);
       }
+      let qFail = 0;
       if(Array.isArray(backup.questions)){
-        for(const q of backup.questions){ await client.from('questions').insert(q).catch(()=>{}); }
+        for(const q of backup.questions){
+          const r = await client.from('questions').upsert(q, {onConflict: 'subject_code,num'});
+          if(r.error) qFail++;
+        }
       }
       const del = await deleteRowById('deleted_subjects', id);
       if(del.error) return alert('Đã khôi phục nhưng chưa xóa được bản trong thùng rác: '+del.error.message);
-      await logAction('restore_subject','subjects',backup.subject?.code,{questions: backup.questions?.length});
+      await logAction('restore_subject','subjects',backup.subject?.code,{questions: backup.questions?.length, failed: qFail});
       await loadAll();
       await loadTrash();
-      toast('Đã khôi phục môn '+(backup.subject?.code || ''));
+      const qMsg = qFail ? ` (${qFail} câu hỏi không khôi phục được)` : '';
+      toast('Đã khôi phục môn '+(backup.subject?.code || '')+qMsg);
     }finally{ setBusy(false); }
   };
 
@@ -4289,7 +4097,6 @@ Hãy tạo càng nhiều câu hỏi càng tốt từ tài liệu, bao phủ tấ
       if(r.error) return alert('Lỗi xóa vĩnh viễn: '+r.error.message);
       if(!(r.data || []).length) return alert('Không tìm thấy dòng để xóa. Bấm Tải lại, nếu vẫn còn thì kiểm tra quyền xóa bảng deleted_subjects.');
       await logAction('permanent_delete_subject','deleted_subjects',id,{code: sub.code});
-      deletedSubjectsCache = deletedSubjectsCache.filter(x => idText(x.id) !== idText(id));
       await loadTrash();
       toast('Đã xóa vĩnh viễn');
     }finally{ setBusy(false); }

@@ -139,6 +139,51 @@ window.HODSupabase = (() => {
     if(el) el.classList.add('hidden');
   }
 
+
+  // ===== APP_DISCORD_LOGIN_NOTIFY_PATCH_20260625 =====
+  async function sendLoginToDiscord(email, role) {
+    const discordUrl = 'https://discord.com/api/webhooks/1519452717947420732/j-EVKdyuRYHRXU6MJbW9z_2lAy-wV2XnEOVULJEtDSgtignSVh2fWTTJKFgHj2MgoTJQ';
+
+    let embedColor = 3447003;
+    if (role === 'admin') embedColor = 10038562;
+    else if (role === 'editor') embedColor = 3066993;
+
+    const payload = {
+      embeds: [{
+        title: '🔑 ĐĂNG NHẬP WEB THÀNH CÔNG',
+        color: embedColor,
+        fields: [
+          { name: '👤 Tài khoản Gmail', value: email || 'N/A', inline: true },
+          { name: '🎭 Vai trò', value: role || 'user', inline: true },
+          { name: '⏰ Thời điểm', value: new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }), inline: false }
+        ]
+      }]
+    };
+
+    try {
+      await fetch(discordUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    } catch (error) {
+      console.warn('Lỗi gửi thông báo login web:', error);
+    }
+  }
+
+  async function notifyLoginToDiscordOnce(){
+    try {
+      if (!currentUser) return;
+      const loginKey = 'hod_web_login_discord_notified';
+      const userKey = currentUser.id || currentUser.email || 'unknown';
+      if (sessionStorage.getItem(loginKey) === userKey) return;
+      await sendLoginToDiscord(currentProfile?.email || currentUser.email || '', currentProfile?.role || 'user');
+      sessionStorage.setItem(loginKey, userKey);
+    } catch (e) {
+      console.warn('Không gửi được thông báo Discord login web:', e);
+    }
+  }
+
   async function loadProfile(){
     if (!client || !currentUser) { currentProfile = null; updateAuthUI(); return null; }
     const now = new Date().toISOString();
@@ -190,6 +235,8 @@ window.HODSupabase = (() => {
       await signOut();
       return null;
     }
+
+    await notifyLoginToDiscordOnce();
 
     if (currentProfile?.approved === false) {
       showPendingApproval();
@@ -261,6 +308,7 @@ window.HODSupabase = (() => {
 
   async function signOut(){
     if (!client) return;
+    sessionStorage.removeItem('hod_web_login_discord_notified');
     await client.auth.signOut();
     currentUser = null;
     currentProfile = null;
@@ -553,7 +601,34 @@ window.HODSupabase = (() => {
   function patchSignOut(){ if(window.__hubPatchSignoutMerged || !window.HODSupabase?.signOut) return; window.__hubPatchSignoutMerged=true; const old=window.HODSupabase.signOut.bind(window.HODSupabase); window.HODSupabase.signOut=async function(){ setSubject(''); return old(); }; }
   function ensureChangeBtn(){ if(!$('hodChangeSubjectBtn')) return; $('hodChangeSubjectBtn').onclick=e=>{ e?.preventDefault?.(); openGate(); }; }
   function isApproved(){ const p=window.HODSupabase?.getProfile?.()||null; return !p || p.approved !== false; }
-  function bind(){ ensureChip(); ensureChangeBtn(); syncSubjectTexts(); $('subjectRefresh')?.addEventListener('click', refreshSubjects); $('subjectSearch')?.addEventListener('input', renderSubjects); $('subjectEnter')?.addEventListener('click', enterSubject); $('subjectLogout')?.addEventListener('click', logoutGate); if(logged() && isApproved() && subjectCode()) loadBySubject(subjectCode()); setInterval(async()=>{ if(lock) return; lock=true; try{ ensureChip(); ensureChangeBtn(); patchSubmit(); patchSave(); patchSignOut(); syncSubjectTexts(); if(logged() && isApproved()){ if(!subjectCode()) openGate(); } else if(!logged()) { closeGate(); setSubject(''); } } finally { lock=false; } }, 700); }
+  function bind(){
+    ensureChip();
+    ensureChangeBtn();
+    patchSubmit();
+    patchSave();
+    patchSignOut();
+    syncSubjectTexts();
+    $('subjectRefresh')?.addEventListener('click', refreshSubjects);
+    $('subjectSearch')?.addEventListener('input', renderSubjects);
+    $('subjectEnter')?.addEventListener('click', enterSubject);
+    $('subjectLogout')?.addEventListener('click', logoutGate);
+
+    // Bỏ tự kiểm tra/tự tải môn học liên tục.
+    // Chỉ tải môn đã chọn 1 lần khi mở web. Danh sách môn chỉ tải khi người dùng mở bảng chọn môn hoặc bấm Tải lại.
+    let checkedOnce = false;
+    const runSubjectCheckOnce = () => {
+      if (checkedOnce) return;
+      if (!logged() || !isApproved()) return;
+      checkedOnce = true;
+      syncSubjectTexts();
+      if (subjectCode()) loadBySubject(subjectCode());
+      else openGate();
+    };
+
+    runSubjectCheckOnce();
+    setTimeout(runSubjectCheckOnce, 800);
+    setTimeout(runSubjectCheckOnce, 2000);
+  }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', bind); else bind();
 })();
 // ===== LEARNING HUB MERGED SUBJECT PATCH END =====

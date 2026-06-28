@@ -564,7 +564,7 @@ html,body{height:100%;overflow:hidden!important;}
 .trashActions{display:flex!important;gap:5px!important;flex-wrap:nowrap!important;justify-content:flex-end!important;max-height:none!important;overflow:visible!important;}
 .trashActions .act{min-height:26px!important;padding:5px 8px!important;border-radius:999px!important;font-size:.72rem!important;white-space:nowrap!important;}
 @media (max-width:900px){.compactTrashItem{grid-template-columns:1fr!important;align-items:start!important;}.trashActions{justify-content:flex-start!important;flex-wrap:wrap!important;}}
-#exportBtn{display:none!important;}
+/* #exportBtn{display:none!important;} */
 .userRow{display:grid;gap:10px;align-items:center;padding:9px 11px;margin:7px 0;min-height:64px;overflow:hidden;grid-template-columns:56px minmax(220px,1.35fr) minmax(92px,.45fr) minmax(84px,.5fr) minmax(130px,.8fr) minmax(120px,.7fr)!important;}
 .avatarCell{display:flex;align-items:center;justify-content:center;}
 .userAvatar{width:42px;height:42px;border-radius:50%;padding:0;overflow:hidden;border:1px solid rgba(232,212,168,.42);background:rgba(200,169,110,.12);display:grid;place-items:center;cursor:pointer;flex:0 0 auto;box-shadow:0 8px 22px rgba(0,0,0,.26);}
@@ -673,3 +673,95 @@ html,body{height:100%;overflow:hidden!important;}
 .lhUserRowFinal,.approvedUserRow,.approvalCardFinal,.lhActionsCell,.lhAvatarCell{visibility:visible!important;pointer-events:auto!important}
 body:not(.role-admin) .adminOnly,body:not(.role-admin) [data-admin-only="true"]{display:none!important}
 #userActionMenuFinal.hidden,#toast.hidden,#modal.hidden,#loginBox.hidden,#denyBox.hidden,#appBox.hidden{display:none!important}
+
+
+/* ===== FIX_ADMIN_REQUEST_IMAGES_FORCE_CSS_20260628 ===== */
+.adminReqCompareCol{min-width:0!important;border:1px solid rgba(200,169,110,.16)!important;border-radius:14px!important;background:rgba(0,0,0,.16)!important;padding:10px!important;}
+.adminReqColTitle{display:block!important;color:var(--gold2)!important;margin-bottom:8px!important;}
+.adminReqImageGrid{display:flex!important;flex-wrap:wrap!important;gap:10px!important;align-items:flex-start!important;}
+.adminReqImageFig{margin:0!important;border:1px solid rgba(200,169,110,.24)!important;border-radius:14px!important;background:rgba(255,255,255,.035)!important;padding:7px!important;max-width:250px!important;}
+.adminReqImageFig img{display:block!important;max-width:230px!important;max-height:180px!important;object-fit:contain!important;border-radius:10px!important;background:rgba(0,0,0,.22)!important;cursor:pointer!important;}
+.adminReqImageFig figcaption{margin-top:5px!important;color:var(--mist)!important;font-size:.76rem!important;font-weight:800!important;text-align:center!important;}
+.adminReqImageFig.imgBroken img{display:none!important;}
+.adminReqImageFig.imgBroken::after{content:"Không tải được ảnh"!important;color:var(--bad)!important;font-weight:900!important;font-size:.82rem!important;}
+.adminReqNoImage{min-height:80px!important;border:1px dashed rgba(200,169,110,.24)!important;border-radius:12px!important;display:grid!important;place-items:center!important;color:var(--mist)!important;background:rgba(255,255,255,.025)!important;}
+.adminReqImageZoom{display:grid!important;place-items:center!important;max-height:72vh!important;overflow:auto!important;}
+.adminReqImageZoom img{max-width:100%!important;max-height:72vh!important;object-fit:contain!important;border-radius:16px!important;border:1px solid rgba(200,169,110,.28)!important;background:rgba(255,255,255,.035)!important;padding:6px!important;}
+@media (max-width:760px){.imageCompare{grid-template-columns:1fr!important;}.adminReqImageFig,.adminReqImageFig img{max-width:100%!important;}}
+/* ===== END FIX_ADMIN_REQUEST_IMAGES_FORCE_CSS_20260628 ===== */
+
+/* ===== ADMIN_PROGRESS_BAR_OVERLAY_20260628 ===== */
+.adminProgressOverlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  background: rgba(0, 0, 0, 0.76) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  display: grid !important;
+  place-items: center !important;
+  z-index: 100000 !important;
+  opacity: 1 !important;
+  transition: opacity 0.25s ease !important;
+}
+.adminProgressOverlay.hidden {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+.adminProgressBox {
+  width: 90% !important;
+  max-width: 480px !important;
+  background: linear-gradient(145deg, rgba(30, 26, 20, 0.95), rgba(15, 13, 10, 0.98)) !important;
+  border: 1px solid rgba(200, 169, 110, 0.28) !important;
+  border-radius: 20px !important;
+  padding: 24px !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6) !important;
+  text-align: center !important;
+  color: #fff !important;
+}
+.adminProgressBox h3 {
+  margin: 0 0 16px !important;
+  font-size: 1.12rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.02em !important;
+  color: var(--gold2, #ffe9b2) !important;
+}
+.adminProgressTrack {
+  height: 10px !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-radius: 999px !important;
+  overflow: hidden !important;
+  margin-bottom: 14px !important;
+  border: 1px solid rgba(255, 255, 255, 0.03) !important;
+}
+.adminProgressBar {
+  height: 100% !important;
+  width: 0% !important;
+  background: linear-gradient(90deg, #d4af37, #2ecc71) !important;
+  border-radius: 999px !important;
+  transition: width 0.1s linear !important;
+}
+.adminProgressSub {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  font-size: 0.8rem !important;
+  color: rgba(245, 240, 232, 0.72) !important;
+}
+.adminProgressPercent {
+  font-weight: 900 !important;
+  color: #2ecc71 !important;
+  font-size: 0.86rem !important;
+}
+.adminProgressDetail {
+  white-space: nowrap !important;
+  text-overflow: ellipsis !important;
+  overflow: hidden !important;
+  display: block !important;
+  font-style: italic !important;
+  color: rgba(245, 240, 232, 0.5) !important;
+}
+/* ===== END ADMIN_PROGRESS_BAR_OVERLAY_20260628 ===== */

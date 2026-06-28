@@ -39,7 +39,10 @@ create table if not exists public.questions (
   images jsonb default '[]'::jsonb,
   is_active boolean default true,
   created_at timestamptz default now(),
-  updated_at timestamptz default now()
+  updated_at timestamptz default now(),
+  has_image boolean default false,
+  error_risk text default 'low',
+  error_risk_reason text
 );
 
 alter table public.questions add column if not exists subject_code text;
@@ -605,3 +608,178 @@ begin
 end $$;
 
 notify pgrst, 'reload schema';
+
+-- ===== EXTRACTED_CONFIG_FROM_OLD_DATA_20260628 =====
+-- Bổ sung cấu hình còn thiếu so với old_data.sql
+-- Không chép dữ liệu người dùng/auth/token/câu hỏi.
+
+-- 1) Bổ sung cột còn thiếu
+alter table public.profiles add column if not exists full_name text;
+alter table public.edit_requests add column if not exists subject_code text;
+alter table public.question_history add column if not exists subject_code text;
+alter table public.question_history add column if not exists question_num bigint;
+
+-- 2) Thùng rác câu hỏi còn thiếu trong file hiện tại
+create table if not exists public.deleted_questions (
+  id bigserial primary key,
+  original_data jsonb not null,
+  deleted_at timestamptz default now(),
+  deleted_by uuid,
+  deleted_by_email text
+);
+
+alter table public.deleted_questions enable row level security;
+
+drop policy if exists "deleted_questions admin only" on public.deleted_questions;
+create policy "deleted_questions admin only" on public.deleted_questions
+  for all to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+-- 3) Đồng bộ profile từ Auth, có thêm full_name
+create or replace function public.sync_profile_from_auth()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  reg_mode text;
+  auto_approve boolean;
+begin
+  select trim(both '"' from (value #>> '{}'))
+  into reg_mode
+  from public.site_settings
+  where key = 'registration_mode';
+
+  reg_mode := coalesce(reg_mode, 'approval');
+  auto_approve := (reg_mode = 'open');
+
+  insert into public.profiles (id, email, full_name, avatar_url, role, approved)
+  values (
+    new.id,
+    new.email,
+    coalesce(new.raw_user_meta_data ->> 'full_name', new.raw_user_meta_data ->> 'name'),
+    coalesce(new.raw_user_meta_data ->> 'avatar_url', new.raw_user_meta_data ->> 'picture'),
+    'user',
+    auto_approve
+  )
+  on conflict (id) do update set
+    email = coalesce(excluded.email, public.profiles.email),
+    full_name = coalesce(excluded.full_name, public.profiles.full_name),
+    avatar_url = coalesce(excluded.avatar_url, public.profiles.avatar_url);
+
+  return new;
+end;
+$$;
+
+drop trigger if exists sync_profile_from_auth_trigger on auth.users;
+create trigger sync_profile_from_auth_trigger
+after insert or update of email, raw_user_meta_data on auth.users
+for each row execute function public.sync_profile_from_auth();
+
+update public.profiles p
+set full_name = coalesce(
+  p.full_name,
+  u.raw_user_meta_data ->> 'full_name',
+  u.raw_user_meta_data ->> 'name'
+)
+from auth.users u
+where p.id = u.id and p.full_name is null;
+
+-- 4) Cấu hình web đang có trong old_data.sql
+insert into public.site_settings (key, value)
+values ('registration_mode', '"open"'::jsonb)
+on conflict (key) do update set value = excluded.value;
+
+-- 5) Danh sách môn học đang có trong old_data.sql
+insert into public.subjects (code, name, description, cover, sort_order, is_active)
+values
+  ('HOD102', 'HOD102 Learning', 'Bộ câu hỏi HOD102.', '', 1, true),
+  ('MLN111', 'MLN111 Learning', 'Bộ câu hỏi MLN111.', '', 2, true),
+  ('MLN122', 'MacLeNin', NULL, NULL, 3, true),
+  ('IPR102', 'Luật bản quyền', 'Trích từ đề ktra', NULL, 5, true),
+  ('GG', 'gg', NULL, NULL, 6, true),
+  ('102', 'mln', 'học', NULL, 7, true)
+on conflict (code) do update set
+  name = excluded.name,
+  description = excluded.description,
+  cover = excluded.cover,
+  sort_order = excluded.sort_order,
+  is_active = excluded.is_active;
+
+-- 6) Realtime cho bảng còn thiếu
+DO $$
+BEGIN
+  IF to_regclass('public.deleted_questions') IS NOT NULL THEN
+    BEGIN
+      ALTER PUBLICATION supabase_realtime ADD TABLE public.deleted_questions;
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END;
+  END IF;
+END $$;
+
+notify pgrst, 'reload schema';
+
+-- ===== FIX_ADMIN_EDITOR_SKIP_APPROVAL_20260628 =====
+-- Admin / Editor không cần chờ phê duyệt.
+-- Khi tài khoản có role admin/editor thì tự approved = true và bỏ block.
+
+alter table public.profiles add column if not exists approved boolean default false;
+alter table public.profiles add column if not exists blocked boolean default false;
+alter table public.profiles add column if not exists role text default 'user';
+
+update public.profiles
+set approved = true,
+    blocked = false
+where lower(role) in ('admin', 'editor');
+
+-- Hàm dùng để đổi role an toàn: cấp admin/editor là tự duyệt luôn.
+create or replace function public.admin_set_user_role(target_user_id uuid, new_role text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Only admin can change role';
+  end if;
+
+  if lower(new_role) not in ('user', 'editor', 'admin') then
+    raise exception 'Invalid role';
+  end if;
+
+  update public.profiles
+  set role = lower(new_role),
+      approved = case when lower(new_role) in ('admin', 'editor') then true else approved end,
+      blocked = case when lower(new_role) in ('admin', 'editor') then false else blocked end
+  where id = target_user_id;
+end;
+$$;
+
+-- Trigger bảo vệ: nếu role là admin/editor thì luôn approved=true.
+create or replace function public.ensure_admin_editor_approved()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if lower(coalesce(new.role, 'user')) in ('admin', 'editor') then
+    new.approved := true;
+    new.blocked := false;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_ensure_admin_editor_approved on public.profiles;
+create trigger trg_ensure_admin_editor_approved
+before insert or update of role, approved, blocked on public.profiles
+for each row
+execute function public.ensure_admin_editor_approved();
+
+notify pgrst, 'reload schema';
+-- ===== END FIX_ADMIN_EDITOR_SKIP_APPROVAL_20260628 =====
+

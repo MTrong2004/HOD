@@ -1,6 +1,6 @@
 const CONFIG = {
-  SUPABASE_URL: 'https://bdbkpqnhavyoalgkvqtw.supabase.co',
-  SUPABASE_ANON_KEY: 'sb_publishable_h-AYsKKK57i0uJpBxJeCHA_csNkgjyB'
+  SUPABASE_URL: 'https://kxyukiwhhorvxgxxxmfq.supabase.co',
+  SUPABASE_ANON_KEY: 'sb_publishable_yOIciG2SCPyu8mP5KWE5RQ_qIgCd4-f'
 };
 
 let client, user, profile, activeStatus = 'all';
@@ -55,6 +55,40 @@ function setBusy(on, label = 'Đang tải...') {
   document.body.classList.toggle('is-busy', !!on);
   $('refreshBtn').disabled = !!on;
   $('refreshBtn').textContent = on ? label : 'Tải lại';
+}
+
+function showProgress(title, current, total, detail = '') {
+  let el = $('adminProgressOverlay');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'adminProgressOverlay';
+    el.className = 'adminProgressOverlay hidden';
+    el.innerHTML = `
+      <div class="adminProgressBox">
+        <h3 id="adminProgressTitle">Đang xử lý...</h3>
+        <div class="adminProgressTrack">
+          <div id="adminProgressBar" class="adminProgressBar"></div>
+        </div>
+        <div class="adminProgressSub">
+          <span id="adminProgressPercent" class="adminProgressPercent">0% (0/0)</span>
+          <span id="adminProgressDetail" class="adminProgressDetail"></span>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(el);
+  }
+  
+  const pct = total > 0 ? Math.round((current / total) * 100) : 0;
+  $('adminProgressTitle').textContent = title;
+  $('adminProgressBar').style.width = pct + '%';
+  $('adminProgressPercent').textContent = pct + '% (' + current + '/' + total + ')';
+  $('adminProgressDetail').textContent = detail;
+  el.classList.remove('hidden');
+}
+
+function hideProgress() {
+  const el = $('adminProgressOverlay');
+  if(el) el.classList.add('hidden');
 }
 
 async function init() {
@@ -513,13 +547,47 @@ async function toggleQuestion(id, a) {
 }
 
 function exportAll() {
-  const blob = new Blob([JSON.stringify(cache, null, 2)], { type: 'application/json' });
+  openModal('Xuất dữ liệu', `
+    <div style="padding:10px 0;">
+      <p style="color:rgba(245,240,232,.72);margin-bottom:20px;font-size:0.9rem;line-height:1.4;">Chọn định dạng dữ liệu bạn muốn tải xuống từ Supabase:</p>
+      <div style="display:grid;grid-template-columns:1fr;gap:12px;">
+        <button class="act ok" id="exportBtnQuestions" style="width:100%;text-align:center;padding:12px;font-size:0.9rem;border-radius:8px;background:rgba(200,169,110,.16);color:var(--gold2);border:1px solid rgba(200,169,110,.35);font-weight:bold;cursor:pointer;">
+          📦 Chỉ danh sách câu hỏi (${(cache.questions || []).length} câu)
+        </button>
+        <button class="act" id="exportBtnFull" style="width:100%;text-align:center;padding:12px;font-size:0.9rem;border-radius:8px;background:rgba(245,240,232,.04);color:var(--mist);border:1px solid var(--bd);font-weight:bold;cursor:pointer;">
+          💾 Toàn bộ cơ sở dữ liệu (Sao lưu cấu hình, user, lịch sử...)
+        </button>
+      </div>
+    </div>
+  `);
+
+  document.getElementById('exportBtnQuestions').onclick = () => {
+    downloadExportFile('questions');
+  };
+  document.getElementById('exportBtnFull').onclick = () => {
+    downloadExportFile('full');
+  };
+}
+
+async function downloadExportFile(type) {
+  let data, filename;
+  if (type === 'questions') {
+    data = cache.questions || [];
+    filename = 'learninghub_questions_export.json';
+    try { await logAction('export_data', 'questions', 'json', {}); } catch(e){}
+  } else {
+    data = cache;
+    filename = 'learninghub_full_backup.json';
+    try { await logAction('export_data', 'backup', 'json', {}); } catch(e){}
+  }
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'hod102_admin_backup.json';
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(a.href);
-  logAction('export_data', 'backup', 'json', {});
+  closeModal();
+  toast('Đã xuất dữ liệu thành công!');
 }
 
 Object.assign(window, { approve, rejectReq, toggleBlock, setRole, toggleQuestion, viewReq, viewHistory, viewQuestion, viewUserEdits });
@@ -3046,13 +3114,40 @@ Hãy tạo càng nhiều câu hỏi càng tốt từ tài liệu, bao phủ tấ
 
       let nextNum = existingNums.size ? Math.max(...existingNums) + 1 : 1;
 
-      for(const q of parsedQuestions){
+      const total = parsedQuestions.length;
+      for(let i = 0; i < total; i++){
+        const q = parsedQuestions[i];
+        showProgress('Đang import câu hỏi...', i + 1, total, `Đang nhập câu ${q.num || i+1}: ${q.question ? q.question.substring(0, 50) + '...' : ''}`);
+        
         let num = Number(q.num) || nextNum;
         if(existingNums.has(num)){
           num = nextNum;
         }
         existingNums.add(num);
         nextNum = Math.max(nextNum, num) + 1;
+
+        const list = q.images || [];
+        const localHasImg = !!(list.length || q.has_image);
+        const text = (q.question || '') + ' ' + Object.values(q.options || {}).join(' ');
+        const needsImg = /(hình vẽ|hình bên|đồ thị|bảng biến thiên|sơ đồ)/gi.test(text);
+        const hasPlaceholder = list.some(im => {
+          const src = typeof im === 'string' ? im : (im.src || im.url || '');
+          return !src || src.includes('URL_') || src.includes('MÔ_TẢ') || src.includes('PLACEHOLDER');
+        });
+        
+        let risk = q.error_risk || '';
+        let reason = q.error_risk_reason || '';
+        if(!risk){
+          if((localHasImg && hasPlaceholder) || (needsImg && list.length === 0)){
+            risk = 'high';
+            reason = 'Cần hình vẽ/ảnh minh họa nhưng chưa có ảnh thực tế';
+          } else if((q.answer || '').length > 1){
+            risk = 'medium';
+            reason = 'Câu chọn nhiều đáp án đúng, cần rà soát kỹ';
+          } else {
+            risk = 'low';
+          }
+        }
 
         const payload = {
           subject_code: subject,
@@ -3063,7 +3158,10 @@ Hãy tạo càng nhiều câu hỏi càng tốt từ tài liệu, bao phủ tấ
           answer_text: q.answer_text || '',
           images: q.images || [],
           is_active: true,
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
+          has_image: localHasImg || needsImg,
+          error_risk: risk,
+          error_risk_reason: reason || null
         };
 
         const r = await client.from('questions').insert(payload);
@@ -3089,6 +3187,7 @@ Hãy tạo càng nhiều câu hỏi càng tốt từ tài liệu, bao phủ tấ
 
     }finally{
       setBusy(false);
+      hideProgress();
     }
   };
 
@@ -3131,53 +3230,108 @@ Hãy tạo càng nhiều câu hỏi càng tốt từ tài liệu, bao phủ tấ
   // --- Admin xóa môn học (chuyển vào thùng rác) ---
   window.deleteSubjectAdmin = async function(code){
     if(!isAdmin()) return alert('Chỉ admin mới được xóa môn.');
-    if(!confirm('Xóa môn "'+code+'"?\n\nMôn học và tất cả câu hỏi sẽ được chuyển vào Thùng rác.')) return;
-
-    setBusy(true, 'Đang xóa môn...');
-    try{
+    
+    setBusy(true, 'Đang kiểm tra thông tin môn...');
+    let subjectData = null;
+    let questionsCount = 0;
+    try {
       const resSub = await client.from('subjects').select('*').eq('code', code).maybeSingle();
-      if(resSub.error) throw new Error('Không đọc được dữ liệu môn: '+resSub.error.message);
-      const subjectData = resSub.data;
-      if(!subjectData) throw new Error('Không tìm thấy môn '+code);
-
-      const resQ = await client.from('questions').select('*').eq('subject_code', code);
-      if(resQ.error) throw new Error('Không đọc được câu hỏi: '+resQ.error.message);
-      const questionsData = resQ.data || [];
-
-      const backup = {
-        subject: subjectData,
-        questions: questionsData,
-        deleted_at: new Date().toISOString()
-      };
-
-      const insBackup = await client.from('deleted_subjects').insert({
-        original_data: backup,
-        deleted_by: user?.id,
-        deleted_by_email: user?.email || profile?.email
-      });
-      if(insBackup.error) throw new Error('Không lưu backup vào thùng rác: '+insBackup.error.message);
-
-      if(questionsData.length){
-        const delQ = await client.from('questions').delete().eq('subject_code', code);
-        if(delQ.error) throw new Error('Lỗi xóa câu hỏi: '+delQ.error.message);
-      }
-
-      const delS = await client.from('subjects').delete().eq('code', code);
-      if(delS.error) throw new Error('Đã xóa câu hỏi nhưng lỗi xóa môn: '+delS.error.message);
-
-      await logAction('delete_subject', 'subjects', code, {
-        subject_code: code,
-        questions_count: (questionsData||[]).length
-      });
-
-      await loadAll();
-      if(typeof window.loadSubjectsAdmin === 'function') await window.loadSubjectsAdmin();
-      toast('Đã chuyển môn '+code+' vào Thùng rác');
-    } catch(e){
-      console.warn('Delete subject error:', e);
-      alert('Lỗi khi xóa môn: '+(e.message||e));
-    } finally {
+      if(resSub.error) throw new Error(resSub.error.message);
+      subjectData = resSub.data;
+      if(!subjectData) throw new Error('Không tìm thấy môn ' + code);
+      
+      const { count, error } = await client.from('questions').select('*', { count: 'exact', head: true }).eq('subject_code', code);
+      if(!error) questionsCount = count || 0;
+    } catch(err) {
       setBusy(false);
+      return alert('Lỗi tải thông tin môn học: ' + err.message);
+    }
+    setBusy(false);
+
+    const name = subjectData.name || '';
+    
+    openModal('Xác nhận xóa môn học', `
+      <div style="padding:10px 0;">
+        <div style="background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.3);border-radius:10px;padding:16px;margin-bottom:20px;color:#e74c3c;">
+          <h3 style="margin-top:0;margin-bottom:8px;font-size:0.96rem;font-weight:bold;">⚠️ Cảnh báo hành động nguy hiểm!</h3>
+          <p style="margin:0;font-size:0.86rem;line-height:1.45;color:rgba(245,240,232,.85);">
+            Bạn đang yêu cầu xóa môn học <b>${esc(name)} (${esc(code)})</b>.
+          </p>
+        </div>
+        
+        <table style="width:100%;border-collapse:collapse;margin-bottom:20px;font-size:0.88rem;color:rgba(245,240,232,.85);">
+          <tr style="border-bottom:1px solid rgba(245,240,232,.1);"><td style="padding:8px 0;font-weight:bold;color:var(--gold2);">Mã môn:</td><td style="padding:8px 0;text-align:right;">${esc(code)}</td></tr>
+          <tr style="border-bottom:1px solid rgba(245,240,232,.1);"><td style="padding:8px 0;font-weight:bold;color:var(--gold2);">Tên môn:</td><td style="padding:8px 0;text-align:right;">${esc(name)}</td></tr>
+          <tr style="border-bottom:1px solid rgba(245,240,232,.1);"><td style="padding:8px 0;font-weight:bold;color:var(--gold2);">Số lượng câu hỏi:</td><td style="padding:8px 0;text-align:right;color:#e74c3c;font-weight:bold;">${questionsCount} câu hỏi sẽ bị xóa</td></tr>
+          <tr style="border-bottom:1px solid rgba(245,240,232,.1);"><td style="padding:8px 0;font-weight:bold;color:var(--gold2);">Nơi lưu trữ sau xóa:</td><td style="padding:8px 0;text-align:right;color:#2ecc71;">Thùng rác (có thể khôi phục)</td></tr>
+        </table>
+        
+        <div class="field" style="margin-bottom:20px;">
+          <label style="display:block;margin-bottom:8px;font-size:0.84rem;color:rgba(245,240,232,.72);">Để xác nhận, vui lòng nhập mã môn học <b>${esc(code)}</b> vào ô bên dưới:</label>
+          <input type="text" id="confirmDeleteSubjectCode" placeholder="Nhập ${esc(code)}" style="width:100%;padding:10px 14px;background:rgba(0,0,0,.22);border:1px solid rgba(200,169,110,.25);border-radius:8px;color:#fff;font-weight:bold;text-align:center;">
+        </div>
+        
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <button class="act" onclick="closeModal()" style="width:100%;text-align:center;padding:10px;font-size:0.88rem;font-weight:bold;border-radius:8px;">Hủy bỏ</button>
+          <button class="act bad" id="btnConfirmDeleteSubject" disabled style="width:100%;text-align:center;padding:10px;font-size:0.88rem;font-weight:bold;border-radius:8px;opacity:0.5;cursor:not-allowed;">Xác nhận xóa</button>
+        </div>
+      </div>
+    `);
+    
+    const input = document.getElementById('confirmDeleteSubjectCode');
+    const btn = document.getElementById('btnConfirmDeleteSubject');
+    if(input && btn) {
+      input.oninput = function() {
+        const match = input.value.trim().toUpperCase() === code.toUpperCase();
+        btn.disabled = !match;
+        btn.style.opacity = match ? '1' : '0.5';
+        btn.style.cursor = match ? 'pointer' : 'not-allowed';
+      };
+      
+      btn.onclick = async function() {
+        closeModal();
+        setBusy(true, 'Đang tiến hành xóa môn học...');
+        try {
+          const resQ = await client.from('questions').select('*').eq('subject_code', code);
+          if(resQ.error) throw new Error('Không đọc được câu hỏi: '+resQ.error.message);
+          const questionsData = resQ.data || [];
+
+          const backup = {
+            subject: subjectData,
+            questions: questionsData,
+            deleted_at: new Date().toISOString()
+          };
+
+          const insBackup = await client.from('deleted_subjects').insert({
+            original_data: backup,
+            deleted_by: user?.id,
+            deleted_by_email: user?.email || profile?.email
+          });
+          if(insBackup.error) throw new Error('Không lưu backup vào thùng rác: '+insBackup.error.message);
+
+          if(questionsData.length){
+            const delQ = await client.from('questions').delete().eq('subject_code', code);
+            if(delQ.error) throw new Error('Lỗi xóa câu hỏi: '+delQ.error.message);
+          }
+
+          const delS = await client.from('subjects').delete().eq('code', code);
+          if(delS.error) throw new Error('Đã xóa câu hỏi nhưng lỗi xóa môn: '+delS.error.message);
+
+          await logAction('delete_subject', 'subjects', code, {
+            subject_code: code,
+            questions_count: questionsData.length
+          });
+
+          await loadAll();
+          if(typeof window.loadSubjectsAdmin === 'function') await window.loadSubjectsAdmin();
+          toast('Đã chuyển môn '+code+' vào Thùng rác');
+        } catch(e) {
+          console.warn('Delete subject error:', e);
+          alert('Lỗi khi xóa môn: '+(e.message||e));
+        } finally {
+          setBusy(false);
+        }
+      };
     }
   };
 
@@ -3293,8 +3447,33 @@ Hãy tạo càng nhiều câu hỏi càng tốt từ tài liệu, bao phủ tấ
 
       if(Array.isArray(r.questions_data) && r.questions_data.length){
         let success=0, errors=0;
-        for(let i=0; i<r.questions_data.length; i++){
+        const total = r.questions_data.length;
+        for(let i=0; i<total; i++){
           const q = r.questions_data[i];
+          showProgress('Đang nhập câu hỏi cho môn mới...', i + 1, total, `Đang xử lý câu ${q.num || i+1}: ${q.question ? q.question.substring(0, 50) + '...' : ''}`);
+          const list = q.images || [];
+          const localHasImg = !!(list.length || q.has_image);
+          const text = (q.question || '') + ' ' + Object.values(q.options || {}).join(' ');
+          const needsImg = /(hình vẽ|hình bên|đồ thị|bảng biến thiên|sơ đồ)/gi.test(text);
+          const hasPlaceholder = list.some(im => {
+            const src = typeof im === 'string' ? im : (im.src || im.url || '');
+            return !src || src.includes('URL_') || src.includes('MÔ_TẢ') || src.includes('PLACEHOLDER');
+          });
+          
+          let risk = q.error_risk || '';
+          let reason = q.error_risk_reason || '';
+          if(!risk){
+            if((localHasImg && hasPlaceholder) || (needsImg && list.length === 0)){
+              risk = 'high';
+              reason = 'Cần hình vẽ/ảnh minh họa nhưng chưa có ảnh thực tế';
+            } else if((q.answer || '').length > 1){
+              risk = 'medium';
+              reason = 'Câu chọn nhiều đáp án đúng, cần rà soát kỹ';
+            } else {
+              risk = 'low';
+            }
+          }
+
           const payload = {
             subject_code: r.code,
             num: q.num || (i+1),
@@ -3304,7 +3483,10 @@ Hãy tạo càng nhiều câu hỏi càng tốt từ tài liệu, bao phủ tấ
             answer_text: q.answer_text || '',
             images: q.images || [],
             is_active: true,
-            updated_at: new Date().toISOString()
+            updated_at: new Date().toISOString(),
+            has_image: localHasImg || needsImg,
+            error_risk: risk,
+            error_risk_reason: reason || null
           };
           const res = await client.from('questions').insert(payload);
           if(res.error) errors++; else success++;
@@ -3330,6 +3512,7 @@ Hãy tạo càng nhiều câu hỏi càng tốt từ tài liệu, bao phủ tấ
       alert('Lỗi: '+(e.message||e));
     } finally {
       setBusy(false);
+      hideProgress();
     }
   };
 
@@ -3901,7 +4084,7 @@ Hãy tạo càng nhiều câu hỏi càng tốt từ tài liệu, bao phủ tấ
   let deletedSubjectsCache = [];
 
   function idText(id){ return String(id ?? ''); }
-  function arg(id){ return JSON.stringify(idText(id)); }
+  function arg(id){ return "'" + idText(id).replace(/'/g, "\\'") + "'"; }
   function shortText(s, n=110){
     s = String(s || '').trim();
     return s.length > n ? s.slice(0, n) + '...' : s;
@@ -4063,14 +4246,16 @@ Hãy tạo càng nhiều câu hỏi càng tốt từ tài liệu, bao phủ tấ
           is_active: sub.is_active !== false,
           sort_order: sub.sort_order || 0,
           cover: sub.cover || '',
-          created_at: sub.created_at || new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          created_at: sub.created_at || new Date().toISOString()
         }, {onConflict: 'code'});
         if(insSub.error) return alert('Không khôi phục được môn: '+insSub.error.message);
       }
       let qFail = 0;
       if(Array.isArray(backup.questions)){
-        for(const q of backup.questions){
+        const total = backup.questions.length;
+        for(let idx=0; idx<total; idx++){
+          const q = backup.questions[idx];
+          showProgress('Đang khôi phục các câu hỏi...', idx + 1, total, `Đang xử lý câu ${q.num || idx+1}: ${q.question ? q.question.substring(0, 50) + '...' : ''}`);
           const r = await client.from('questions').upsert(q, {onConflict: 'subject_code,num'});
           if(r.error) qFail++;
         }
@@ -4082,7 +4267,10 @@ Hãy tạo càng nhiều câu hỏi càng tốt từ tài liệu, bao phủ tấ
       await loadTrash();
       const qMsg = qFail ? ` (${qFail} câu hỏi không khôi phục được)` : '';
       toast('Đã khôi phục môn '+(backup.subject?.code || '')+qMsg);
-    }finally{ setBusy(false); }
+    }finally{
+      setBusy(false);
+      hideProgress();
+    }
   };
 
   window.permanentDeleteSubject = async function(id){
@@ -5371,10 +5559,41 @@ async function sendLoginToDiscord(email, role) {
     const ops={}; document.querySelectorAll('[data-dq-opt]').forEach(t=>{const v=(t.value||'').trim(); if(v) ops[t.dataset.dqOpt]=v;});
     const question=($('dqQuestion')?.value||'').trim(); const answer=($('dqAnswer')?.value||'').trim().toUpperCase();
     if(!question) return alert('Câu hỏi không được để trống.'); if(!answer) return alert('Đáp án đúng không được để trống.');
-    const payload={question,options:ops,answer,answer_text:Object.entries(ops).filter(([k])=>answer.includes(k)).map(([k,v])=>`${k}. ${v}`).join('; '),images:directEditDraftImages||[],updated_at:new Date().toISOString()};
+    const list = directEditDraftImages || [];
+    const localHasImg = !!(list.length || oldQ.has_image);
+    const text = question + ' ' + Object.values(ops).join(' ');
+    const needsImg = /(hình vẽ|hình bên|đồ thị|bảng biến thiên|sơ đồ)/gi.test(text);
+    const hasPlaceholder = list.some(im => {
+      const src = typeof im === 'string' ? im : (im.src || im.url || im.secure_url || '');
+      return !src || src.includes('URL_') || src.includes('MÔ_TẢ') || src.includes('PLACEHOLDER');
+    });
+    
+    let risk = '';
+    let reason = '';
+    if((localHasImg && hasPlaceholder) || (needsImg && list.length === 0)){
+      risk = 'high';
+      reason = 'Cần hình vẽ/ảnh minh họa nhưng chưa có ảnh thực tế';
+    } else if(answer.length > 1){
+      risk = 'medium';
+      reason = 'Câu chọn nhiều đáp án đúng, cần rà soát kỹ';
+    } else {
+      risk = 'low';
+    }
+
+    const payload={
+      question,
+      options:ops,
+      answer,
+      answer_text:Object.entries(ops).filter(([k])=>answer.includes(k)).map(([k,v])=>`${k}. ${v}`).join('; '),
+      images:directEditDraftImages||[],
+      updated_at:new Date().toISOString(),
+      has_image: localHasImg || needsImg,
+      error_risk: risk,
+      error_risk_reason: reason || null
+    };
     setBusy(true,'Đang lưu...');
     try{
-      const res=await client.from('questions').update(payload).eq('id',id).select('id,num,subject_code,question,options,answer,is_active,updated_at').maybeSingle();
+      const res=await client.from('questions').update(payload).eq('id',id).select('id,num,subject_code,question,options,answer,is_active,updated_at,has_image,error_risk,error_risk_reason').maybeSingle();
       if(res.error) return alert(res.error.message);
       const idx=(cache.questions||[]).findIndex(x=>String(x.id)===String(id)); if(idx>=0) cache.questions[idx]={...cache.questions[idx],...(res.data||payload),images:payload.images};
       try{ await client.from('question_history').insert({question_id:id,question_num:oldQ.num||null,subject_code:oldQ.subject_code||null,request_id:null,previous_data:{question:oldQ.question,options:oldQ.options||{},answer:oldQ.answer,answer_text:oldQ.answer_text,images:oldQ.images||[]},new_data:payload,changed_by:user.id,approved_by:user.id}); }catch(e){}
@@ -5388,7 +5607,7 @@ async function sendLoginToDiscord(email, role) {
 // ===== COPILOT_ADMIN_BANDWIDTH_FINAL_OVERRIDE_20260627 =====
 // Chỉ tải 50 câu/trang, không tải cột images trong danh sách admin.
 (function(){
-  const QUESTION_COLS='id,num,subject_code,question,options,answer,is_active,updated_at,created_at';
+  const QUESTION_COLS='id,num,subject_code,question,options,answer,is_active,updated_at,created_at,has_image,error_risk,error_risk_reason';
   const STATE=window.__ADMIN_PAGE_STATE__=window.__ADMIN_PAGE_STATE__||{page:1,size:50,total:0,subject:localStorage.getItem('admin_question_subject_filter_v1')||'all',subjects:[]};
   function search(){return String($('search')?.value||'').trim();}
   async function safeQ(p){try{const r=await p;return r.error?[]:(r.data||[])}catch(e){return[]}}
@@ -5425,3 +5644,348 @@ async function sendLoginToDiscord(email, role) {
   const inp=$('search');if(inp&&!inp.__adminFinalSearch){inp.__adminFinalSearch=true;let t;inp.addEventListener('input',()=>{clearTimeout(t);t=setTimeout(()=>{STATE.page=1;loadQuestionPage().then(render)},350)},{passive:true});}
   const btn=$('refreshBtn');if(btn)btn.onclick=loadAll;
 })();
+
+
+// ===== FINAL_FIX_REQUESTS_AND_SUBJECT_REQUESTS_20260627 =====
+// Fix: tab Yêu cầu sửa và Yêu cầu thêm môn không hiện data do bản tối ưu trước đó load thiếu cột/không gọi load subject_requests.
+(function(){
+  const QUESTION_COLS = 'id,num,subject_code,question,options,answer,is_active,updated_at,created_at,has_image,error_risk,error_risk_reason';
+  const STATE = window.__ADMIN_PAGE_STATE__ || (window.__ADMIN_PAGE_STATE__ = {
+    page:1, size:50, total:0,
+    subject: localStorage.getItem('admin_question_subject_filter_v1') || 'all',
+    subjects:[]
+  });
+  let subjectReqCache = [];
+  let subjectReqFilter = 'pending';
+
+  function searchVal(){ return String($('search')?.value || '').trim(); }
+  async function safeQuery(name, query){
+    try{
+      const r = await query;
+      if(r.error){ console.warn('[ADMIN FIX]', name, r.error); return {data:[], error:r.error}; }
+      return {data:r.data || [], count:r.count || 0, error:null};
+    }catch(e){ console.warn('[ADMIN FIX]', name, e); return {data:[], error:e}; }
+  }
+  async function loadSubjectsLite(){
+    const r = await safeQuery('subjects from questions', client.from('questions').select('subject_code').limit(10000));
+    const set = new Set((r.data||[]).map(x => x.subject_code || 'HOD102').filter(Boolean));
+    if(!set.size){ set.add('HOD102'); set.add('MLN111'); }
+    STATE.subjects = Array.from(set).sort((a,b)=>String(a).localeCompare(String(b)));
+  }
+  async function loadQuestionPageLite(){
+    const from = (STATE.page - 1) * STATE.size;
+    const to = from + STATE.size - 1;
+    let q = client.from('questions')
+      .select(QUESTION_COLS, {count:'exact'})
+      .order('subject_code', {ascending:true})
+      .order('num', {ascending:true})
+      .range(from, to);
+    if(STATE.subject !== 'all') q = q.eq('subject_code', STATE.subject);
+    const s = searchVal();
+    if(s){
+      if(/^\d+$/.test(s)) q = q.or(`num.eq.${Number(s)},id.eq.${Number(s)}`);
+      else q = q.or(`question.ilike.%${s.replaceAll('%','')}%,answer.ilike.%${s.replaceAll('%','')}%`);
+    }
+    const r = await q;
+    if(r.error){ err('Lỗi tải câu hỏi: ' + r.error.message); cache.questions=[]; STATE.total=0; return; }
+    cache.questions = r.data || [];
+    STATE.total = r.count || 0;
+  }
+
+  async function loadCoreTablesFixed(){
+    const [profiles, edits, history, logs] = await Promise.all([
+      safeQuery('profiles', client.from('profiles').select('*').order('last_activity', {ascending:false, nullsFirst:false})),
+      // QUAN TRỌNG: phải select('*') để có old_data/new_data. Bản trước load thiếu nên tab Yêu cầu sửa nhìn như mất data.
+      safeQuery('edit_requests', client.from('edit_requests').select('*').order('created_at', {ascending:false}).limit(500)),
+      safeQuery('question_history', client.from('question_history').select('*').order('created_at', {ascending:false}).limit(500)),
+      isAdmin() ? safeQuery('admin_logs', client.from('admin_logs').select('*').order('created_at', {ascending:false}).limit(300)) : Promise.resolve({data:[]})
+    ]);
+    cache.profiles = profiles.data || [];
+    cache.requests = edits.data || [];
+    cache.history = history.data || [];
+    cache.logs = logs.data || [];
+  }
+
+  window.loadAll = loadAll = async function(){
+    clearErr();
+    setBusy(true, 'Đang tải dữ liệu...');
+    try{
+      await Promise.all([loadCoreTablesFixed(), loadSubjectsLite()]);
+      await loadQuestionPageLite();
+      render();
+      await window.loadSubjectRequests?.();
+      if(typeof loadRegistrationMode === 'function') loadRegistrationMode();
+      if(typeof startAdminRealtime === 'function') startAdminRealtime();
+      toast(`Đã tải: ${cache.requests.length} yêu cầu sửa, ${subjectReqCache.length} yêu cầu thêm môn`);
+    }finally{ setBusy(false); }
+  };
+
+  // Fix click So sánh: luôn fetch full row để chắc chắn có old_data/new_data.
+  window.viewReq = async function(id){
+    let r = (cache.requests || []).find(x => String(x.id) === String(id));
+    try{
+      const full = await client.from('edit_requests').select('*').eq('id', id).maybeSingle();
+      if(!full.error && full.data) r = full.data;
+    }catch(e){}
+    if(!r) return alert('Không tìm thấy yêu cầu sửa.');
+    const oldData = r.old_data || getQuestionByReq(r) || {};
+    openModal(`Yêu cầu sửa câu ${questionLabel(r)}`, compareHTML(oldData, r.new_data || {}));
+  };
+
+  // Load + render Yêu cầu thêm môn độc lập, không phụ thuộc render() cũ.
+  window.loadSubjectRequests = async function(){
+    if(!isEditor()) return;
+    const el = $('subjectRequestList');
+    if(el) el.innerHTML = '<p class="muted">Đang tải yêu cầu thêm môn...</p>';
+    const r = await safeQuery('subject_requests', client.from('subject_requests').select('*').order('created_at', {ascending:false}).limit(500));
+    subjectReqCache = r.data || [];
+    if(r.error){
+      if(el) el.innerHTML = `<p class="muted">Không tải được subject_requests: ${esc(r.error.message || r.error)}</p>`;
+      return;
+    }
+    renderSubjectRequestsFixed(subjectReqFilter);
+    const badge = $('subjectRequestBadge');
+    const pending = subjectReqCache.filter(x => x.status === 'pending').length;
+    if(badge){ badge.textContent = pending; badge.classList.toggle('hidden', !pending); }
+  };
+
+  window.filterSubjectRequests = function(status){
+    subjectReqFilter = status || 'pending';
+    document.querySelectorAll('.subjectReqFilter').forEach(b => b.classList.toggle('active', b.dataset.srf === subjectReqFilter));
+    renderSubjectRequestsFixed(subjectReqFilter);
+  };
+
+  function renderSubjectRequestsFixed(filter='pending'){
+    const el = $('subjectRequestList');
+    if(!el) return;
+    const list = filter === 'all' ? subjectReqCache : subjectReqCache.filter(r => (r.status || 'pending') === filter);
+    const pending = subjectReqCache.filter(r => (r.status || 'pending') === 'pending').length;
+    const approved = subjectReqCache.filter(r => r.status === 'approved').length;
+    const rejected = subjectReqCache.filter(r => r.status === 'rejected').length;
+    if($('srfPending')) $('srfPending').textContent = pending;
+    if($('srfApproved')) $('srfApproved').textContent = approved;
+    if($('srfRejected')) $('srfRejected').textContent = rejected;
+    if($('srfAll')) $('srfAll').textContent = subjectReqCache.length;
+    if(!list.length){ el.innerHTML = '<p class="muted">Không có yêu cầu thêm môn.</p>'; return; }
+    el.innerHTML = list.map(r => {
+      const qs = Array.isArray(r.questions_data) ? r.questions_data : [];
+      const status = r.status || 'pending';
+      const statusText = status === 'approved' ? 'Đã duyệt' : status === 'rejected' ? 'Từ chối' : 'Chờ duyệt';
+      return `<div class="item subjectRequestItem">
+        <div class="head">
+          <div>
+            <b>${esc(r.code || '?')}</b> - ${esc(r.name || '')} <span class="badge ${esc(status)}">${statusText}</span>
+            <br><span class="muted">${esc(r.user_email || r.user_id || '?')} · ${r.created_at ? new Date(r.created_at).toLocaleString('vi-VN') : ''}</span>
+            ${r.description ? `<br><span class="muted">Mô tả: ${esc(r.description)}</span>` : ''}
+            <br><span class="muted">${qs.length} câu hỏi đính kèm</span>
+            ${r.admin_note ? `<br><span class="muted">Ghi chú: ${esc(r.admin_note)}</span>` : ''}
+          </div>
+        </div>
+        <div class="actions">
+          ${qs.length ? `<button class="act" onclick="previewSubjectRequestQuestionsFixed(${r.id})">Xem câu hỏi</button>` : ''}
+          ${status === 'pending' ? `<button class="act ok" onclick="approveSubjectRequest(${r.id})">Duyệt</button><button class="act bad" onclick="rejectSubjectRequest(${r.id})">Từ chối</button>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  window.previewSubjectRequestQuestionsFixed = function(id){
+    const r = subjectReqCache.find(x => String(x.id) === String(id));
+    if(!r) return;
+    const qs = Array.isArray(r.questions_data) ? r.questions_data : [];
+    const html = qs.slice(0, 50).map((q,i)=>`<div class="item"><b>Câu ${esc(q.num || i+1)}</b>: ${esc(String(q.question || '').slice(0,220))}<br><span class="muted">Đáp án: ${esc(q.answer || '?')}</span></div>`).join('') || '<p class="muted">Không có câu hỏi đính kèm.</p>';
+    openModal(`Câu hỏi của yêu cầu ${esc(r.code || '')}`, html + (qs.length > 50 ? `<p class="muted">Còn ${qs.length-50} câu nữa...</p>` : ''));
+  };
+
+  const oldSetPageFixed = setPage;
+  setPage = function(id,n){
+    oldSetPageFixed(id,n);
+    if(id === 'subjectRequests') setTimeout(()=>window.loadSubjectRequests?.(), 50);
+    if(id === 'requests') renderRequests();
+  };
+
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(()=>window.loadSubjectRequests?.(), 1200);
+  });
+})();
+
+
+// ===== FIX_ADMIN_REQUEST_IMAGES_FORCE_20260628 =====
+// Bắt buộc hiện ảnh trong modal So sánh yêu cầu sửa, kể cả cache câu hỏi đang load thiếu cột images.
+(function(){
+  const E = x => String(x ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  function getImgUrl(im){
+    if(!im) return '';
+    if(typeof im === 'string') return im.trim();
+    if(typeof im !== 'object') return '';
+    return String(im.src || im.url || im.secure_url || im.publicUrl || im.public_url || im.file_url || im.image_url || im.dataUrl || im.data_url || im.path || '').trim();
+  }
+  function imgs(v){
+    if(!v) return [];
+    let raw = v;
+    if(typeof raw === 'string'){
+      const t = raw.trim();
+      if(!t || t === '[]' || t === '{}' || t.toLowerCase() === 'không có') return [];
+      if((t.startsWith('[') && t.endsWith(']')) || (t.startsWith('{') && t.endsWith('}'))){ try{ raw = JSON.parse(t); }catch(e){ raw = t; } }
+    }
+    if(!Array.isArray(raw)) raw = [raw];
+    return raw.map(getImgUrl).filter(Boolean);
+  }
+  function imageBox(v){
+    const a = imgs(v);
+    if(!a.length) return '<div class="adminReqNoImage">Không có ảnh</div>';
+    return '<div class="adminReqImageGrid">' + a.map((src,i)=>
+      `<figure class="adminReqImageFig"><img src="${E(src)}" loading="lazy" onclick="openAdminReqImageForce('${encodeURIComponent(src)}')" onerror="this.closest('.adminReqImageFig')?.classList.add('imgBroken')"><figcaption>Ảnh ${i+1}</figcaption></figure>`
+    ).join('') + '</div>';
+  }
+  window.openAdminReqImageForce = function(x){
+    const src = decodeURIComponent(x || '');
+    openModal('Xem ảnh', `<div class="adminReqImageZoom"><img src="${E(src)}"></div>`);
+  };
+  function textBox(v, title){
+    const val = typeof formatValue === 'function' ? formatValue(v) : String(v ?? '');
+    return `<pre><b>${title}</b>
+${E(val)}</pre>`;
+  }
+  window.compareHTML = compareHTML = function(oldData, newData){
+    oldData = oldData || {}; newData = newData || {};
+    const fields = ['question','options','answer'];
+    const hasImage = imgs(oldData.images).length || imgs(newData.images).length || Object.prototype.hasOwnProperty.call(oldData,'images') || Object.prototype.hasOwnProperty.call(newData,'images');
+    if(hasImage) fields.push('images');
+    return '<div class="diffList compactDiffList adminReqDiffList">' + fields.map(f=>{
+      const label = typeof labelField === 'function' ? labelField(f) : f;
+      const before = oldData[f], after = newData[f];
+      const changed = JSON.stringify(f==='images'?imgs(before):before) !== JSON.stringify(f==='images'?imgs(after):after);
+      return `<section class="diffBlock ${changed?'changed':''} compactDiffBlock ${f==='images'?'imageDiffBlock':''}"><h3>${E(label)}<span>${changed?'Đã đổi':'Không đổi'}</span></h3><div class="compare compactCompare ${f==='images'?'imageCompare':''}"><div class="adminReqCompareCol"><b class="adminReqColTitle">Trước</b>${f==='images'?imageBox(before):textBox(before,'Trước')}</div><div class="adminReqCompareCol"><b class="adminReqColTitle">Sau</b>${f==='images'?imageBox(after):textBox(after,'Sau')}</div></div></section>`;
+    }).join('') + '</div>';
+  };
+  window.viewReq = viewReq = async function(id){
+    let r = (cache.requests || []).find(x => String(x.id) === String(id));
+    try{ const full = await client.from('edit_requests').select('*').eq('id', id).maybeSingle(); if(!full.error && full.data) r = full.data; }catch(e){}
+    if(!r) return alert('Không tìm thấy yêu cầu sửa.');
+    let q = null;
+    try{
+      if(r.question_id){ const got = await client.from('questions').select('id,num,subject_code,question,options,answer,answer_text,images').eq('id', r.question_id).maybeSingle(); if(!got.error) q = got.data; }
+      if(!q && r.question_num){ const got = await client.from('questions').select('id,num,subject_code,question,options,answer,answer_text,images').eq('num', r.question_num).maybeSingle(); if(!got.error) q = got.data; }
+    }catch(e){}
+    const oldData = Object.assign({}, q || {}, r.old_data || {});
+    if(q && !Object.prototype.hasOwnProperty.call(oldData,'images')) oldData.images = q.images || [];
+    const newData = Object.assign({}, r.new_data || {});
+    if(!Object.prototype.hasOwnProperty.call(newData,'images') && r.new_data && Object.keys(r.new_data).length) newData.images = [];
+    openModal(`Yêu cầu sửa câu ${typeof questionLabel==='function'?questionLabel(r):(r.question_num||r.id)}`, compareHTML(oldData, newData));
+  };
+})();
+// ===== END FIX_ADMIN_REQUEST_IMAGES_FORCE_20260628 =====
+
+
+// ===== FINAL_FORCE_ADMIN_REALTIME_RESTORE_20260628 =====
+// Khôi phục realtime sau các bản patch loadAll phía dưới ghi đè mất startAdminRealtime.
+(function(){
+  let ch = null;
+  let timer = null;
+  let loading = false;
+  let lastReason = '';
+
+  function chip(text, cls){
+    let el = document.getElementById('adminAutoCheckChip');
+    if(!el){
+      el = document.createElement('div');
+      el.id = 'adminAutoCheckChip';
+      el.innerHTML = '<span class="autoDot" aria-hidden="true"></span><span class="autoText"></span>';
+      document.body.appendChild(el);
+    }
+    el.classList.remove('hidden','is-checking','is-idle','is-live','is-error');
+    el.classList.add(cls || 'is-live');
+    const t = el.querySelector('.autoText');
+    if(t) t.textContent = text || 'Realtime';
+    moveChip();
+  }
+
+  function moveChip(){
+    const el = document.getElementById('adminAutoCheckChip');
+    const wrap = document.querySelector('.topTools') || document.querySelector('.top');
+    if(el && wrap && el.parentElement !== wrap){
+      const search = document.querySelector('.searchWrap');
+      search && search.parentElement === wrap ? search.insertAdjacentElement('afterend', el) : wrap.appendChild(el);
+    }
+  }
+
+  function canRun(){
+    try{ return !!client && !!user && !!profile && typeof isEditor === 'function' && isEditor(); }
+    catch(e){ return false; }
+  }
+
+  async function reloadByRealtime(reason){
+    if(!canRun() || loading) return;
+    loading = true;
+    lastReason = reason || lastReason || 'change';
+    chip('Realtime...', 'is-checking');
+    try{
+      if(typeof loadAll === 'function') await loadAll();
+      if(typeof renderApprovals === 'function') renderApprovals();
+      if(typeof window.loadSubjectRequests === 'function') window.loadSubjectRequests();
+      chip('Realtime', 'is-live');
+      if(reason === 'edit_requests') toast('Có cập nhật yêu cầu sửa');
+    }catch(e){
+      console.warn('[FINAL realtime reload]', e);
+      chip('Realtime lỗi', 'is-error');
+    }finally{
+      loading = false;
+    }
+  }
+
+  function debounced(reason){
+    clearTimeout(timer);
+    timer = setTimeout(() => reloadByRealtime(reason), 350);
+  }
+
+  window.startAdminRealtimeFinal = function(){
+    if(!canRun()) return;
+    if(ch) return;
+    chip('Realtime...', 'is-checking');
+    try{
+      ch = client.channel('learning-hub-admin-realtime-final')
+        .on('postgres_changes', {event:'*', schema:'public', table:'edit_requests'}, () => debounced('edit_requests'))
+        .on('postgres_changes', {event:'*', schema:'public', table:'profiles'}, () => debounced('profiles'))
+        .on('postgres_changes', {event:'*', schema:'public', table:'question_history'}, () => debounced('question_history'))
+        .on('postgres_changes', {event:'*', schema:'public', table:'subject_requests'}, () => debounced('subject_requests'))
+        .on('postgres_changes', {event:'*', schema:'public', table:'questions'}, () => debounced('questions'))
+        .subscribe(status => {
+          if(status === 'SUBSCRIBED') chip('Realtime', 'is-live');
+          if(status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED'){
+            chip('Realtime lỗi', 'is-error');
+            try{ if(ch) client.removeChannel(ch); }catch(e){}
+            ch = null;
+            setTimeout(window.startAdminRealtimeFinal, 2500);
+          }
+        });
+    }catch(e){
+      console.warn('[startAdminRealtimeFinal]', e);
+      chip('Realtime lỗi', 'is-error');
+      ch = null;
+    }
+  };
+
+  window.stopAdminRealtimeFinal = function(){
+    try{ if(ch) client.removeChannel(ch); }catch(e){}
+    ch = null;
+  };
+
+  const oldLoadAllFinalRT = typeof loadAll === 'function' ? loadAll : null;
+  if(oldLoadAllFinalRT && !window.__finalRealtimeLoadAllPatched){
+    window.__finalRealtimeLoadAllPatched = true;
+    loadAll = window.loadAll = async function(){
+      const out = await oldLoadAllFinalRT.apply(this, arguments);
+      setTimeout(() => { moveChip(); window.startAdminRealtimeFinal(); }, 80);
+      setTimeout(() => { moveChip(); window.startAdminRealtimeFinal(); }, 800);
+      return out;
+    };
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => { moveChip(); window.startAdminRealtimeFinal(); }, 600);
+    setTimeout(() => { moveChip(); window.startAdminRealtimeFinal(); }, 1800);
+  });
+  setInterval(() => { if(canRun() && !ch) window.startAdminRealtimeFinal(); moveChip(); }, 5000);
+})();
+// ===== END FINAL_FORCE_ADMIN_REALTIME_RESTORE_20260628 =====

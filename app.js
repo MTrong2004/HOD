@@ -1,6 +1,6 @@
 /* AI_JS_MAP_START
-Mục đích: Bản đồ nhanh cho AI đọc app.js đỡ tốn token. Không ảnh hưởng chức năng web.
-Quy tắc sửa: giữ nguyên 1 file app.js, chỉ sửa nhóm liên quan, tránh vá chồng, tránh tạo thêm PATCH/FINAL nếu có thể. KHÔNG ĐỤNG Discord webhook.
+Mục đích: Bản đồ nhanh cho AI đọc app.js, tránh sửa nhầm và tránh vá chồng. Không ảnh hưởng chức năng web.
+Quy tắc sửa: giữ nguyên 1 file app.js, chỉ sửa nhóm liên quan, ưu tiên gộp vào block đang dùng. KHÔNG ĐỤNG Discord webhook.
 
 NHÓM CHÍNH TRONG app.js
 1) Config / dữ liệu ban đầu
@@ -16,11 +16,11 @@ NHÓM CHÍNH TRONG app.js
 - Dùng cho: thẻ học, lật thẻ, câu trước/sau, ẩn lựa chọn, cỡ chữ.
 
 4) Tab / Study / Search
-- Tìm: switchTab, smart, renderStudy, studyList, search, openStudyReport, compactStudyCard
+- Tìm: switchTab, smart, renderStudy, studyList, search, openStudyReport, compactStudyCard, FINAL_SMART_SEARCH_STOPWORDS_RELEVANCE
 - Dùng cho: tab Thư viện, tìm kiếm, mở/thu gọn câu, báo cáo từ thư viện.
 
 5) Quiz / Exam
-- Tìm: renderQuiz, pickAns, checkAns, score, startTimer, stopTimer, __examOnlyRender, examOnly
+- Tìm: renderQuiz, pickAns, checkAns, score, startTimer, stopTimer, __examOnlyRender, FINAL_EXAM_ONLY_QUIZ_UI
 - Dùng cho: luyện tập, thi, timer, chấm điểm.
 
 6) Editor / Report câu hỏi
@@ -48,28 +48,37 @@ NHÓM CHÍNH TRONG app.js
 - Dùng cho: chọn môn, tải câu hỏi theo subject_code, lưu tiến độ từng môn.
 
 12) Add Subject / Import câu hỏi
-- Tìm: ADD_SUBJECT_FEATURE, AI_PROMPT, getAddSubjectHTML, handleFileImport, __previewUserImport, __submitSubjectRequest, parsedQuestions
+- Tìm: ADD_SUBJECT_FEATURE, AI_PROMPT, getAddSubjectHTML, handleFileImport, __previewUserImport, __submitSubjectRequest, parsedQuestions, IMPORT_PREVIEW_INLINE_EDIT
 - Dùng cho: thêm môn, copy prompt AI, import JSON/MD/TXT, xem trước câu hỏi.
 
-13) Image / Cloudinary / Upload
-- Tìm: CLOUDINARY, cleanImages, upload, image, imgUpload, user-upload, COPILOT_CLOUDINARY_IMAGE_FIX, CLEAN_IMAGE_REQUEST
+13) Add Question / Nút + Thư viện
+- Tìm: COPILOT_MERGED_ADD_QUESTION_DISPLAY_VERSION_20260629, addQuestionFab, addQuestionModal, savePrettyQuestion, addImgUpload
+- Dùng cho: admin/editor thêm câu hỏi trực tiếp. Đây là bản đã gộp, không thêm HOTFIX nút + mới nếu không cần.
+
+14) Image / Cloudinary / Upload
+- Tìm: CLOUDINARY, cleanImages, upload, image, imgUpload, user-upload, COPILOT_CLOUDINARY_IMAGE_FIX, CLEAN_IMAGE_REQUEST, __LHUploadCloudinary, __LHCleanImages
 - Dùng cho: upload ảnh câu hỏi, sửa/đổi ảnh, chuẩn hóa URL ảnh.
 
-14) Mobile / UX runtime
+15) Mobile / UX runtime
 - Tìm: mobileCardNav, touchstart, touchend, landingParticles, landingBgMover, last_activity
 - Dùng cho: vuốt flashcard mobile, nền landing, cập nhật hoạt động người dùng.
 
-15) Các block vá cuối file
+16) Cache / Bandwidth
+- Tìm: APP_F5_SUPABASE_CACHE_20260629, LOW_BANDWIDTH_SUPABASE_MODE, APP_REALTIME_CACHE_INVALIDATE, COPILOT_BANDWIDTH_DISCORD_ALERT_20260629
+- Dùng cho: giảm gọi Supabase, cache dữ liệu, cảnh báo bandwidth.
+
+17) Block vá cuối file
 - Tìm: FINAL_, PATCH_, HOTFIX_, COPILOT_
-- Dùng cho: bản vá runtime. Khi sửa, ưu tiên hợp nhất vào hàm chính thay vì thêm vá chồng.
+- Dùng cho: bản vá runtime. Khi sửa, ưu tiên hợp nhất vào block chính thay vì thêm vá chồng.
 
 GỢI Ý AI
-- Lỗi flashcard: xem nhóm 2 + 3 + 13 + 14 nếu có ảnh/mobile.
-- Lỗi thư viện/tìm kiếm: xem nhóm 4 + 6.
-- Lỗi quiz/thi: xem nhóm 5 + 11.
+- Lỗi flashcard: xem nhóm 2 + 3 + 14 + 15.
+- Lỗi thư viện/tìm kiếm: xem nhóm 4 + 6 + 13.
+- Lỗi quiz/thi: xem nhóm 5.
 - Lỗi đăng nhập/quyền: xem nhóm 7 + 8 + 9 + 10.
-- Lỗi chọn môn/thêm môn: xem nhóm 11 + 12.
-- Lỗi ảnh/upload: xem nhóm 6 + 13.
+- Lỗi chọn môn/thêm môn: xem nhóm 11 + 12 + 13.
+- Lỗi ảnh/upload: xem nhóm 6 + 14.
+- Lỗi băng thông/cache: xem nhóm 16.
 AI_JS_MAP_END */
 
 // ===== FIX_OAUTH_SESSION_FINAL_20260628 =====
@@ -103,6 +112,139 @@ if (location.protocol === 'file:') {
     if (sg) { sg.classList.remove('hidden'); sg.setAttribute('aria-hidden', 'false'); document.body.classList.add('has-subject-gate'); }
   });
 }
+
+
+
+
+
+// ===== APP_F5_SUPABASE_CACHE_20260629 =====
+// F5 tiết kiệm băng thông: cache GET Supabase + chống gọi lặp questions/profiles.
+// Có realtime clear cache khi questions/subjects đổi.
+(function(){
+  if(window.__APP_F5_SUPABASE_CACHE_20260629) return;
+  window.__APP_F5_SUPABASE_CACHE_20260629 = true;
+
+  const nativeFetch = window.fetch ? window.fetch.bind(window) : null;
+  if(!nativeFetch) return;
+
+  const PREFIX = 'lh_f5_cache:';
+  const mem = new Map();
+  const pending = new Map();
+  const MAX_BODY = 900 * 1024;
+  const profilePatchLast = new Map();
+
+  function methodOf(init){ return String(init && init.method ? init.method : 'GET').toUpperCase(); }
+  function isSupabaseRest(url){ return /\/rest\/v1\//.test(url.pathname); }
+  function isCacheablePath(path){ return /\/(questions|subjects|profiles|site_settings)\b/.test(path); }
+  function ttlFor(url){
+    const p = url.pathname;
+    const q = url.search || '';
+    if(/\/questions\b/.test(p)) return 10 * 60 * 1000;
+    if(/\/subjects\b/.test(p)) return 10 * 60 * 1000;
+    if(/\/profiles\b/.test(p) && /id=eq\./.test(q)) return 10 * 60 * 1000;
+    if(/\/site_settings\b/.test(p)) return 10 * 60 * 1000;
+    return 0;
+  }
+  function keyOf(url){ return url.origin + url.pathname + url.search; }
+  function headersObj(headers){
+    const o = {'x-learninghub-cache':'1'};
+    try{ headers.forEach((v,k)=>{ if(k.toLowerCase() !== 'content-length') o[k]=v; }); }catch(e){}
+    return o;
+  }
+  function makeResponse(entry){
+    return new Response(entry.body, {status:entry.status || 200, statusText:entry.statusText || 'OK', headers:entry.headers || {'x-learninghub-cache':'1'}});
+  }
+  function readStore(key){
+    try{
+      const raw = sessionStorage.getItem(PREFIX + key);
+      if(!raw) return null;
+      const e = JSON.parse(raw);
+      if(!e || !e.exp || Date.now() > e.exp) return null;
+      return e;
+    }catch(err){ return null; }
+  }
+  function writeStore(key, entry){ try{ sessionStorage.setItem(PREFIX + key, JSON.stringify(entry)); }catch(err){} }
+  async function saveFromResponse(key, ttl, res){
+    try{
+      const txt = await res.clone().text();
+      if(txt.length > MAX_BODY) return;
+      const entry = {body:txt, status:res.status, statusText:res.statusText, headers:headersObj(res.headers), exp:Date.now()+ttl};
+      mem.set(key, entry);
+      writeStore(key, entry);
+    }catch(err){}
+  }
+  function matchKind(text, kind){
+    if(!kind || kind === 'all') return true;
+    if(kind === 'questions') return text.includes('/questions');
+    if(kind === 'subjects') return text.includes('/subjects');
+    if(kind === 'profiles') return text.includes('/profiles');
+    return text.includes('/' + kind);
+  }
+  function clearCache(kind){
+    try{
+      Object.keys(sessionStorage).forEach(k => {
+        if(k.startsWith(PREFIX) && matchKind(k, kind)) sessionStorage.removeItem(k);
+      });
+      Array.from(mem.keys()).forEach(k => { if(matchKind(k, kind)) mem.delete(k); });
+      Array.from(pending.keys()).forEach(k => { if(matchKind(k, kind)) pending.delete(k); });
+      window.__LH_LAST_CACHE_CLEAR = {kind: kind || 'all', at: Date.now()};
+    }catch(e){}
+  }
+  function shouldSkipProfilePatch(url, init){
+    const method = methodOf(init);
+    if(method !== 'PATCH' && method !== 'PUT') return false;
+    if(!/\/profiles\b/.test(url.pathname)) return false;
+    const body = String(init && init.body ? init.body : '');
+    // Chỉ chặn các update hoạt động/avatar/email lặp, không chặn cập nhật quyền từ admin.
+    if(!/last_activity|last_login|avatar_url|email/.test(body)) return false;
+    if(/last_login/.test(body)) return false; // đăng nhập/mở web phải được ghi nhận
+    if(/role|approved|blocked|is_blocked|status/.test(body)) return false;
+    const key = keyOf(url) + '|' + body.replace(/"last_activity"\s*:\s*"[^"]+"/g, '"last_activity":"TIME"');
+    const last = profilePatchLast.get(key) || 0;
+    if(Date.now() - last < 5 * 60 * 1000) return true;
+    profilePatchLast.set(key, Date.now());
+    return false;
+  }
+
+  window.clearLearningHubQuestionCache = function(){ clearCache('questions'); };
+  window.clearLearningHubSupabaseCache = clearCache;
+
+  window.fetch = async function(input, init){
+    let url;
+    try{ url = new URL(typeof input === 'string' ? input : input.url, location.href); }catch(e){ return nativeFetch(input, init); }
+
+    // Giảm profiles?id=... status 204 lặp lại do update hoạt động/avatar.
+    if(isSupabaseRest(url) && shouldSkipProfilePatch(url, init)){
+      return new Response(null, {status:204, statusText:'No Content', headers:{'x-learninghub-skip':'profile-patch-duplicate'}});
+    }
+
+    if(methodOf(init) !== 'GET' || !isSupabaseRest(url) || !isCacheablePath(url.pathname)) return nativeFetch(input, init);
+
+    const ttl = ttlFor(url);
+    if(!ttl) return nativeFetch(input, init);
+    const key = keyOf(url);
+
+    const m = mem.get(key);
+    if(m && Date.now() <= m.exp) return makeResponse(m);
+    const s = readStore(key);
+    if(s){ mem.set(key, s); return makeResponse(s); }
+
+    if(pending.has(key)){
+      const entry = await pending.get(key).catch(()=>null);
+      if(entry) return makeResponse(entry);
+    }
+
+    // Quan trọng: chỉ gọi network 1 lần. Bản cũ gọi nativeFetch 2 lần khi cache miss.
+    const network = nativeFetch(input, init).then(async res => {
+      if(res && res.ok) await saveFromResponse(key, ttl, res);
+      return res;
+    }).finally(()=>pending.delete(key));
+
+    pending.set(key, network.then(()=>mem.get(key) || null));
+    return network;
+  };
+})();
+// ===== END APP_F5_SUPABASE_CACHE_20260629 =====
 
 /* ===== merged app logic ===== */
 
@@ -149,7 +291,23 @@ let RAW = [], pool = [], ci = Math.max(0, Math.min(+localStorage.getItem('hod102
   setv('--frontpad', '14px 18px'); setv('--optgap', '6px'); setv('--optpad', '7px 10px'); setv('--qmb', '8px'); setv('--imgmb', '7px'); setv('--tagmb', '6px'); setv('--letter', '25px'); setv('--letterfs', '.76rem'); setv('--tagfs', '.62rem'); setv('--tagpad', '3px 10px'); setv('--ogap', '8px');
 }
 function fitVisible() { return; }
-function renderCard() { let c = pool[ci] || RAW[0]; if (!c) return; fit(c); applyCardFontSize(); $('idx').textContent = ci + 1; $('total').textContent = pool.length; $('bar').style.width = ((ci + 1) / pool.length * 100) + '%'; $('tag').textContent = 'CÂU ' + c.num; $('question').textContent = c.question; const __imgEl = $('images'); const __imgKey = JSON.stringify((c.images || []).map(im => String((im && typeof im === 'object' ? (im.src || im.url || im.secure_url || im.publicUrl || im.public_url) : im) || ''))); if (__imgEl.dataset.imgKey !== __imgKey) { __imgEl.innerHTML = imgsHTML(c); __imgEl.dataset.imgKey = __imgKey; } __imgEl.style.display = (c.images && c.images.length) ? 'flex' : 'none'; document.querySelector('#fc .front')?.classList.toggle('hasImg', !!(c.images && c.images.length)); $('options').innerHTML = optionsHTML(c); $('options').classList.toggle('hide', hideOptions); applyCardFontSize(); $('toggleOpts').textContent = '👁'; $('toggleOpts').title = hideOptions ? 'Hiện lựa chọn' : 'Ẩn lựa chọn'; updateCardTools(); $('ansLetter').textContent = (c.answer || '').split('').join(', '); $('ansText').innerHTML = esc(finalAnswerText(c)).replace(/; /g, '<br>'); $('card').classList.remove('dir-horizontal', 'dir-up', 'dir-down'); $('card').classList.add('dir-' + flipDir); $('card').classList.toggle('flip', flipped); $('mode').textContent = flipMode === 'single' ? '1x' : '2x'; var _sc = localStorage.getItem('learninghub_subject_code_merged_v1') || ''; localStorage.setItem('hod102_ci', ci); if (_sc) localStorage.setItem('learninghub_progress_' + _sc, ci); localStorage.setItem('hod102_flip_mode', flipMode); localStorage.setItem('hod102_hide_options', hideOptions ? '1' : '0') } function flip(dir = 'horizontal') { flipDir = dir; flipped = !flipped; renderCard() } function next() { ci = (ci + 1) % pool.length; flipped = false; flipDir = 'horizontal'; renderCard() } function prev() { ci = (ci - 1 + pool.length) % pool.length; flipped = false; flipDir = 'horizontal'; renderCard() } function shuffle() { for (let i = pool.length - 1; i > 0; i--) { let j = Math.floor(Math.random() * (i + 1));[pool[i], pool[j]] = [pool[j], pool[i]] } ci = 0; flipped = false; flipDir = 'horizontal'; randomActive = false; localStorage.setItem('hod102_random_active', '0'); renderCard(); let sh = $('shuffle'); if (sh) { sh.classList.add('flash'); setTimeout(() => sh.classList.remove('flash'), 650) } } let __allowUserReset = false; function reset(force) { if (force !== true && __allowUserReset !== true) { try { renderCard() } catch (e) { } return } __allowUserReset = false; pool = [...RAW]; ci = 0; flipped = false; flipDir = 'horizontal'; randomActive = false; localStorage.setItem('hod102_random_active', '0'); renderCard() } function triggerReset() { __allowUserReset = true; reset(true) } function switchTab(n, b) { try { localStorage.setItem('learninghub_last_tab_v1', n) } catch (e) { } document.querySelectorAll('.tab').forEach(x => x.classList.remove('active')); b.classList.add('active'); document.querySelectorAll('.pane').forEach(x => x.classList.remove('active')); $(n).classList.add('active'); if (n === 'study') renderStudy(); if (n === 'quiz') try { renderQuiz() } catch (e) { } } function sample(a, n) { a = [...a]; for (let i = a.length - 1; i > 0; i--) { let j = Math.floor(Math.random() * (i + 1));[a[i], a[j]] = [a[j], a[i]] } return n ? a.slice(0, n) : a } function fmt(ms) { let s = Math.floor(ms / 1000), m = Math.floor(s / 60); s %= 60; return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0') } function startTimer() { clearInterval(timerInt); examStart = Date.now(); timerInt = setInterval(() => $('timer').textContent = fmt(Date.now() - examStart), 1000) } function stopTimer() { clearInterval(timerInt) } function syncQuizSet() { if (qSet && qSet.length) { qSet = qSet.map(c => RAW.find(x => x.num === c.num) || c) } } function renderQuiz() { if (typeof window.__examOnlyRender === 'function') return window.__examOnlyRender(); const body = $('quizBody'); if (body) body.innerHTML = ''; } function pickAns(i, k) { if ((quizMode === 'practice' && qDone[i]) || examSubmitted) return; let c = qSet[i]; if (c.answer.length > 1) { let set = new Set((qSel[i] || '').split('').filter(Boolean)); set.has(k) ? set.delete(k) : set.add(k); qSel[i] = [...set].sort().join('') } else qSel[i] = k; renderQuiz() } function checkAns(i) { if (!qSel[i]) { alert('Bạn chọn đáp án trước nha.'); return } qDone[i] = true; renderQuiz() } function score() {/* old practice score overlay removed */ } function smart(q) { q = q.trim().toLowerCase(); if (!q) return RAW; let m = q.match(/^#(\d+)$/); if (m) return RAW.filter(c => c.num === +m[1]); m = q.match(/^answer\s*:\s*([a-e]+)$/i); if (m) return RAW.filter(c => sortAns(c.answer) === sortAns(m[1].toUpperCase())); if (['multi', 'multiple', 'chọn nhiều'].includes(q)) return RAW.filter(c => c.answer.length > 1); return RAW.filter(c => (String(c.num) + ' ' + c.question + ' ' + c.answer + ' ' + (c.answer_text || '') + ' ' + Object.values(c.options).join(' ')).toLowerCase().includes(q)) } function renderStudy() { let arr = smart($('search').value || ''), max = arr.length; $('studyList').innerHTML = arr.slice(0, max).map(c => `<div class="sitem"><div class="snum">CÂU ${c.num}</div><div class="sq">${esc(c.question)}</div><div class="qimgs">${imgsHTML(c)}</div><div class="sopts">${Object.entries(c.options).map(([k, v]) => `<div class="sopt ${c.answer.includes(k) ? 'ans' : ''}"><div class="skey">${c.answer.includes(k) ? '✓' : k}</div><div>${esc(k + '. ' + v)}</div></div>`).join('')}</div></div>`).join('') + (arr.length > max ? `<div class="more">Đang hiển thị ${max} / ${arr.length} kết quả.</div>` : arr.length ? '' : '<div class="more">Không tìm thấy kết quả.</div>') } function openEditor() { let c = pool[ci]; editDraft = clone(c); let reporting = !!(window.HODSupabase?.getUser?.()) && !window.HODSupabase?.isAdmin?.(); $('editTitle').textContent = (reporting ? 'Báo cáo / đề xuất sửa câu ' : 'Sửa câu ') + c.num; if ($('saveEdit')) $('saveEdit').textContent = reporting ? 'Gửi báo cáo cho admin' : 'Lưu sửa'; if ($('restoreEdit')) $('restoreEdit').classList.toggle('hidden', reporting); $('editQuestion').value = c.question; $('editAnswer').value = c.answer; renderEditOptions(); renderEditImages(); $('editModal').classList.remove('hidden') } function renderEditOptions() { let ops = editDraft.options || {}; $('editOptions').innerHTML = ['A', 'B', 'C', 'D', 'E'].map(k => `<div class="field"><label>Đáp án ${k}</label><textarea data-opt="${k}">${esc(ops[k] || '')}</textarea></div>`).join('') } function renderEditImages() { $('editImgs').innerHTML = (editDraft.images || []).map((im, i) => `<div class="editImg"><button class="rm" data-rm="${i}">×</button><img src="${im.src}"></div>`).join('') || '<p style="color:var(--mist)">Chưa có hình.</p>' } function saveEditor() { let oldQ = clone(RAW.find(c => c.num === editDraft.num) || pool[ci] || editDraft); editDraft.question = $('editQuestion').value.trim(); editDraft.answer = $('editAnswer').value.trim().toUpperCase(); let ops = {}; document.querySelectorAll('[data-opt]').forEach(t => { if (t.value.trim()) ops[t.dataset.opt] = t.value.trim() }); editDraft.options = ops; editDraft.answer_text = answerText(editDraft); if (window.HODSupabase && window.HODSupabase.isReady()) { window.HODSupabase.submitEditRequest(editDraft, oldQ); return } if (window.HODSupabase?.getUser?.()) { alert('Chưa kết nối được dữ liệu duyệt. Hãy tải lại trang rồi gửi lại báo cáo.'); return } edits[editDraft.num] = { question: editDraft.question, options: editDraft.options, answer: editDraft.answer, answer_text: editDraft.answer_text, images: editDraft.images || [] }; localStorage.setItem(STORE, JSON.stringify(edits)); rebuild(); ci = pool.findIndex(c => c.num === editDraft.num); if (ci < 0) ci = 0; flipped = false; renderCard(); renderQuiz(); renderStudy(); $('editModal').classList.add('hidden'); notify('Đã lưu sửa local') } function restoreEditor() { delete edits[editDraft.num]; localStorage.setItem(STORE, JSON.stringify(edits)); rebuild(); syncQuizSet(); renderCard(); renderQuiz(); renderStudy(); $('editModal').classList.add('hidden'); notify('Đã khôi phục') } function exportEdits() { let blob = new Blob([JSON.stringify(edits, null, 2)], { type: 'application/json' }), a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'hod102_user_edits.json'; a.click(); URL.revokeObjectURL(a.href) } function importEditsFile(f) { let fr = new FileReader(); fr.onload = () => { try { edits = JSON.parse(fr.result) || {}; localStorage.setItem(STORE, JSON.stringify(edits)); rebuild(); renderCard(); renderQuiz(); renderStudy(); notify('Đã nhập file sửa') } catch (e) { alert('File JSON không hợp lệ') } }; fr.readAsText(f) } function applyCardFontSize() { let n = parseFloat(cardFontSize || '1'); if (!isFinite(n)) n = 1; n = Math.max(.8, Math.min(1.3, n)); cardFontSize = String(n); let root = document.documentElement, fc = $('fc'); let set = (k, v) => { root.style.setProperty(k, v); if (fc) fc.style.setProperty(k, v) }; let base = 1.35 * n; set('--card-qfs', (1.08 * base).toFixed(3) + 'rem'); set('--card-ofs', (.92 * base).toFixed(3) + 'rem'); set('--card-afs', (1.0 * base).toFixed(3) + 'rem'); set('--card-letter', (25 * Math.min(1.35, base)).toFixed(0) + 'px'); set('--card-letterfs', (.76 * base).toFixed(3) + 'rem'); localStorage.setItem('hod102_card_font_size_v3', String(n)); if ($('stCardFont')) $('stCardFont').value = Math.round(n * 100); if ($('stCardFontState')) $('stCardFontState').textContent = Math.round(n * 100) + '%' } function updateCardTools() { let sh = $('shuffle'), eye = $('toggleOpts'); if (sh) { sh.classList.remove('active'); sh.title = 'Xáo ngẫu nhiên' } if (eye) { eye.classList.toggle('active', !!hideOptions); eye.title = hideOptions ? 'Đang ẩn lựa chọn' : 'Đang hiện lựa chọn' } } function setupGlobalHeader() { let top = document.querySelector('#fc .top'); let tabs = document.querySelector('.tabs'); if (top && !top.classList.contains('globalTop')) { top.classList.add('globalTop'); document.body.insertBefore(top, tabs || document.body.firstChild) } } function setupCardTools() { let card = $('card'); if (!card || $('cardTools')) return; let tools = document.createElement('div'); tools.id = 'cardTools'; tools.className = 'cardTools'; let sh = $('shuffle'), eye = $('toggleOpts'), ed = $('editCard'); if (sh) { sh.textContent = '⚂'; sh.classList.add('cardToolBtn', 'diceBtn'); tools.appendChild(sh) } if (eye) { eye.textContent = '👁'; eye.classList.add('cardToolBtn', 'eyeBtn'); tools.appendChild(eye) } tools.addEventListener('click', e => e.stopPropagation()); tools.addEventListener('mousedown', e => e.stopPropagation()); card.insertBefore(tools, ed); updateCardTools() } function updateSettingsUI() { if (!$('stFlipState')) return; $('stFlipState').textContent = 'Đang dùng: ' + (flipMode === 'single' ? '1x - bấm 1 lần để lật' : '2x - hạn chế lật nhầm'); $('stOptState').textContent = hideOptions ? 'Đang ẩn lựa chọn' : 'Đang hiện lựa chọn'; if ($('stGoInput')) $('stGoInput').value = (pool[ci]?.num) || ''; applyCardFontSize(); updateCardTools() } function toggleFlipMode() { flipMode = flipMode === 'single' ? 'double' : 'single'; flipped = false; renderCard(); updateSettingsUI() } function goToQuestionNum() { let n = +$('stGoInput').value; if (!n) { alert('Nhập số câu trước nha.'); return } let i = pool.findIndex(c => c.num === n); if (i < 0) i = RAW.findIndex(c => c.num === n); if (i < 0) { alert('Không tìm thấy câu ' + n); return } if (!pool.find(c => c.num === n)) pool = [...RAW]; ci = i; flipped = false; renderCard(); updateSettingsUI(); $('settingsModal').classList.add('hidden') } function init() { setupGlobalHeader(); document.querySelectorAll('.tab').forEach(btn => btn.onclick = () => switchTab(btn.dataset.tab, btn)); $('shuffle').onclick = shuffle; $('reset').onclick = () => triggerReset(); $('toggleOpts').onclick = () => { hideOptions = !hideOptions; renderCard() }; $('openSettings').onclick = () => { $('settingsModal').classList.remove('hidden'); updateSettingsUI() }; $('closeSettings').onclick = () => $('settingsModal').classList.add('hidden'); document.querySelectorAll('.modal,.overlay').forEach(m => { m.addEventListener('mousedown', e => { if (e.target === m) m.classList.add('hidden') }) }); document.querySelectorAll('.modal .box,.overlay .box').forEach(box => { if (!box.querySelector('.modalX')) { let x = document.createElement('button'); x.className = 'modalX'; x.type = 'button'; x.textContent = '×'; x.title = 'Đóng'; x.onclick = e => { e.stopPropagation(); box.closest('.modal,.overlay')?.classList.add('hidden') }; box.prepend(x) } }); setupCardTools(); if ($('toggleGuide')) $('toggleGuide').onclick = () => { let g = $('guidePanel'), open = g.classList.toggle('hidden') === false; $('toggleGuide').textContent = open ? 'Ẩn hướng dẫn' : 'Mở hướng dẫn' }; if ($('stCardFont')) $('stCardFont').oninput = e => { cardFontSize = (+e.target.value / 100).toFixed(2); applyCardFontSize(); renderCard() }; if ($('stCardFontReset')) $('stCardFontReset').onclick = () => { cardFontSize = '1'; applyCardFontSize(); renderCard(); updateSettingsUI() }; if ($('stToggleFlipMode')) $('stToggleFlipMode').onclick = toggleFlipMode; if ($('stToggleOpts')) $('stToggleOpts').onclick = () => { hideOptions = !hideOptions; renderCard(); updateSettingsUI() }; if ($('stShuffle')) $('stShuffle').onclick = () => { shuffle(); updateSettingsUI() }; if ($('stReset')) $('stReset').onclick = () => { triggerReset(); updateSettingsUI() }; if ($('stGo')) $('stGo').onclick = goToQuestionNum; if ($('stGoInput')) $('stGoInput').onkeydown = e => { if (e.key === 'Enter') goToQuestionNum() }; if ($('stEdit')) $('stEdit').onclick = () => { openEditor(); $('settingsModal').classList.add('hidden') }; $('editCard').title = 'Báo cáo / đề xuất sửa câu'; $('editCard').textContent = '!'; $('editCard').onclick = e => { e.stopPropagation(); openEditor() }; $('prev').onclick = prev; $('next').onclick = next; $('mode').onclick = toggleFlipMode; $('zone').onclick = e => { let r = $('card').getBoundingClientRect(); if (!$('card').contains(e.target)) { e.clientX < r.left ? prev() : next(); return } if (e.target.closest('#editCard') || e.target.closest('#cardTools')) return; if (flipMode === 'single') flip('horizontal') };/* old Practice/Exam quiz UI bindings removed */$('search').oninput = renderStudy; $('studyList').onclick = e => { let it = e.target.closest('.sitem'); if (it) it.classList.toggle('open') }; $('closeEdit').onclick = () => $('editModal').classList.add('hidden'); $('saveEdit').onclick = saveEditor; $('restoreEdit').onclick = restoreEditor; $('editImgs').onclick = e => { let b = e.target.closest('[data-rm]'); if (b) { editDraft.images.splice(+b.dataset.rm, 1); renderEditImages() } }; $('imgUpload').onchange = e => { [...e.target.files].forEach(file => { let fr = new FileReader(); fr.onload = () => { editDraft.images = editDraft.images || []; editDraft.images.push({ id: 'user_' + Date.now(), src: fr.result, source: 'user-upload', name: file.name }); renderEditImages() }; fr.readAsDataURL(file) }); e.target.value = '' }; $('exportEdits').onclick = exportEdits; $('importEdits').onclick = () => $('importFile').click(); $('importFile').onchange = e => { if (e.target.files[0]) importEditsFile(e.target.files[0]) }; $('clearEdits').onclick = () => { if (confirm('Xóa tất cả chỉnh sửa đã lưu?')) { edits = {}; localStorage.removeItem(STORE); rebuild(); renderCard(); notify('Đã xóa tất cả sửa') } }; window.onkeydown = e => { if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return; if (e.code === 'Space') { e.preventDefault(); flip('horizontal') } if (e.key === 'ArrowUp') { e.preventDefault(); flip('up') } if (e.key === 'ArrowDown') { e.preventDefault(); flip('down') } if (e.key === 'ArrowRight') next(); if (e.key === 'ArrowLeft') prev(); if (e.key.toLowerCase() === 'r') triggerReset(); if (e.key.toLowerCase() === 'h') { hideOptions = !hideOptions; renderCard() } if (e.key.toLowerCase() === 'e') openEditor(); if (e.key === '1') document.querySelector('[data-tab="fc"]').click(); if (e.key === '2') document.querySelector('[data-tab="quiz"]').click(); if (e.key === '3') document.querySelector('[data-tab="study"]').click() }; applyCardFontSize(); setupCardTools(); renderCard(); renderQuiz() } document.addEventListener('DOMContentLoaded', init);
+function renderCard() { let c = pool[ci] || RAW[0]; if (!c) return; fit(c); applyCardFontSize(); $('idx').textContent = ci + 1; $('total').textContent = pool.length; $('bar').style.width = ((ci + 1) / pool.length * 100) + '%'; $('tag').textContent = 'CÂU ' + c.num; $('question').textContent = c.question; const __imgEl = $('images'); const __imgKey = JSON.stringify((c.images || []).map(im => String((im && typeof im === 'object' ? (im.src || im.url || im.secure_url || im.publicUrl || im.public_url) : im) || ''))); if (__imgEl.dataset.imgKey !== __imgKey) { __imgEl.innerHTML = imgsHTML(c); __imgEl.dataset.imgKey = __imgKey; } __imgEl.style.display = (c.images && c.images.length) ? 'flex' : 'none'; document.querySelector('#fc .front')?.classList.toggle('hasImg', !!(c.images && c.images.length)); $('options').innerHTML = optionsHTML(c); $('options').classList.toggle('hide', hideOptions); applyCardFontSize(); $('toggleOpts').textContent = '👁'; $('toggleOpts').title = hideOptions ? 'Hiện lựa chọn' : 'Ẩn lựa chọn'; updateCardTools(); $('ansLetter').textContent = (c.answer || '').split('').join(', '); $('ansText').innerHTML = esc(finalAnswerText(c)).replace(/; /g, '<br>'); $('card').classList.remove('dir-horizontal', 'dir-up', 'dir-down'); $('card').classList.add('dir-' + flipDir); $('card').classList.toggle('flip', flipped); $('mode').textContent = flipMode === 'single' ? '1x' : '2x'; var _sc = localStorage.getItem('learninghub_subject_code_merged_v1') || ''; localStorage.setItem('hod102_ci', ci); if (_sc) localStorage.setItem('learninghub_progress_' + _sc, ci); localStorage.setItem('hod102_flip_mode', flipMode); localStorage.setItem('hod102_hide_options', hideOptions ? '1' : '0') } function flip(dir = 'horizontal') { flipDir = dir; flipped = !flipped; renderCard() } function next() { ci = (ci + 1) % pool.length; flipped = false; flipDir = 'horizontal'; renderCard() } function prev() { ci = (ci - 1 + pool.length) % pool.length; flipped = false; flipDir = 'horizontal'; renderCard() } function shuffle() { for (let i = pool.length - 1; i > 0; i--) { let j = Math.floor(Math.random() * (i + 1));[pool[i], pool[j]] = [pool[j], pool[i]] } ci = 0; flipped = false; flipDir = 'horizontal'; randomActive = false; localStorage.setItem('hod102_random_active', '0'); renderCard(); let sh = $('shuffle'); if (sh) { sh.classList.add('flash'); setTimeout(() => sh.classList.remove('flash'), 650) } } let __allowUserReset = false; function reset(force) { if (force !== true && __allowUserReset !== true) { try { renderCard() } catch (e) { } return } __allowUserReset = false; pool = [...RAW]; ci = 0; flipped = false; flipDir = 'horizontal'; randomActive = false; localStorage.setItem('hod102_random_active', '0'); renderCard() } function triggerReset() { __allowUserReset = true; reset(true) } function switchTab(n, b) { try { localStorage.setItem('learninghub_last_tab_v1', n) } catch (e) { } document.querySelectorAll('.tab').forEach(x => x.classList.remove('active')); b.classList.add('active'); document.querySelectorAll('.pane').forEach(x => x.classList.remove('active')); $(n).classList.add('active'); if (n === 'study') renderStudy(); if (n === 'quiz') try { renderQuiz() } catch (e) { } } function sample(a, n) { a = [...a]; for (let i = a.length - 1; i > 0; i--) { let j = Math.floor(Math.random() * (i + 1));[a[i], a[j]] = [a[j], a[i]] } return n ? a.slice(0, n) : a } function fmt(ms) { let s = Math.floor(ms / 1000), m = Math.floor(s / 60); s %= 60; return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0') } function startTimer() { clearInterval(timerInt); examStart = Date.now(); timerInt = setInterval(() => $('timer').textContent = fmt(Date.now() - examStart), 1000) } function stopTimer() { clearInterval(timerInt) } function syncQuizSet() { if (qSet && qSet.length) { qSet = qSet.map(c => RAW.find(x => x.num === c.num) || c) } } function renderQuiz() { if (typeof window.__examOnlyRender === 'function') return window.__examOnlyRender(); const body = $('quizBody'); if (body) body.innerHTML = ''; } function pickAns(i, k) { if ((quizMode === 'practice' && qDone[i]) || examSubmitted) return; let c = qSet[i]; if (c.answer.length > 1) { let set = new Set((qSel[i] || '').split('').filter(Boolean)); set.has(k) ? set.delete(k) : set.add(k); qSel[i] = [...set].sort().join('') } else qSel[i] = k; renderQuiz() } function checkAns(i) { if (!qSel[i]) { alert('Bạn chọn đáp án trước nha.'); return } qDone[i] = true; renderQuiz() } function score() {/* old practice score overlay removed */ } function smart(q) { q = q.trim().toLowerCase(); if (!q) return RAW; let m = q.match(/^#(\d+)$/); if (m) return RAW.filter(c => c.num === +m[1]); m = q.match(/^answer\s*:\s*([a-e]+)$/i); if (m) return RAW.filter(c => sortAns(c.answer) === sortAns(m[1].toUpperCase())); if (['multi', 'multiple', 'chọn nhiều'].includes(q)) return RAW.filter(c => c.answer.length > 1); return RAW.filter(c => (String(c.num) + ' ' + c.question + ' ' + c.answer + ' ' + (c.answer_text || '') + ' ' + Object.values(c.options).join(' ')).toLowerCase().includes(q)) } function renderStudy() { let arr = smart($('search').value || ''), max = arr.length; $('studyList').innerHTML = arr.slice(0, max).map(c => `<div class="sitem"><div class="snum">CÂU ${c.num}</div><div class="sq">${esc(c.question)}</div><div class="qimgs">${imgsHTML(c)}</div><div class="sopts">${Object.entries(c.options).map(([k, v]) => `<div class="sopt ${c.answer.includes(k) ? 'ans' : ''}"><div class="skey">${c.answer.includes(k) ? '✓' : k}</div><div>${esc(k + '. ' + v)}</div></div>`).join('')}</div></div>`).join('') + (arr.length > max ? `<div class="more">Đang hiển thị ${max} / ${arr.length} kết quả.</div>` : arr.length ? '' : '<div class="more">Không tìm thấy kết quả.</div>') } function openEditor() { let c = pool[ci]; editDraft = clone(c); let reporting = !!(window.HODSupabase?.getUser?.()) && !window.HODSupabase?.isAdmin?.(); $('editTitle').textContent = (reporting ? 'Báo cáo / đề xuất sửa câu ' : 'Sửa câu ') + c.num; if ($('saveEdit')) $('saveEdit').textContent = reporting ? 'Gửi báo cáo cho admin' : 'Lưu sửa'; if ($('restoreEdit')) $('restoreEdit').classList.toggle('hidden', reporting); $('editQuestion').value = c.question; $('editAnswer').value = c.answer; renderEditOptions(); renderEditImages(); $('editModal').classList.remove('hidden') } function renderEditOptions() { let ops = editDraft.options || {}; $('editOptions').innerHTML = ['A', 'B', 'C', 'D', 'E'].map(k => `<div class="field"><label>Đáp án ${k}</label><textarea data-opt="${k}">${esc(ops[k] || '')}</textarea></div>`).join('') } function renderEditImages() { $('editImgs').innerHTML = (editDraft.images || []).map((im, i) => `<div class="editImg"><button class="rm" data-rm="${i}">×</button><img src="${im.src}"></div>`).join('') || '<p style="color:var(--mist)">Chưa có hình.</p>' } function saveEditor() { let oldQ = clone(RAW.find(c => c.num === editDraft.num) || pool[ci] || editDraft); editDraft.question = $('editQuestion').value.trim(); editDraft.answer = $('editAnswer').value.trim().toUpperCase(); let ops = {}; document.querySelectorAll('[data-opt]').forEach(t => { if (t.value.trim()) ops[t.dataset.opt] = t.value.trim() }); editDraft.options = ops; editDraft.answer_text = answerText(editDraft); if (window.HODSupabase && window.HODSupabase.isReady()) { window.HODSupabase.submitEditRequest(editDraft, oldQ); return } if (window.HODSupabase?.getUser?.()) { alert('Chưa kết nối được dữ liệu duyệt. Hãy tải lại trang rồi gửi lại báo cáo.'); return } edits[editDraft.num] = { question: editDraft.question, options: editDraft.options, answer: editDraft.answer, answer_text: editDraft.answer_text, images: editDraft.images || [] }; localStorage.setItem(STORE, JSON.stringify(edits)); rebuild(); ci = pool.findIndex(c => c.num === editDraft.num); if (ci < 0) ci = 0; flipped = false; renderCard(); renderQuiz(); renderStudy(); $('editModal').classList.add('hidden'); notify('Đã lưu sửa local') } function restoreEditor() { delete edits[editDraft.num]; localStorage.setItem(STORE, JSON.stringify(edits)); rebuild(); syncQuizSet(); renderCard(); renderQuiz(); renderStudy(); $('editModal').classList.add('hidden'); notify('Đã khôi phục') } function exportEdits() { let blob = new Blob([JSON.stringify(edits, null, 2)], { type: 'application/json' }), a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'hod102_user_edits.json'; a.click(); URL.revokeObjectURL(a.href) } function importEditsFile(f) { let fr = new FileReader(); fr.onload = () => { try { edits = JSON.parse(fr.result) || {}; localStorage.setItem(STORE, JSON.stringify(edits)); rebuild(); renderCard(); renderQuiz(); renderStudy(); notify('Đã nhập file sửa') } catch (e) { alert('File JSON không hợp lệ') } }; fr.readAsText(f) } function applyCardFontSize() { let n = parseFloat(cardFontSize || '1'); if (!isFinite(n)) n = 1; n = Math.max(.8, Math.min(1.3, n)); cardFontSize = String(n); let root = document.documentElement, fc = $('fc'); let set = (k, v) => { root.style.setProperty(k, v); if (fc) fc.style.setProperty(k, v) }; let base = 1.35 * n; set('--card-qfs', (1.08 * base).toFixed(3) + 'rem'); set('--card-ofs', (.92 * base).toFixed(3) + 'rem'); set('--card-afs', (1.0 * base).toFixed(3) + 'rem'); set('--card-letter', (25 * Math.min(1.35, base)).toFixed(0) + 'px'); set('--card-letterfs', (.76 * base).toFixed(3) + 'rem'); localStorage.setItem('hod102_card_font_size_v3', String(n)); if ($('stCardFont')) $('stCardFont').value = Math.round(n * 100); if ($('stCardFontState')) $('stCardFontState').textContent = Math.round(n * 100) + '%' } function updateCardTools() { let sh = $('shuffle'), eye = $('toggleOpts'); if (sh) { sh.classList.remove('active'); sh.title = 'Xáo ngẫu nhiên' } if (eye) { eye.classList.toggle('active', !!hideOptions); eye.title = hideOptions ? 'Đang ẩn lựa chọn' : 'Đang hiện lựa chọn' } } function setupGlobalHeader() { let top = document.querySelector('#fc .top'); let tabs = document.querySelector('.tabs'); if (top && !top.classList.contains('globalTop')) { top.classList.add('globalTop'); document.body.insertBefore(top, tabs || document.body.firstChild) } } function setupCardTools() { let card = $('card'); if (!card || $('cardTools')) return; let tools = document.createElement('div'); tools.id = 'cardTools'; tools.className = 'cardTools'; let sh = $('shuffle'), eye = $('toggleOpts'), ed = $('editCard'); if (sh) { sh.textContent = '⚂'; sh.classList.add('cardToolBtn', 'diceBtn'); tools.appendChild(sh) } if (eye) { eye.textContent = '👁'; eye.classList.add('cardToolBtn', 'eyeBtn'); tools.appendChild(eye) } tools.addEventListener('click', e => e.stopPropagation()); tools.addEventListener('mousedown', e => e.stopPropagation()); card.insertBefore(tools, ed); updateCardTools() } function updateSettingsUI() { if (!$('stFlipState')) return; $('stFlipState').textContent = 'Đang dùng: ' + (flipMode === 'single' ? '1x - bấm 1 lần để lật' : '2x - hạn chế lật nhầm'); $('stOptState').textContent = hideOptions ? 'Đang ẩn lựa chọn' : 'Đang hiện lựa chọn'; if ($('stGoInput')) $('stGoInput').value = (pool[ci]?.num) || ''; applyCardFontSize(); updateCardTools() } function toggleFlipMode() { flipMode = flipMode === 'single' ? 'double' : 'single'; flipped = false; renderCard(); updateSettingsUI() } function goToQuestionNum() { let n = +$('stGoInput').value; if (!n) { alert('Nhập số câu trước nha.'); return } let i = pool.findIndex(c => c.num === n); if (i < 0) i = RAW.findIndex(c => c.num === n); if (i < 0) { alert('Không tìm thấy câu ' + n); return } if (!pool.find(c => c.num === n)) pool = [...RAW]; ci = i; flipped = false; renderCard(); updateSettingsUI(); $('settingsModal').classList.add('hidden') } function init() { setupGlobalHeader(); document.querySelectorAll('.tab').forEach(btn => btn.onclick = () => switchTab(btn.dataset.tab, btn)); $('shuffle').onclick = shuffle; $('reset').onclick = () => triggerReset(); $('toggleOpts').onclick = () => { hideOptions = !hideOptions; renderCard() }; $('openSettings').onclick = () => { $('settingsModal').classList.remove('hidden'); updateSettingsUI() }; $('closeSettings').onclick = () => $('settingsModal').classList.add('hidden'); document.querySelectorAll('.modal,.overlay').forEach(m => { m.addEventListener('mousedown', e => { if (e.target === m) m.classList.add('hidden') }) }); document.querySelectorAll('.modal .box,.overlay .box').forEach(box => { if (!box.querySelector('.modalX')) { let x = document.createElement('button'); x.className = 'modalX'; x.type = 'button'; x.textContent = '×'; x.title = 'Đóng'; x.onclick = e => { e.stopPropagation(); box.closest('.modal,.overlay')?.classList.add('hidden') }; box.prepend(x) } }); setupCardTools(); if ($('toggleGuide')) $('toggleGuide').onclick = () => { let g = $('guidePanel'), open = g.classList.toggle('hidden') === false; $('toggleGuide').textContent = open ? 'Ẩn hướng dẫn' : 'Mở hướng dẫn' }; if ($('stCardFont')) $('stCardFont').oninput = e => { cardFontSize = (+e.target.value / 100).toFixed(2); applyCardFontSize(); renderCard() }; if ($('stCardFontReset')) $('stCardFontReset').onclick = () => { cardFontSize = '1'; applyCardFontSize(); renderCard(); updateSettingsUI() }; if ($('stToggleFlipMode')) $('stToggleFlipMode').onclick = toggleFlipMode; if ($('stToggleOpts')) $('stToggleOpts').onclick = () => { hideOptions = !hideOptions; renderCard(); updateSettingsUI() }; if ($('stShuffle')) $('stShuffle').onclick = () => { shuffle(); updateSettingsUI() }; if ($('stReset')) $('stReset').onclick = () => { triggerReset(); updateSettingsUI() }; if ($('stGo')) $('stGo').onclick = goToQuestionNum; if ($('stGoInput')) $('stGoInput').onkeydown = e => { if (e.key === 'Enter') goToQuestionNum() }; if ($('stEdit')) $('stEdit').onclick = () => { openEditor(); $('settingsModal').classList.add('hidden') }; $('editCard').title = 'Báo cáo / đề xuất sửa câu'; $('editCard').textContent = '!'; $('editCard').onclick = e => { e.stopPropagation(); openEditor() }; $('prev').onclick = prev; $('next').onclick = next; $('mode').onclick = toggleFlipMode; $('zone').onclick = e => { let r = $('card').getBoundingClientRect(); if (!$('card').contains(e.target)) { e.clientX < r.left ? prev() : next(); return } if (e.target.closest('#editCard') || e.target.closest('#cardTools')) return; if (flipMode === 'single') flip('horizontal') };/* old Practice/Exam quiz UI bindings removed */$('search').oninput = renderStudy; $('studyList').onclick = e => { let it = e.target.closest('.sitem'); if (it) it.classList.toggle('open') }; $('closeEdit').onclick = () => $('editModal').classList.add('hidden'); $('saveEdit').onclick = saveEditor; $('restoreEdit').onclick = restoreEditor; $('editImgs').onclick = e => { let b = e.target.closest('[data-rm]'); if (b) { editDraft.images.splice(+b.dataset.rm, 1); renderEditImages() } }; $('imgUpload').onchange = e => { [...e.target.files].forEach(file => { let fr = new FileReader(); fr.onload = () => { editDraft.images = editDraft.images || []; editDraft.images.push({ id: 'user_' + Date.now(), src: fr.result, source: 'user-upload', name: file.name }); renderEditImages() }; fr.readAsDataURL(file) }); e.target.value = '' }; $('exportEdits').onclick = exportEdits; $('importEdits').onclick = () => $('importFile').click(); $('importFile').onchange = e => { if (e.target.files[0]) importEditsFile(e.target.files[0]) }; $('clearEdits').onclick = () => { if (confirm('Xóa tất cả chỉnh sửa đã lưu?')) { edits = {}; localStorage.removeItem(STORE); rebuild(); renderCard(); notify('Đã xóa tất cả sửa') } };  window.onkeydown = e => {
+    if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+    if ($('quiz') && $('quiz').classList.contains('active')) {
+      return;
+    }
+    if (e.code === 'Space') { e.preventDefault(); flip('horizontal') }
+    if (e.key === 'ArrowUp') { e.preventDefault(); flip('up') }
+    if (e.key === 'ArrowDown') { e.preventDefault(); flip('down') }
+    if (e.key === 'ArrowRight') next();
+    if (e.key === 'ArrowLeft') prev();
+    if (e.key.toLowerCase() === 'r') triggerReset();
+    if (e.key.toLowerCase() === 'h') { hideOptions = !hideOptions; renderCard() }
+    if (e.key.toLowerCase() === 'e') openEditor();
+    if (e.key === '1') document.querySelector('[data-tab="fc"]').click();
+    if (e.key === '2') document.querySelector('[data-tab="quiz"]').click();
+    if (e.key === '3') document.querySelector('[data-tab="study"]').click()
+  }; applyCardFontSize(); setupCardTools(); renderCard(); renderQuiz() } document.addEventListener('DOMContentLoaded', init);
 
 // ===============================
 // HOD102 + Supabase MVP bridge
@@ -323,7 +481,10 @@ window.HODSupabase = (() => {
   async function loadProfile() {
     if (!client || !currentUser) { currentProfile = null; updateAuthUI(); return null; }
     const now = new Date().toISOString();
-    const base = { id: currentUser.id, email: currentUser.email, last_login: now };
+    const base = { id: currentUser.id, email: currentUser.email, last_login: now, last_activity: now };
+
+    // Role/quyền phải luôn lấy mới, không dùng cache cũ kẻo admin bị hiện thành user.
+    try { window.clearLearningHubSupabaseCache?.('profiles'); } catch(e) {}
 
     let existing = null;
     const sel = await client.from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
@@ -356,14 +517,20 @@ window.HODSupabase = (() => {
       } else currentProfile = ins.data;
     } else {
       const upd = await client.from('profiles')
-        .update({ email: currentUser.email, last_login: now })
+        .update({ email: currentUser.email, last_login: now, last_activity: now })
         .eq('id', currentUser.id)
         .select('*')
         .single();
       if (upd.error) {
         console.warn('Không cập nhật last_login:', upd.error);
         currentProfile = existing;
-      } else currentProfile = upd.data;
+      } else {
+        // Giữ role/quyền từ bản đọc ban đầu nếu response update bị thiếu hoặc trả sai do policy/cache.
+        currentProfile = { ...existing, ...(upd.data || {}) };
+        if (existing?.role && (!upd.data?.role || upd.data.role === 'user')) currentProfile.role = existing.role;
+        if (existing?.approved !== undefined && upd.data?.approved === undefined) currentProfile.approved = existing.approved;
+        if (existing?.blocked !== undefined && upd.data?.blocked === undefined) currentProfile.blocked = existing.blocked;
+      }
     }
 
     if (currentProfile?.blocked || currentProfile?.is_blocked || currentProfile?.status === 'blocked') {
@@ -600,7 +767,7 @@ window.HODSupabase = (() => {
 
   document.addEventListener('DOMContentLoaded', init);
 
-  return { init, isReady, isAdmin, submitEditRequest, loadQuestionsFromSupabase, openAuth, openAdmin, signOut, signInGoogle, getUser: () => currentUser, getProfile: () => currentProfile, get __client() { if (typeof console !== 'undefined') console.warn('__client is deprecated'); return client; } };
+  return { init, isReady, isAdmin, submitEditRequest, loadQuestionsFromSupabase, openAuth, openAdmin, signOut, signInGoogle, getUser: () => currentUser, getProfile: () => currentProfile, get __client() { return client; } };
 })();
 
 // ===== HOD Login + Admin UI (added) =====
@@ -695,7 +862,7 @@ window.HODSupabase = (() => {
   const HUB_KEY = window.APP_CONFIG?.SUPABASE_ANON_KEY || '';
   const SUBJECT_STORE = 'learninghub_subject_code_merged_v1';
   let subjectClient = null, subjectsCache = [], pickedCode = localStorage.getItem(SUBJECT_STORE) || '', lock = false;
-  function c() { if (!window.supabase) return null; if (!subjectClient) subjectClient = window.supabase.createClient(HUB_URL, HUB_KEY); return subjectClient; }
+  function c() { if (window.HODSupabase?.__client) return window.HODSupabase.__client; if (!window.supabase) return null; if (!subjectClient) subjectClient = window.supabase.createClient(HUB_URL, HUB_KEY); return subjectClient; }
   function $(id) { return document.getElementById(id); }
   function esc2(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
     function displayCode(code) { return String(code || '').replace(/_\d+$/i, ''); }
@@ -716,27 +883,31 @@ window.HODSupabase = (() => {
   function showLoading(on, msg = 'Đang tải danh sách môn học...') { const e = $('subjectLoading'); if (e) { e.textContent = msg; e.classList.toggle('hidden', !on); } }
   function fallbackSubjects() { return [{ code: 'HOD102', name: 'HOD102 Learning', description: 'Môn mặc định để bắt đầu học.', cover: '', is_active: true, question_count: 0 }, { code: 'MLN111', name: 'MLN111 Learning', description: 'Bộ câu hỏi và tài liệu MLN111.', cover: '', is_active: true, question_count: 0 }]; }
   async function addQuestionCounts(subjects) {
-    const list = subjects || [];
-    const supa = c();
-    if (!supa || !list.length) return list.map(s => ({ ...s, question_count: s.question_count ?? s.questions_count ?? 0 }));
-    const counted = [];
-    for (const s of list) {
-      let n = Number(s.question_count ?? s.questions_count ?? s.count);
-      if (!Number.isFinite(n) || n === 0) {
-        try {
-          const { count, error } = await supa
-            .from('questions')
-            .select('id', { count: 'exact', head: true })
-            .eq('subject_code', s.code)
-            .eq('is_active', true);
-          if (!error && Number.isFinite(Number(count))) n = Number(count);
-        } catch (e) { console.warn('[subject count]', s.code, e); }
-      }
-      counted.push({ ...s, question_count: Number.isFinite(n) ? n : 0 });
-    }
-    return counted;
-  }
-  async function getSubjects() { const supa = c(); if (!supa || !logged()) return fallbackSubjects(); const { data, error } = await supa.from('subjects').select('*').eq('is_active', true).order('sort_order', { ascending: true }).order('code', { ascending: true }); if (error || !data || !data.length) { console.warn(error || 'No subjects'); showErr('Không tải được danh sách môn học. Đang dùng môn mặc định.'); return fallbackSubjects(); } return await addQuestionCounts(data); }
+const list = subjects || [];
+// Tiết kiệm băng thông: không query questions ở bước render môn.
+// Số câu lấy từ subjects nếu có, hoặc cache localStorage đã đếm một lần.
+let store = { counts: {}, confirmed: {} };
+try { store = JSON.parse(localStorage.getItem('learninghub_subject_counts_cache_v3') || '{}') || store; } catch(e) {}
+store.counts = store.counts || {};
+store.confirmed = store.confirmed || {};
+const active = localStorage.getItem('learninghub_subject_code_merged_v1') || '';
+const current = {};
+try {
+  (RAW || []).forEach(q => {
+    const code = q.subject_code || active || '';
+    if(code) current[code] = (current[code] || 0) + 1;
+  });
+} catch(e) {}
+return list.map(s => {
+  const code = s.code || '';
+  let n = s.question_count ?? s.questions_count ?? s.count;
+  if(n === undefined || n === null || Number(n) === 0) n = current[code] ?? store.counts[code] ?? 0;
+  n = Number(n);
+  if(!Number.isFinite(n)) n = 0;
+  return { ...s, question_count: n };
+});
+}
+async function getSubjects() { const supa = c(); if (!supa || !logged()) return fallbackSubjects(); const { data, error } = await supa.from('subjects').select('*').eq('is_active', true).order('sort_order', { ascending: true }).order('code', { ascending: true }); if (error || !data || !data.length) { console.warn(error || 'No subjects'); showErr('Không tải được danh sách môn học. Đang dùng môn mặc định.'); return fallbackSubjects(); } return await addQuestionCounts(data); }
   function card(s) {
     const rawCode = String(s.code || '');
     const code = esc2(displayCode(rawCode));
@@ -768,9 +939,46 @@ window.HODSupabase = (() => {
     });
   }
   function renderSubjects() { const list = $('subjectList'); if (!list) return; const q = (($('subjectSearch')?.value) || '').trim().toLowerCase(); const arr = subjectsCache.filter(s => !q || `${s.code || ''} ${s.name || ''} ${s.description || ''}`.toLowerCase().includes(q)); list.innerHTML = arr.map(card).join(''); $('subjectEmpty')?.classList.toggle('hidden', !!arr.length); list.querySelectorAll('.subjectCard').forEach(x => x.onclick = () => { pickedCode = x.dataset.code; applyPicked(); }); applyPicked(); }
-  async function refreshSubjects() { if (!logged()) return; clearErr(); showLoading(true); try { subjectsCache = await getSubjects(); if (!pickedCode && subjectCode()) pickedCode = subjectCode(); if (!pickedCode && subjectsCache[0]) pickedCode = subjectsCache[0].code; renderSubjects(); syncSubjectTexts(); } finally { showLoading(false); } }
-  function openGate() { if (!logged()) return; if ($('subjectUserEmail')) $('subjectUserEmail').textContent = user()?.email || 'Chưa đăng nhập'; gateOn(true); closeAccountMenu(); refreshSubjects(); }
-  function closeGate() { gateOn(false); }
+  let lastRefreshTime = 0;
+  async function refreshSubjects() {
+    const now = Date.now();
+    if (now - lastRefreshTime < 5000) {
+      console.warn('[refreshSubjects] Bị chặn do gọi quá nhanh (throttle 5s)');
+      return;
+    }
+    lastRefreshTime = now;
+    if (!logged()) return;
+    clearErr();
+    showLoading(true);
+    try {
+      subjectsCache = await getSubjects();
+      if (!pickedCode && subjectCode()) pickedCode = subjectCode();
+      if (!pickedCode && subjectsCache[0]) pickedCode = subjectsCache[0].code;
+      renderSubjects();
+      syncSubjectTexts();
+    } finally {
+      showLoading(false);
+    }
+  }
+  let lastOpenGateTime = 0;
+  function openGate() {
+    const now = Date.now();
+    if (now - lastOpenGateTime < 3000) {
+      console.warn('[openGate] Bị chặn do gọi quá nhanh (throttle 3s)');
+      return;
+    }
+    lastOpenGateTime = now;
+    if (!logged()) return;
+    localStorage.setItem('learninghub_subject_gate_open_v1', 'true');
+    if ($('subjectUserEmail')) $('subjectUserEmail').textContent = user()?.email || 'Chưa đăng nhập';
+    gateOn(true);
+    closeAccountMenu();
+    refreshSubjects();
+  }
+  function closeGate() {
+    localStorage.setItem('learninghub_subject_gate_open_v1', 'false');
+    gateOn(false);
+  }
   async function loadBySubject(code) { const supa = c(); if (!supa || !logged() || !code) return false; const { data, error } = await supa.from('questions').select('id,subject_code,num,question,options,answer,answer_text,images,is_active,updated_at').eq('is_active', true).eq('subject_code', code).order('num', { ascending: true }); if (error) { console.warn(error); notifyUX('Không tải được dữ liệu môn học.'); return false; } if (!data || !data.length) { RAW = []; pool = []; ci = 0; if ($('idx')) $('idx').textContent = '0'; if ($('total')) $('total').textContent = '0'; try { renderStudy() } catch (e) { } try { renderQuiz() } catch (e) { } notifyUX(`Môn ${code} chưa có dữ liệu.`); return false; } RAW = data.map(r => ({ id: r.id, subject_code: r.subject_code || code, num: r.num, question: r.question, options: r.options || {}, answer: r.answer, answer_text: r.answer_text, images: (typeof cleanImages === 'function' ? cleanImages(r.images || []) : r.images || []) })); pool = [...RAW]; var _saved = +localStorage.getItem('learninghub_progress_' + code) || 0; ci = Math.max(0, Math.min(_saved, pool.length - 1)); flipped = false; if ($('idx')) $('idx').textContent = String(ci + 1); if ($('total')) $('total').textContent = String(pool.length); updateBrand(code); syncSubjectTexts(); try { renderCard() } catch (e) { } try { renderQuiz() } catch (e) { } try { renderStudy() } catch (e) { } notifyUX(`Đã tải ${label(code)}`); return true; }
   async function enterSubject() { if (!pickedCode) return; setSubject(pickedCode); closeGate(); if (typeof window.loadCurrentSubjectOnly === 'function') await window.loadCurrentSubjectOnly(false); else await loadBySubject(pickedCode); }
   async function logoutGate() { closeGate(); setSubject(''); await window.HODSupabase?.signOut?.(); }
@@ -793,19 +1001,18 @@ window.HODSupabase = (() => {
 
     // Bỏ tự kiểm tra/tự tải môn học liên tục.
     // Chỉ tải môn đã chọn 1 lần khi mở web. Danh sách môn chỉ tải khi người dùng mở bảng chọn môn hoặc bấm Tải lại.
-    let checkedOnce = false;
     const runSubjectCheckOnce = () => {
-      if (checkedOnce) return;
+      if (window.__LHCheckedOnce) return;
       if (!logged() || !isApproved()) return;
-      checkedOnce = true;
+      window.__LHCheckedOnce = true;
       syncSubjectTexts();
-      if (subjectCode()) loadBySubject(subjectCode());
+      const isGateOpen = localStorage.getItem('learninghub_subject_gate_open_v1') === 'true';
+      if (subjectCode() && !isGateOpen) loadBySubject(subjectCode());
       else openGate();
     };
 
     runSubjectCheckOnce();
     setTimeout(runSubjectCheckOnce, 800);
-    setTimeout(runSubjectCheckOnce, 2000);
   }
   window.getSubjectsCache = () => subjectsCache;
   window.loadBySubject = loadBySubject;
@@ -883,6 +1090,7 @@ window.HODSupabase = (() => {
   // Hàm chuyển đổi Tab thông minh chuyên biệt
   window.__switchSubjectGateTab = function (mode) {
     const isAdd = mode === 'add';
+    localStorage.setItem('learninghub_subject_gate_tab_v1', mode);
 
     // Cập nhật trạng thái Active trên nút bấm Tab
     document.querySelectorAll('.subjectGateTab').forEach(btn => {
@@ -911,8 +1119,7 @@ window.HODSupabase = (() => {
       if (isAdd) {
         form.innerHTML = getAddSubjectHTML();
         parsedQuestions = [];
-        $('addSubjectCode')?.addEventListener('input', function () { this.value = this.value.toUpperCase().replace(/[^A-Z0-9_]/g, ''); });
-        $('userImportFile')?.addEventListener('change', handleFileImport);
+        restoreAddSubjectState();
       }
     }
   };
@@ -938,6 +1145,13 @@ window.HODSupabase = (() => {
     tabsBar.querySelectorAll('.subjectGateTab').forEach(btn => {
       btn.onclick = () => window.__switchSubjectGateTab(btn.dataset.sgtab);
     });
+
+    const savedTab = localStorage.getItem('learninghub_subject_gate_tab_v1') || 'list';
+    if (savedTab === 'add' && canAdd()) {
+      window.__switchSubjectGateTab('add');
+    } else {
+      window.__switchSubjectGateTab('list');
+    }
   }
 
   function showAddBtn() {
@@ -946,38 +1160,144 @@ window.HODSupabase = (() => {
     const tabBtn = $('subjectGateTabAdd');
     const allowed = canAdd();
     if (btn) btn.classList.toggle('hidden', !allowed);
-    if (tabBtn) tabBtn.style.display = allowed ? 'block' : 'none';
+
+    const note = $('userApprovalNote');
+    if (note) {
+      note.style.setProperty('display', (allowed && !isAdminOrEditor()) ? 'block' : 'none', 'important');
+    }
+
+    if (tabBtn) {
+      const wasHidden = tabBtn.style.display === 'none';
+      tabBtn.style.display = allowed ? 'block' : 'none';
+      if (allowed && wasHidden) {
+        const savedTab = localStorage.getItem('learninghub_subject_gate_tab_v1') || 'list';
+        if (savedTab === 'add') {
+          window.__switchSubjectGateTab('add');
+        }
+      }
+    }
   }
 
-  const AI_PROMPT = `Bạn là trợ lý tạo ngân hàng câu hỏi trắc nghiệm. Đọc tài liệu tôi gửi và tạo câu hỏi trắc nghiệm theo đúng format bên dưới.
+  const AI_PROMPT = `Bạn là trợ lý chuyển đổi ngân hàng câu hỏi trắc nghiệm sang JSON trong file Markdown.
 
-QUY TẮC BATCH (QUAN TRỌNG):
-- Tạo TỐI ĐA số câu có thể trong MỖI lần trả lời (mục tiêu 40-50 câu/batch).
-- Để tiết kiệm token: "answer_text" chỉ viết 1 dòng ngắn, KHÔNG giải thích dài.
-- Nếu chưa hết tài liệu, DỪNG ở cuối batch và nói: "Gõ 'tiếp' để tôi tạo phần tiếp (câu X-Y)."
-- Khi tôi gõ "tiếp", tiếp tục batch sau, đánh số "num" liên tục, CÙNG format.
-- Mỗi batch là mảng JSON hoàn chỉnh, parse được độc lập.
-- KHÔNG thêm text giải thích bên ngoài block JSON.
+ĐỌC FILE và chuyển đổi NGUYÊN VẸN (KHÔNG tự biên thêm, KHÔNG bỏ bớt).
 
-YÊU CẦU:
-- 4 đáp án A-D (thêm E nếu cần). Đáp án đúng = chữ cái (VD: "A" hoặc "AC").
-- Câu hỏi rõ ràng, chính xác theo tài liệu.
-- "answer_text": giải thích TỐI ĐA 1 câu ngắn.
-- "has_image": true/false — câu CẦN hình ảnh (biểu đồ, sơ đồ...) hay không.
-- "error_risk": "low" | "medium" | "high"
-- "error_risk_reason": lý do ngắn gọn (tối đa 10 từ).
+QUY TẮC BATCH:
 
-FORMAT:
+- Sau mỗi batch DỪNG và nói: "Gõ 'tiếp' để xuất câu X-Y."
+- Khi nhận "tiếp", xuất batch tiếp theo, đánh số "num" liên tục.
+- Mỗi batch xuất 1 file .md hoàn chỉnh, tải được ngay.
+
+QUY TẮC CHUYỂN ĐỔI:
+- Đáp án: chỉ lấy ký tự chữ cái đầu tiên sau "**Đáp án:**" (bỏ mọi chú thích phía sau).
+- Nếu câu chỉ có A/B/C (không có D): bỏ key "D" khỏi object options.
+- Giữ NGUYÊN nội dung câu hỏi và lựa chọn, KHÔNG paraphrase.
+- "has_image": false (trừ khi câu đề cập hình ảnh/biểu đồ).
+- "error_risk": "low" (câu ngắn, rõ) | "medium" (câu trung bình) | "high" (câu dài, phức tạp, dễ nhầm).
+
+FORMAT FILE .MD OUTPUT:
+---
+# [Tên môn] - Batch [N] (Câu [X]-[Y])
+> Xuất ngày: [ngày hôm nay] | Tổng: [số câu trong batch] câu
+---
+
 \`\`\`json
 [
-  {"num":1,"question":"...?","options":{"A":"...","B":"...","C":"...","D":"..."},"answer":"A","answer_text":"Giải thích ngắn","images":[],"has_image":false,"error_risk":"low","error_risk_reason":"Định nghĩa rõ ràng"}
+  {
+    "num": 1,
+    "question": "…?",
+    "options": {
+      "A": "…",
+      "B": "…",
+      "C": "…",
+      "D": "…"
+    },
+    "answer": "B",
+    "images": [],
+    "has_image": false,
+    "error_risk": "low"
+  }
 ]
 \`\`\`
+---
 
-Bắt đầu ngay, tạo nhiều câu nhất có thể. Khi hết token thì dừng và nhắc tôi gõ "tiếp".`;
+KHÔNG thêm bất kỳ text giải thích nào bên ngoài cấu trúc trên.
+Bắt đầu ngay từ câu 1.`;
 
   window.__ADD_SUBJECT_AI_PROMPT = AI_PROMPT;
   let parsedQuestions = [];
+
+  function clearAddSubjectLocalStorage() {
+    localStorage.removeItem('learninghub_add_subject_code_v1');
+    localStorage.removeItem('learninghub_add_subject_name_v1');
+    localStorage.removeItem('learninghub_add_subject_desc_v1');
+    localStorage.removeItem('learninghub_add_subject_step_v1');
+    localStorage.removeItem('learninghub_add_subject_file_name_v1');
+    localStorage.removeItem('learninghub_add_subject_file_size_v1');
+    localStorage.removeItem('learninghub_add_subject_file_data_v1');
+    localStorage.removeItem('learninghub_add_subject_file_previewed_v1');
+  }
+
+  function restoreAddSubjectState() {
+    const code = localStorage.getItem('learninghub_add_subject_code_v1') || '';
+    const name = localStorage.getItem('learninghub_add_subject_name_v1') || '';
+    const desc = localStorage.getItem('learninghub_add_subject_desc_v1') || '';
+    const savedStep = parseInt(localStorage.getItem('learninghub_add_subject_step_v1') || '1');
+
+    const codeInp = $('addSubjectCode');
+    const nameInp = $('addSubjectName');
+    const descInp = $('addSubjectDesc');
+
+    if (codeInp) codeInp.value = code;
+    if (nameInp) nameInp.value = name;
+    if (descInp) descInp.value = desc;
+
+    codeInp?.addEventListener('input', function () {
+      this.value = this.value.toUpperCase().replace(/[^A-Z0-9_]/g, '');
+      localStorage.setItem('learninghub_add_subject_code_v1', this.value);
+    });
+    nameInp?.addEventListener('input', function () {
+      localStorage.setItem('learninghub_add_subject_name_v1', this.value);
+    });
+    descInp?.addEventListener('input', function () {
+      localStorage.setItem('learninghub_add_subject_desc_v1', this.value);
+    });
+
+    const fileName = localStorage.getItem('learninghub_add_subject_file_name_v1');
+    const fileSize = localStorage.getItem('learninghub_add_subject_file_size_v1');
+    const fileData = localStorage.getItem('learninghub_add_subject_file_data_v1');
+
+    if (fileName && fileData) {
+      if ($('userImportData')) $('userImportData').value = fileData;
+      const dropZone = $('importDropZone');
+      const card = $('userImportFileCard');
+      const nameEl = $('userImportFileName');
+      const metaEl = $('userImportFileMeta');
+      if (dropZone) dropZone.classList.add('hidden');
+      if (card) card.classList.remove('hidden');
+      if (nameEl) nameEl.textContent = fileName;
+      if (metaEl) metaEl.textContent = Math.max(1, Math.round(parseInt(fileSize || '0') / 1024)) + ' KB · Sẵn sàng xem trước';
+      const pv = $('previewImportBtn');
+      if (pv) { pv.classList.remove('hidden'); pv.disabled = false; }
+      
+      const wasPreviewed = localStorage.getItem('learninghub_add_subject_file_previewed_v1') === 'true';
+      if (wasPreviewed) {
+        setTimeout(() => {
+          if (typeof window.__previewUserImport === 'function') {
+            window.__previewUserImport();
+          }
+        }, 100);
+      }
+    }
+
+    $('userImportFile')?.addEventListener('change', handleFileImport);
+
+    if (savedStep > 1 && code && name) {
+      setTimeout(() => {
+        window.__switchStep(savedStep);
+      }, 50);
+    }
+  }
 
   // MÃ MỚI: Giao diện form chia 3 bước (Stepper)
   function getAddSubjectHTML() {
@@ -1060,7 +1380,7 @@ Bắt đầu ngay, tạo nhiều câu nhất có thể. Khi hết token thì d�
         </div>
       </div>
       
-      ${!isAdminOrEditor() ? '<div class="userApprovalNote" style="margin-top:15px;">⏳ Yêu cầu sẽ được gửi cho admin duyệt trước.</div>' : ''}
+      <div class="userApprovalNote" id="userApprovalNote" style="margin-top:15px; display:none;">⏳ Yêu cầu sẽ được gửi cho admin duyệt trước.</div>
     </div>`;
   }
 
@@ -1073,6 +1393,8 @@ Bắt đầu ngay, tạo nhiều câu nhất có thể. Khi hết token thì d�
       if (!code) { alert('Vui lòng nhập mã môn trước khi tiếp tục.'); document.getElementById('addSubjectCode')?.focus(); return; }
       if (!name) { alert('Vui lòng nhập tên môn trước khi tiếp tục.'); document.getElementById('addSubjectName')?.focus(); return; }
     }
+
+    localStorage.setItem('learninghub_add_subject_step_v1', step);
 
     // Ẩn tất cả các bước
     document.querySelectorAll('.add-step-content').forEach(el => el.classList.remove('active'));
@@ -1129,7 +1451,15 @@ Bắt đầu ngay, tạo nhiều câu nhất có thể. Khi hết token thì d�
         const jsonMatch = text.match(/```\s*([\s\S]*?)```/);
         if (jsonMatch) jsonStr = jsonMatch[1];
       }
-      if ($('userImportData')) $('userImportData').value = jsonStr.trim();
+      const cleanedData = jsonStr.trim();
+      if ($('userImportData')) $('userImportData').value = cleanedData;
+
+      // Lưu file data vào localStorage
+      localStorage.setItem('learninghub_add_subject_file_name_v1', file.name);
+      localStorage.setItem('learninghub_add_subject_file_size_v1', String(file.size));
+      localStorage.setItem('learninghub_add_subject_file_data_v1', cleanedData);
+      localStorage.removeItem('learninghub_add_subject_file_previewed_v1');
+
       const dropZone = $('importDropZone');
       const card = $('userImportFileCard');
       const nameEl = $('userImportFileName');
@@ -1170,13 +1500,18 @@ Bắt đầu ngay, tạo nhiều câu nhất có thể. Khi hết token thì d�
         data = JSON.parse(cleaned);
       }
     } catch (e) {
+      localStorage.removeItem('learninghub_add_subject_file_previewed_v1');
       alert('JSON không hợp lệ. Hãy kiểm tra lại format.\n\nLỗi: ' + e.message);
       return;
     }
 
     if (!Array.isArray(data)) {
       if (data.questions && Array.isArray(data.questions)) data = data.questions;
-      else { alert('Dữ liệu phải là mảng JSON [...]'); return; }
+      else {
+        localStorage.removeItem('learninghub_add_subject_file_previewed_v1');
+        alert('Dữ liệu phải là mảng JSON [...]');
+        return;
+      }
     }
 
     const errors = [];
@@ -1186,10 +1521,12 @@ Bắt đầu ngay, tạo nhiều câu nhất có thể. Khi hết token thì d�
       if (!q.answer) errors.push('Câu ' + (i + 1) + ': thiếu "answer"');
     });
     if (errors.length) {
+      localStorage.removeItem('learninghub_add_subject_file_previewed_v1');
       alert('Dữ liệu có lỗi:\n\n' + errors.slice(0, 10).join('\n'));
       return;
     }
 
+    localStorage.setItem('learninghub_add_subject_file_previewed_v1', 'true');
     parsedQuestions = data;
     window.__previewSelections = {};
     const metaEl = $('userImportFileMeta');
@@ -1297,11 +1634,30 @@ Bắt đầu ngay, tạo nhiều câu nhất có thể. Khi hết token thì d�
           if (r.error) { errors++; if (!firstErr) firstErr = r.error.message; }
           else success++;
         }
-        successMsg = 'Đã thêm môn ' + code + ' với ' + success + ' câu hỏi' + (errors ? ' (' + errors + ' lỗi: ' + firstErr + ')' : '');
+        successMsg = 'Đã thêm môn ' + finalCode + ' với ' + success + ' câu hỏi' + (errors ? ' (' + errors + ' lỗi: ' + firstErr + ')' : '');
+        try {
+          const key = 'learninghub_subject_counts_cache_v3';
+          const store = JSON.parse(localStorage.getItem(key) || '{}') || {};
+          store.counts = store.counts || {};
+          store.confirmed = store.confirmed || {};
+          store.counts[finalCode] = success;
+          store.confirmed[finalCode] = true;
+          store.updated_at = new Date().toISOString();
+          localStorage.setItem(key, JSON.stringify(store));
+          localStorage.setItem('learninghub_subjects_dirty_v3', String(Date.now()));
+          localStorage.removeItem('learninghub_subjects_cache_v1');
+          sessionStorage.removeItem('learninghub_subject_counts_cache_v1');
+          window.clearLearningHubSupabaseCache?.('subjects');
+          window.clearLearningHubSupabaseCache?.('questions');
+        } catch(e) {}
         alert(successMsg);
         notify(successMsg);
         window.__switchSubjectGateTab('list');
-        $('subjectRefresh')?.click();
+        try {
+          $('subjectRefresh')?.click();
+          setTimeout(() => $('subjectRefresh')?.click(), 5600);
+          setTimeout(() => window.refreshSubjectCountsOnce?.(), 6500);
+        } catch(e) {}
       } else {
         // Học viên/User gửi request: Hiển thị thanh tiến trình khi upload tệp tin lớn
         showProgress('Đang gửi yêu cầu tạo môn học...', 50, 100, 'Đang tải dữ liệu câu hỏi lên máy chủ...');
@@ -1327,6 +1683,7 @@ Bắt đầu ngay, tạo nhiều câu nhất có thể. Khi hết token thì d�
 
       parsedQuestions = [];
       document.getElementById('importPreviewModal')?.classList.add('hidden');
+      clearAddSubjectLocalStorage();
     } catch (e) {
       console.warn('Add subject error:', e);
       alert('Lỗi khi lưu môn học: ' + (e?.message || e));
@@ -1639,7 +1996,7 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
 // ===== FINAL_USER_LAST_ACTIVITY_TRACKING_20260613 =====
 // Cập nhật hoạt động gần nhất của người dùng trên web.
 (function () {
-  const MIN_GAP = 10 * 60 * 1000; // giảm Supabase bandwidth: tối đa 1 lần / 10 phút
+  const MIN_GAP = 60 * 1000; // tối đa 1 lần / 1 phút để phù hợp trạng thái hiển thị của Admin
   let lastSent = 0;
   let sending = false;
 
@@ -1673,7 +2030,7 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
     // Tắt ping activity khi focus/interval để tiết kiệm Supabase bandwidth.
     // document.addEventListener('visibilitychange', () => { if(!document.hidden) touchActivity(true); });
     // window.addEventListener('focus', () => touchActivity(true));
-    // setInterval(() => { if(!document.hidden) touchActivity(false); }, 60000);
+    // // setInterval(() => { if(!document.hidden) touchActivity(false); }, 60000); // TẮT: chỉ cập nhật khi user đăng nhập/mở web hoặc có thao tác
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindActivityEvents);
@@ -2208,256 +2565,8 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
 })();
 
 
-// ===== FINAL_ADMIN_EDITOR_ADD_QUESTION_AND_SHOW_ALL_20260614 =====
-// 1) Tab "Thư viện" hiện toàn bộ kết quả, không dừng ở 180.
-// 2) Thêm nút + góc phải để admin/editor thêm câu hỏi trực tiếp vào Supabase.
-(function () {
-  const SUBJECT_STORE = 'learninghub_subject_code_merged_v1';
-  const $ = id => document.getElementById(id);
-  const escLocal = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const subjectCode = () => localStorage.getItem(SUBJECT_STORE) || '';
-  const client = () => window.HODSupabase?.__client || null;
-  const user = () => window.HODSupabase?.getUser?.() || null;
-  const profile = () => window.HODSupabase?.getProfile?.() || null;
-  function canManageQuestions() {
-    const p = profile();
-    const role = String(p?.role || '').toLowerCase();
-    return !!user() && (role === 'admin' || role === 'editor') && !(p?.blocked || p?.is_blocked || p?.status === 'blocked');
-  }
-  function notifyAdd(msg) { if (typeof notify === 'function') notify(msg); else alert(msg); }
-
-  // Chặn mọi giới hạn 120/160/180 còn sót lại trong dòng thông báo nếu hàm cũ vẫn chạy.
-  function cleanupLimitText() {
-    const list = $('studyList');
-    if (!list) return;
-    list.querySelectorAll('.more').forEach(x => {
-      if (/Đang hiển thị\s+\d+\s*\//i.test(x.textContent || '')) x.remove();
-    });
-  }
-  const oldRenderStudy = typeof renderStudy === 'function' ? renderStudy : null;
-  if (oldRenderStudy && !window.__showAllStudyPatched20260614) {
-    window.__showAllStudyPatched20260614 = true;
-    renderStudy = function () {
-      const r = oldRenderStudy.apply(this, arguments);
-      setTimeout(cleanupLimitText, 0);
-      return r;
-    };
-    window.renderStudy = renderStudy;
-  }
-
-  function ensureAddQuestionUI() {
-    if (!$('addQuestionFab')) {
-      const btn = document.createElement('button');
-      btn.id = 'addQuestionFab';
-      btn.type = 'button';
-      btn.title = 'Thêm câu hỏi';
-      btn.textContent = '+';
-      btn.onclick = openAddQuestionModal;
-      document.body.appendChild(btn);
-    }
-    if (!$('addQuestionModal')) {
-      const modal = document.createElement('div');
-      modal.id = 'addQuestionModal';
-      modal.className = 'modal hidden addQuestionModal';
-      modal.innerHTML = `
-        <div class="box addQuestionBox">
-          <button type="button" class="modalX" id="addQuestionClose">×</button>
-          <h2>Thêm câu hỏi</h2>
-          <p class="addQuestionHint">Chỉ admin/editor mới thấy và dùng được chức năng này.</p>
-          <div class="field"><label>Số câu</label><input id="addQuestionNum" type="number" min="1" placeholder="Tự lấy số tiếp theo nếu để trống"></div>
-          <div class="field"><label>Câu hỏi</label><textarea id="addQuestionText" placeholder="Nhập nội dung câu hỏi..."></textarea></div>
-          <div class="editGrid addQuestionOptions">
-            <div class="field"><label>Đáp án A</label><textarea id="addOptA"></textarea></div>
-            <div class="field"><label>Đáp án B</label><textarea id="addOptB"></textarea></div>
-            <div class="field"><label>Đáp án C</label><textarea id="addOptC"></textarea></div>
-            <div class="field"><label>Đáp án D</label><textarea id="addOptD"></textarea></div>
-            <div class="field"><label>Đáp án E</label><textarea id="addOptE" placeholder="Có thể bỏ trống"></textarea></div>
-            <div class="field"><label>Đáp án đúng</label><input id="addQuestionAnswer" placeholder="Ví dụ: A hoặc BC"></div>
-          </div>
-          <div class="row addQuestionActions">
-            <button type="button" class="primary" id="saveAddQuestion">Lưu câu hỏi</button>
-            <button type="button" class="btn" id="cancelAddQuestion">Hủy</button>
-          </div>
-        </div>`;
-      document.body.appendChild(modal);
-      $('addQuestionClose').onclick = closeAddQuestionModal;
-      $('cancelAddQuestion').onclick = closeAddQuestionModal;
-      $('saveAddQuestion').onclick = saveNewQuestion;
-      modal.addEventListener('mousedown', e => { if (e.target === modal) closeAddQuestionModal(); });
-    }
-    updateAddQuestionVisibility();
-  }
-
-  function updateAddQuestionVisibility() {
-    const btn = $('addQuestionFab');
-    if (!btn) return;
-    const show = canManageQuestions();
-    btn.classList.toggle('hidden', !show);
-    btn.style.display = show ? 'flex' : 'none';
-    document.body.classList.toggle('can-add-question', show);
-    if (!show) $('addQuestionModal')?.classList.add('hidden');
-  }
-
-  function nextQuestionNum() {
-    const nums = (RAW || []).map(q => Number(q.num)).filter(Number.isFinite);
-    return nums.length ? Math.max(...nums) + 1 : 1;
-  }
-
-  function openAddQuestionModal() {
-    if (!canManageQuestions()) return;
-    ensureAddQuestionUI();
-    $('addQuestionNum').value = nextQuestionNum();
-    $('addQuestionText').value = '';
-    ['A', 'B', 'C', 'D', 'E'].forEach(k => { const el = $('addOpt' + k); if (el) el.value = ''; });
-    $('addQuestionAnswer').value = '';
-    $('addQuestionModal').classList.remove('hidden');
-    setTimeout(() => $('addQuestionText')?.focus(), 60);
-  }
-  function closeAddQuestionModal() { $('addQuestionModal')?.classList.add('hidden'); }
-
-  function buildAnswerText(answer, options) {
-    return String(answer || '').toUpperCase().split('').filter(Boolean).map(k => k + '. ' + (options[k] || '')).join('; ');
-  }
-
-  async function saveNewQuestion() {
-    if (!canManageQuestions()) return alert('Tài khoản này không có quyền thêm câu hỏi.');
-    const c = client();
-    if (!c) return alert('Chưa kết nối Supabase.');
-    const subject = subjectCode();
-    if (!subject) return alert('Bạn cần chọn môn trước.');
-
-    const num = Number(($('addQuestionNum')?.value || '').trim()) || nextQuestionNum();
-    const question = ($('addQuestionText')?.value || '').trim();
-    const answer = ($('addQuestionAnswer')?.value || '').trim().toUpperCase().replace(/[^A-E]/g, '');
-    const options = {};
-    ['A', 'B', 'C', 'D', 'E'].forEach(k => {
-      const v = ($('addOpt' + k)?.value || '').trim();
-      if (v) options[k] = v;
-    });
-
-    if (!question) return alert('Nhập câu hỏi trước.');
-    if (Object.keys(options).length < 2) return alert('Nhập ít nhất 2 đáp án.');
-    if (!answer) return alert('Nhập đáp án đúng, ví dụ A hoặc BC.');
-    for (const k of answer) { if (!options[k]) return alert('Đáp án đúng ' + k + ' chưa có nội dung.'); }
-
-    const payload = {
-      subject_code: subject,
-      num,
-      question,
-      options,
-      answer,
-      answer_text: buildAnswerText(answer, options),
-      images: [],
-      is_active: true,
-      updated_at: new Date().toISOString()
-    };
-
-    const btn = $('saveAddQuestion');
-    if (btn) { btn.disabled = true; btn.textContent = 'Đang lưu...'; }
-    try {
-      const { data, error } = await c.from('questions').insert(payload).select('*').single();
-      if (error) throw error;
-      try {
-        await c.from('question_history').insert({
-          question_id: data?.id || null,
-          request_id: null,
-          previous_data: null,
-          new_data: payload,
-          changed_by: user()?.id || null,
-          approved_by: user()?.id || null
-        });
-      } catch (e) { }
-      closeAddQuestionModal();
-      notifyAdd('Đã thêm câu hỏi');
-      if (typeof window.loadCurrentSubjectOnly === 'function') await window.loadCurrentSubjectOnly();
-      else if (window.HODSupabase?.loadQuestionsFromSupabase) await window.HODSupabase.loadQuestionsFromSupabase();
-      try {
-        const idx = (RAW || []).findIndex(q => Number(q.num) === num);
-        if (idx >= 0) { pool = [...RAW]; ci = idx; flipped = false; renderCard?.(); renderStudy?.(); }
-      } catch (e) { }
-    } catch (err) {
-      alert('Thêm câu hỏi thất bại: ' + (err?.message || err));
-    } finally {
-      if (btn) { btn.disabled = false; btn.textContent = 'Lưu câu hỏi'; }
-    }
-  }
-
-  function bootAddQuestion() {
-    ensureAddQuestionUI();
-    updateAddQuestionVisibility();
-    cleanupLimitText();
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootAddQuestion);
-  else bootAddQuestion();
-  setTimeout(bootAddQuestion, 300);
-  setTimeout(bootAddQuestion, 1200);
-  setInterval(updateAddQuestionVisibility, 700);
-})();
-
-
-// ===== HOTFIX_SHOW_PLUS_ONLY_STUDY_TAB_20260614 =====
-// Sửa lỗi CSS display:none!important làm mất nút +. Nút + chỉ hiện ở tab Thư viện cho admin/editor.
-(function () {
-  const $ = id => document.getElementById(id);
-  function canManage() {
-    const p = window.HODSupabase?.getProfile?.() || null;
-    const u = window.HODSupabase?.getUser?.() || null;
-    const role = String(p?.role || '').toLowerCase();
-    return !!u && (role === 'admin' || role === 'editor') && !(p?.blocked || p?.is_blocked || p?.status === 'blocked');
-  }
-  function isStudyTab() {
-    return $('study')?.classList.contains('active') || document.querySelector('.tab.active')?.dataset?.tab === 'study';
-  }
-  function ensurePlus() {
-    let btn = $('addQuestionFab');
-    if (!btn) {
-      btn = document.createElement('button');
-      btn.id = 'addQuestionFab';
-      btn.type = 'button';
-      btn.title = 'Thêm câu hỏi';
-      btn.textContent = '+';
-      document.body.appendChild(btn);
-    }
-    if (!btn.__hotfixPlusClick) {
-      btn.__hotfixPlusClick = true;
-      btn.addEventListener('click', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        if (typeof openAddModal === 'function') return openAddModal();
-        const modal = $('addQuestionModal');
-        if (modal) modal.classList.remove('hidden');
-      });
-    }
-    return btn;
-  }
-  function updatePlus() {
-    const btn = ensurePlus();
-    const show = canManage() && isStudyTab();
-    document.body.classList.toggle('add-question-visible', show);
-    btn.classList.toggle('hidden', !show);
-    btn.style.setProperty('display', show ? 'flex' : 'none', 'important');
-    btn.style.setProperty('visibility', show ? 'visible' : 'hidden', 'important');
-    btn.style.setProperty('pointer-events', show ? 'auto' : 'none', 'important');
-    btn.style.setProperty('opacity', show ? '1' : '0', 'important');
-  }
-  function boot() {
-    updatePlus();
-    document.querySelectorAll('.tab').forEach(t => {
-      if (t.__hotfixPlusBound) return;
-      t.__hotfixPlusBound = true;
-      t.addEventListener('click', () => setTimeout(updatePlus, 80));
-    });
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
-  else boot();
-  setTimeout(boot, 300);
-  setTimeout(boot, 1000);
-  setInterval(updatePlus, 250);
-})();
-
-
-// ===== FINAL_PRETTY_ADD_QUESTION_EDIT_STYLE_20260614 =====
-// Form thêm câu mới dùng layout giống form Sửa trực tiếp câu + nút cộng đẹp hơn.
+// ===== COPILOT_MERGED_ADD_QUESTION_DISPLAY_VERSION_20260629 =====
+// Đã gộp các bản vá nút + / form thêm câu để tránh chồng lấn. Giữ giao diện đang hiển thị: form đẹp, nút + chỉ ở tab Thư viện và ẩn khi modal mở.
 (function () {
   const SUBJECT_STORE = 'learninghub_subject_code_merged_v1';
   const $ = id => document.getElementById(id);
@@ -2493,7 +2602,7 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
       document.body.appendChild(btn);
     }
     btn.classList.add('prettyAddFab');
-    btn.innerHTML = '<span>+</span>';
+    btn.innerHTML = '<span>+</span>'; // khóa 1 icon, không tạo bóng/ghost
     btn.onclick = function (e) {
       e.preventDefault();
       e.stopPropagation();
@@ -2502,16 +2611,32 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
     return btn;
   }
 
+  function modalOpen() {
+    const m = $('addQuestionModal');
+    return !!m && !m.classList.contains('hidden') && getComputedStyle(m).display !== 'none';
+  }
+
   function updatePlus() {
     const btn = ensurePlus();
-    const show = canManage() && isAllTab();
+    const open = modalOpen();
+    const show = canManage() && isAllTab() && !open;
     document.body.classList.toggle('add-question-visible', show);
+    document.body.classList.toggle('add-question-modal-open', open);
     btn.classList.toggle('hidden', !show);
+    btn.setAttribute('aria-hidden', show ? 'false' : 'true');
     btn.style.setProperty('display', show ? 'flex' : 'none', 'important');
     btn.style.setProperty('visibility', show ? 'visible' : 'hidden', 'important');
     btn.style.setProperty('opacity', show ? '1' : '0', 'important');
     btn.style.setProperty('pointer-events', show ? 'auto' : 'none', 'important');
-    if (!show) $('addQuestionModal')?.classList.add('hidden');
+    if (!canManage() || !isAllTab()) $('addQuestionModal')?.classList.add('hidden');
+  }
+
+  function cleanupLimitText() {
+    const list = $('studyList');
+    if (!list) return;
+    list.querySelectorAll('.more').forEach(x => {
+      if (/Đang hiển thị\s+\d+\s*\//i.test(x.textContent || '')) x.remove();
+    });
   }
 
   function ensurePrettyModal() {
@@ -2659,9 +2784,10 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
     $('addQuestionAnswer').value = '';
     renderPrettyImages();
     modal.classList.remove('hidden');
+    updatePlus();
     setTimeout(() => $('addQuestionText')?.focus(), 80);
   }
-  function closePrettyAddModal() { $('addQuestionModal')?.classList.add('hidden'); }
+  function closePrettyAddModal() { $('addQuestionModal')?.classList.add('hidden'); setTimeout(updatePlus, 30); }
 
   function answerTextLine(answer, options) {
     return String(answer || '').toUpperCase().split('').filter(Boolean).map(k => k + '. ' + (options[k] || '')).join('; ');
@@ -2706,174 +2832,29 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
 
   function boot() {
     ensurePlus();
-    ensurePrettyModal();
+    const modal = ensurePrettyModal();
+    cleanupLimitText();
     updatePlus();
+    if (modal && !modal.__mergedAddObserver) {
+      modal.__mergedAddObserver = true;
+      const obs = new MutationObserver(() => setTimeout(updatePlus, 30));
+      obs.observe(modal, { attributes: true, attributeFilter: ['class', 'style'] });
+      modal.addEventListener('click', () => setTimeout(updatePlus, 30), true);
+      modal.addEventListener('mousedown', () => setTimeout(updatePlus, 30), true);
+    }
     document.querySelectorAll('.tab').forEach(t => {
       if (t.__prettyAddTabBound) return;
       t.__prettyAddTabBound = true;
-      t.addEventListener('click', () => setTimeout(updatePlus, 80));
+      t.addEventListener('click', () => setTimeout(() => { cleanupLimitText(); updatePlus(); }, 80));
     });
   }
+  window.openAddQuestionModal = openPrettyAddModal;
+  window.openPrettyAddModal = openPrettyAddModal;
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
   setTimeout(boot, 300); setTimeout(boot, 1000);
   setInterval(updatePlus, 250);
 })();
-
-
-// ===== HOTFIX_ADD_MODAL_COMPACT_HIDE_PLUS_20260614 =====
-// Ẩn nút + khi đang mở form thêm câu hỏi. Form thêm câu hỏi gọn lại để thấy đủ nút Lưu/Đóng trong một màn hình.
-(function () {
-  const $ = id => document.getElementById(id);
-  function canManage() {
-    const p = window.HODSupabase?.getProfile?.() || null;
-    const u = window.HODSupabase?.getUser?.() || null;
-    const role = String(p?.role || '').toLowerCase();
-    return !!u && (role === 'admin' || role === 'editor') && !(p?.blocked || p?.is_blocked || p?.status === 'blocked');
-  }
-  function isStudyTab() {
-    return $('study')?.classList.contains('active') || document.querySelector('.tab.active')?.dataset?.tab === 'study';
-  }
-  function modalOpen() {
-    const m = $('addQuestionModal');
-    return !!m && !m.classList.contains('hidden') && getComputedStyle(m).display !== 'none';
-  }
-  function updatePlusFinal() {
-    const btn = $('addQuestionFab');
-    const show = !!btn && canManage() && isStudyTab() && !modalOpen();
-    document.body.classList.toggle('add-question-visible', show);
-    document.body.classList.toggle('add-question-modal-open', modalOpen());
-    if (btn) {
-      btn.classList.toggle('hidden', !show);
-      btn.style.setProperty('display', show ? 'flex' : 'none', 'important');
-      btn.style.setProperty('visibility', show ? 'visible' : 'hidden', 'important');
-      btn.style.setProperty('pointer-events', show ? 'auto' : 'none', 'important');
-      btn.style.setProperty('opacity', show ? '1' : '0', 'important');
-    }
-  }
-  function patchModalButtons() {
-    const modal = $('addQuestionModal');
-    if (!modal || modal.__compactHidePlusPatched) return;
-    modal.__compactHidePlusPatched = true;
-    modal.addEventListener('mousedown', () => setTimeout(updatePlusFinal, 30), true);
-    modal.addEventListener('click', () => setTimeout(updatePlusFinal, 30), true);
-    const obs = new MutationObserver(() => setTimeout(updatePlusFinal, 30));
-    obs.observe(modal, { attributes: true, attributeFilter: ['class', 'style'] });
-  }
-  function boot() {
-    patchModalButtons();
-    updatePlusFinal();
-    document.querySelectorAll('.tab').forEach(t => {
-      if (t.__finalAddPlusHideBound) return;
-      t.__finalAddPlusHideBound = true;
-      t.addEventListener('click', () => setTimeout(updatePlusFinal, 100));
-    });
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
-  else boot();
-  setTimeout(boot, 300);
-  setTimeout(boot, 1000);
-  setInterval(updatePlusFinal, 200);
-})();
-
-
-// ===== HOTFIX_ADD_PLUS_CLEAN_NO_GHOST_20260614 =====
-// Bảo đảm nút + chỉ có 1 icon, không sinh thêm lớp lạ.
-(function () {
-  function cleanPlus() {
-    const btn = document.getElementById('addQuestionFab');
-    if (!btn) return;
-    btn.classList.add('prettyAddFab');
-    if (!btn.querySelector('span')) btn.innerHTML = '<span>+</span>';
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', cleanPlus); else cleanPlus();
-  setTimeout(cleanPlus, 300);
-  setInterval(cleanPlus, 1000);
-})();
-
-
-// ===== HOTFIX_STOP_PLUS_FLICKER_WHEN_ADD_MODAL_OPEN_20260614 =====
-// Chặn các interval cũ bật lại nút + khi form Thêm câu hỏi đang mở.
-(function () {
-  const $ = id => document.getElementById(id);
-  let raf = 0;
-  function modalOpen() {
-    const m = $('addQuestionModal');
-    return !!m && !m.classList.contains('hidden') && getComputedStyle(m).display !== 'none';
-  }
-  function hardHidePlus() {
-    const btn = $('addQuestionFab');
-    if (!btn) return;
-    btn.classList.add('hidden');
-    btn.setAttribute('aria-hidden', 'true');
-    btn.style.setProperty('display', 'none', 'important');
-    btn.style.setProperty('visibility', 'hidden', 'important');
-    btn.style.setProperty('opacity', '0', 'important');
-    btn.style.setProperty('pointer-events', 'none', 'important');
-    document.body.classList.add('add-question-modal-open');
-    document.body.classList.remove('add-question-visible');
-  }
-  function canManage() {
-    const p = window.HODSupabase?.getProfile?.() || null;
-    const u = window.HODSupabase?.getUser?.() || null;
-    const role = String(p?.role || '').toLowerCase();
-    return !!u && (role === 'admin' || role === 'editor') && !(p?.blocked || p?.is_blocked || p?.status === 'blocked');
-  }
-  function isStudyTab() {
-    return $('study')?.classList.contains('active') || document.querySelector('.tab.active')?.dataset?.tab === 'study';
-  }
-  function showPlusIfAllowed() {
-    const btn = $('addQuestionFab');
-    if (!btn) return;
-    const show = canManage() && isStudyTab() && !modalOpen();
-    document.body.classList.toggle('add-question-visible', show);
-    document.body.classList.toggle('add-question-modal-open', modalOpen());
-    btn.classList.toggle('hidden', !show);
-    btn.setAttribute('aria-hidden', show ? 'false' : 'true');
-    btn.style.setProperty('display', show ? 'flex' : 'none', 'important');
-    btn.style.setProperty('visibility', show ? 'visible' : 'hidden', 'important');
-    btn.style.setProperty('opacity', show ? '1' : '0', 'important');
-    btn.style.setProperty('pointer-events', show ? 'auto' : 'none', 'important');
-  }
-  function frameLock() {
-    if (modalOpen()) {
-      hardHidePlus();
-      raf = requestAnimationFrame(frameLock);
-    } else {
-      cancelAnimationFrame(raf);
-      raf = 0;
-      document.body.classList.remove('add-question-modal-open');
-      showPlusIfAllowed();
-    }
-  }
-  function startLock() {
-    if (raf) return;
-    raf = requestAnimationFrame(frameLock);
-  }
-  function boot() {
-    const modal = $('addQuestionModal');
-    if (modal && !modal.__plusFlickerObserver) {
-      modal.__plusFlickerObserver = true;
-      const obs = new MutationObserver(() => { modalOpen() ? startLock() : showPlusIfAllowed(); });
-      obs.observe(modal, { attributes: true, attributeFilter: ['class', 'style'] });
-      modal.addEventListener('click', () => setTimeout(() => modalOpen() ? startLock() : showPlusIfAllowed(), 0), true);
-      modal.addEventListener('mousedown', () => setTimeout(() => modalOpen() ? startLock() : showPlusIfAllowed(), 0), true);
-    }
-    const btn = $('addQuestionFab');
-    if (btn && !btn.__plusFlickerCapture) {
-      btn.__plusFlickerCapture = true;
-      btn.addEventListener('click', () => { hardHidePlus(); startLock(); }, true);
-      btn.addEventListener('mousedown', () => { hardHidePlus(); startLock(); }, true);
-      btn.addEventListener('pointerdown', () => { hardHidePlus(); startLock(); }, true);
-    }
-    modalOpen() ? startLock() : showPlusIfAllowed();
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
-  else boot();
-  setTimeout(boot, 100);
-  setTimeout(boot, 500);
-  setInterval(() => { modalOpen() ? startLock() : showPlusIfAllowed(); }, 80);
-})();
-
+// ===== END COPILOT_MERGED_ADD_QUESTION_DISPLAY_VERSION_20260629 =====
 
 // ===== FINAL_DELETE_BUTTON_BESIDE_OPEN_20260614 =====
 // Nút Xóa nằm CẠNH nút Mở/Thu gọn, không xóa nút Mở.
@@ -3125,6 +3106,11 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
     }
     if (saveBtn) saveBtn.disabled = true;
 
+    localStorage.removeItem('learninghub_add_subject_file_name_v1');
+    localStorage.removeItem('learninghub_add_subject_file_size_v1');
+    localStorage.removeItem('learninghub_add_subject_file_data_v1');
+    localStorage.removeItem('learninghub_add_subject_file_previewed_v1');
+
     window.__previewSelections = {};
     try { window.__closeImportPreviewModal?.(); } catch (e) { }
     notifySafe('Đã xóa file import');
@@ -3354,7 +3340,7 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
     if (data[i]) {
       data[i].error_risk = val;
       renderQualityStats(data);
-      const card = document.querySelector(`[data-pcard=”${i}”]`);
+      const card = document.querySelector(`[data-pcard="${i}"]`);
       if (card) {
         card.style.borderLeftColor = riskColor(val);
         card.style.background = { low: 'rgba(39,174,96,0.08)', medium: 'rgba(243,156,18,0.08)', high: 'rgba(231,76,60,0.08)' }[val] || '';
@@ -3993,146 +3979,139 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
 
 // ===== FINAL_EXAM_ONLY_QUIZ_UI_20260627 =====
 (function () {
-  let examOnlyIndex = 0, examOnlyReview = false;
+  let examOnlyIndex = 0;
+  let examOnlyReview = false;
+  let examSelectedCodes = [];
+  let timerInt = null;
+  let examStart = 0;
+  let examBaseMs = 0;
+  let examElapsed = '00:00';
+
   const EXAM_STORE = 'learninghub_exam_state_v1';
   const $ = id => document.getElementById(id);
   const E = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const S = s => typeof sortAns === 'function' ? sortAns(s || '') : String(s || '').split('').sort().join('');
-  const A = c => { try { return typeof finalAnswerText === 'function' ? finalAnswerText(c) : answerText(c) } catch (e) { return (c.answer || '').split('').map(k => k + '. ' + ((c.options || {})[k] || '')).join('; ') } };
+  const FMT = ms => typeof fmt === 'function' ? fmt(ms) : String(Math.floor(ms / 60000)).padStart(2, '0') + ':' + String(Math.floor(ms / 1000) % 60).padStart(2, '0');
   const IMG = c => { try { return typeof imgsHTML === 'function' ? imgsHTML(c) : '' } catch (e) { return '' } };
+  const EXPLAIN = c => {
+    try { return typeof finalAnswerText === 'function' ? finalAnswerText(c) : answerText(c) }
+    catch (e) { return String(c?.answer || '').split('').map(k => k + '. ' + ((c?.options || {})[k] || '')).join('; ') }
+  };
   const done = () => Object.keys(qSel || {}).filter(k => qSel[k]).length;
-  
-  let timerInt = null, examStart = 0, examElapsed = '00:00';
-  const time = () => examElapsed;
-  
-  function startTimer() {
+  const examSubject = () => { try { return localStorage.getItem('learninghub_subject_code_merged_v1') || '' } catch (e) { return '' } };
+  const displayCode = code => String(code || '').replace(/_\d+$/i, '');
+  const baseCode = code => String(code || '').split(/[_\-\s]/)[0].toUpperCase();
+
+  function timeMsFromText(t) {
+    const m = String(t || '').match(/^(\d+):(\d+)$/);
+    return m ? ((+m[1] * 60 + +m[2]) * 1000) : 0;
+  }
+  function setTimerText() {
+    const el = $('examTimer');
+    if (el) el.textContent = examElapsed;
+  }
+  function startTimer(resumeMs = 0) {
     clearInterval(timerInt);
+    examBaseMs = Math.max(0, resumeMs || 0);
     examStart = Date.now();
+    examElapsed = FMT(examBaseMs);
+    setTimerText();
     timerInt = setInterval(() => {
-      examElapsed = typeof fmt === 'function' ? fmt(Date.now() - examStart) : '00:00';
-      const el = $('examTimer');
-      if (el) el.textContent = examElapsed;
+      examElapsed = FMT(examBaseMs + Date.now() - examStart);
+      setTimerText();
     }, 1000);
   }
-  function stopTimer() {
-    clearInterval(timerInt);
+  function stopTimer() { clearInterval(timerInt); timerInt = null; }
+  function resetTimer() { stopTimer(); examBaseMs = 0; examStart = 0; examElapsed = '00:00'; setTimerText(); }
+  function nowTimerMs() { return examSubmitted || !timerInt ? timeMsFromText(examElapsed) : examBaseMs + Date.now() - examStart; }
+
+  function saveExam() {
+    try {
+      if (!qSet || !qSet.length) return;
+      localStorage.setItem(EXAM_STORE, JSON.stringify({
+        subject: examSubject(),
+        nums: (qSet || []).map(c => c.num),
+        ids: (qSet || []).map(c => c.id || ''),
+        qSel: qSel || {},
+        submitted: !!examSubmitted,
+        index: examOnlyIndex || 0,
+        review: !!examOnlyReview,
+        qCnt: qCnt || 0,
+        timerMs: nowTimerMs(),
+        timer: examElapsed
+      }));
+    } catch (e) { }
+  }
+  function clearExam() { try { localStorage.removeItem(EXAM_STORE) } catch (e) { } }
+  function restoreExam() {
+    try {
+      const st = JSON.parse(localStorage.getItem(EXAM_STORE) || 'null');
+      if (!st || !Array.isArray(st.nums) || !st.nums.length || !Array.isArray(RAW) || !RAW.length) return false;
+      if (st.subject && examSubject() && st.subject !== examSubject()) return false;
+      const restored = st.nums.map((n, i) => RAW.find(c => String(c.id || '') === String(st.ids?.[i] || '') || Number(c.num) === Number(n))).filter(Boolean);
+      if (!restored.length) return false;
+      qSet = restored;
+      qSel = st.qSel || {};
+      examSubmitted = !!st.submitted;
+      examOnlyIndex = Math.max(0, Math.min(+st.index || 0, qSet.length - 1));
+      examOnlyReview = !!st.review;
+      qCnt = st.qCnt || 0;
+      quizMode = 'exam';
+      examElapsed = st.timer || FMT(+st.timerMs || 0);
+      if (!examSubmitted && !timerInt) startTimer(+st.timerMs || timeMsFromText(examElapsed));
+      return true;
+    } catch (e) { return false }
   }
 
-  function examSubject() { try { return localStorage.getItem('learninghub_subject_code_merged_v1') || '' } catch (e) { return '' } }
-  function saveExam() { try { if (!qSet || !qSet.length) return; localStorage.setItem(EXAM_STORE, JSON.stringify({ subject: examSubject(), nums: (qSet || []).map(c => c.num), ids: (qSet || []).map(c => c.id || ''), qSel: qSel || {}, submitted: !!examSubmitted, index: examOnlyIndex || 0, review: !!examOnlyReview, qCnt: qCnt || 0, timer: time() })) } catch (e) { } }
-  function clearExam() { try { localStorage.removeItem(EXAM_STORE) } catch (e) { } }
-  function restoreExam() { try { const st = JSON.parse(localStorage.getItem(EXAM_STORE) || 'null'); if (!st || !Array.isArray(st.nums) || !st.nums.length || !Array.isArray(RAW) || !RAW.length) return false; if (st.subject && examSubject() && st.subject !== examSubject()) return false; const restored = st.nums.map((n, i) => RAW.find(c => String(c.id || '') === String(st.ids?.[i] || '') || Number(c.num) === Number(n))).filter(Boolean); if (!restored.length) return false; qSet = restored; qSel = st.qSel || {}; examSubmitted = !!st.submitted; examOnlyIndex = Math.max(0, Math.min(+st.index || 0, qSet.length - 1)); examOnlyReview = !!st.review; qCnt = st.qCnt || 0; quizMode = 'exam'; if (st.timer) examElapsed = st.timer; return true } catch (e) { return false } }
   function markTab() { document.querySelectorAll('.tab').forEach(t => { if (t.dataset?.tab === 'quiz') t.textContent = 'Kiểm tra' }); }
-  let examSelectedCodes = [];
-  
-  function setup() {
-    const box = document.querySelector('#quiz .setup'); if (!box) return;
+  function removeOldQuizUI() { document.querySelectorAll('#quiz .modeRow,#quiz .cntGrid:not(.examOnlyCountGrid),#practiceMode,#examMode').forEach(x => x.remove()) }
+
+  function cachedSubjects() {
     let subjects = typeof window.getSubjectsCache === 'function' ? (window.getSubjectsCache() || []) : [];
     try {
       if (!subjects.length) {
-        const cachedSubjects = JSON.parse(localStorage.getItem('learninghub_subjects_cache_v1') || '[]');
-        if (Array.isArray(cachedSubjects)) subjects = cachedSubjects;
+        const cached = JSON.parse(localStorage.getItem('learninghub_subjects_cache_v1') || '[]');
+        if (Array.isArray(cached)) subjects = cached;
       }
-    } catch(e) {}
-    const activeSubject = localStorage.getItem('learninghub_subject_code_merged_v1') || '';
+    } catch (e) { }
+    return subjects;
+  }
+
+  function setup() {
+    const box = document.querySelector('#quiz .setup');
+    if (!box) return;
+    const activeSubject = examSubject();
+    const subjects = cachedSubjects();
     const totalCount = (RAW || []).length;
+    if (activeSubject && (!examSelectedCodes.length || !examSelectedCodes.includes(activeSubject))) examSelectedCodes = [activeSubject];
+    const activeBase = baseCode(activeSubject);
+    const activeSub = subjects.find(s => s.code === activeSubject) || (activeSubject ? { code: activeSubject, name: displayCode(activeSubject), question_count: totalCount } : null);
+    const matchingSubjects = subjects.filter(s => s.code !== activeSubject && baseCode(s.code) === activeBase);
 
-    // Helper to get base alphanumeric prefix of code
-    const getBaseCode = code => (code || '').split(/[_\-\s]/)[0].toUpperCase();
-    const displayExamCode = code => String(code || '').replace(/_\d+$/i, '');
-    const activeBase = getBaseCode(activeSubject);
-
-    // Nếu reload trang mà cache môn chưa có, tải lại danh sách môn một lần để hiện phần gộp môn
-    if (activeSubject && (!subjects.length || !subjects.some(s => s.code !== activeSubject && getBaseCode(s.code) === activeBase)) && !window.__examSubjectsReloading) {
-      const examClient = window.HODSupabase?.__client || null;
-      if (examClient) {
-        window.__examSubjectsReloading = true;
-        examClient.from('subjects').select('*').eq('is_active', true).order('sort_order', { ascending: true }).order('code', { ascending: true }).then(async ({ data }) => {
-          try {
-            const arr = Array.isArray(data) ? data : [];
-            for (const s of arr) {
-              try {
-                const { count } = await examClient.from('questions').select('id', { count: 'exact', head: true }).eq('subject_code', s.code).eq('is_active', true);
-                s.question_count = Number(count || 0);
-              } catch(e) {}
-            }
-            localStorage.setItem('learninghub_subjects_cache_v1', JSON.stringify(arr));
-          } catch(e) {}
-          window.__examSubjectsReloading = false;
-          try { if (typeof renderQuiz === 'function') renderQuiz(); } catch(e) {}
-        }).catch(() => { window.__examSubjectsReloading = false; });
-      }
-    }
-
-    // If active subject changes or is not in selected list, reset
-    if (activeSubject && (!examSelectedCodes.length || !examSelectedCodes.includes(activeSubject))) {
-      examSelectedCodes = [activeSubject];
-    }
-
-    // Find other subjects that have matching base code
-    const matchingSubjects = subjects.filter(s => s.code !== activeSubject && getBaseCode(s.code) === activeBase);
-
-    // Build chip template for optional extra subjects
-    const buildChip = (s) => {
-      const checked = examSelectedCodes.includes(s.code);
-      const countText = Number.isFinite(+s.question_count) ? `${s.question_count} câu` : '';
-      const descText = s.description || 'Môn học chưa có mô tả.';
-      return `
-        <label class="examSubjectChip ${checked ? 'checked' : ''}" data-exam-subj="${E(s.code)}">
-          <input type="checkbox" value="${E(s.code)}" ${checked ? 'checked' : ''}>
-          <span class="examSubjectChipTop">
-            <span class="examSubjectChipCode">${E(displayExamCode(s.code))}</span>
-            <span class="examSubjectChipName">${E(s.name || '')}</span>
-          </span>
-          <span class="examSubjectChipDesc">${E(descText)}</span>
-          <span class="examSubjectChipDivider"></span>
-          <span class="examSubjectChipBottom">
-            <span class="examSubjectChipCount">${countText || '0 câu'}</span>
-            <span class="examSubjectChipChoose">${checked ? 'Đã chọn' : 'Chọn'}</span>
-          </span>
-        </label>`;
-    };
-
-    // Active subject card (full info like subject gate card)
-    const activeSub = subjects.find(s => s.code === activeSubject) || (activeSubject ? { code: activeSubject, name: displayExamCode(activeSubject) } : null);
-    const activeDesc = E(activeSub?.description || 'Môn học chưa có mô tả.');
-    const activeInternalCode = '';
-    const activeCount = Number.isFinite(+(activeSub?.question_count)) ? `${activeSub.question_count} câu` : `${totalCount} câu`;
     const activeCard = activeSub ? `
       <div class="examActiveSubjectCard">
-        <div class="examActiveSubjectTop">
-          <span class="examActiveSubjectCode">${E(displayExamCode(activeSub.code))}</span>
-          <span class="examActiveSubjectName">${E(activeSub.name || displayExamCode(activeSub.code))}</span>
-        </div>
-        <div class="examActiveSubjectDesc">${activeDesc}${activeInternalCode ? `<br><span style="color:var(--mist);font-size:.82rem">${E(activeInternalCode)}</span>` : ''}</div>
-        <div class="examActiveSubjectMeta">${activeCount}</div>
+        <div class="examActiveSubjectTop"><span class="examActiveSubjectCode">${E(displayCode(activeSub.code))}</span><span class="examActiveSubjectName">${E(activeSub.name || displayCode(activeSub.code))}</span></div>
+        <div class="examActiveSubjectDesc">${E(activeSub.description || 'Môn học chưa có mô tả.')}</div>
+        <div class="examActiveSubjectMeta">${E(activeSub.question_count || totalCount || 0)} câu</div>
       </div>` : '';
 
-    const extraChips = matchingSubjects.map(buildChip).join('');
-
-    // Sum questions of all selected subjects
-    const updateMergedCount = () => {
-      const selectedSubjects = subjects.filter(s => examSelectedCodes.includes(s.code));
-      let sum = selectedSubjects.reduce((acc, s) => acc + (+s.question_count || 0), 0);
-      if (sum === 0) sum = totalCount;
-      const el = $('examTotalCountVal');
-      if (el) el.textContent = sum;
-    };
+    const extraChips = matchingSubjects.map(s => {
+      const checked = examSelectedCodes.includes(s.code);
+      return `<label class="examSubjectChip ${checked ? 'checked' : ''}" data-exam-subj="${E(s.code)}">
+        <input type="checkbox" value="${E(s.code)}" ${checked ? 'checked' : ''}>
+        <span class="examSubjectChipTop"><span class="examSubjectChipCode">${E(displayCode(s.code))}</span><span class="examSubjectChipName">${E(s.name || '')}</span></span>
+        <span class="examSubjectChipDesc">${E(s.description || 'Môn học chưa có mô tả.')}</span>
+        <span class="examSubjectChipDivider"></span>
+        <span class="examSubjectChipBottom"><span class="examSubjectChipCount">${E(s.question_count || 0)} câu</span><span class="examSubjectChipChoose">${checked ? 'Đã chọn' : 'Chọn'}</span></span>
+      </label>`;
+    }).join('');
 
     box.innerHTML = `
       <div class="examOnlyStart">
         <div class="examOnlyBadge">KIỂM TRA</div>
-        
         <div class="examOnlyLabel">Môn đang học</div>
-        ${activeCard || `<span style="color:var(--mist)">Chưa chọn môn học</span>`}
-        
-        ${extraChips ? `
-        <div class="examOnlyLabel">Gộp thêm môn <span style="font-weight:400;color:var(--mist);font-size:.85rem">(chọn thêm môn cùng mã để gộp đề)</span></div>
-        <div class="examSubjectChips" id="examSubjectChipsExtra">
-          ${extraChips}
-        </div>
-        ` : ''}
-        
+        ${activeCard || '<span style="color:var(--mist)">Chưa chọn môn học</span>'}
+        ${extraChips ? `<div class="examOnlyLabel">Gộp thêm môn <span style="font-weight:400;color:var(--mist);font-size:.85rem">(chọn thêm môn cùng mã để gộp đề)</span></div><div class="examSubjectChips" id="examSubjectChipsExtra">${extraChips}</div>` : ''}
         <div class="examOnlyLabel">Số câu kiểm tra <span style="font-weight:400;color:var(--mist);font-size:.85rem">(Thư viện hiện có: <span id="examTotalCountVal">${totalCount}</span> câu)</span></div>
         <div class="examOnlyCountGrid">
           <button class="cnt" data-exam-cnt="10">10</button>
@@ -4142,169 +4121,334 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
           <button class="cnt" data-exam-cnt="100">100</button>
           <button class="cnt" data-exam-cnt="0">Tất cả</button>
         </div>
-        <div class="examCustomCntRow">
-          <label class="examCustomCntLabel">Tùy chỉnh:</label>
-          <input type="number" id="examCustomCnt" class="examCustomCntInput" min="1" placeholder="Nhập số câu..." value="">
-          <button type="button" class="cnt examCustomCntApply" id="examCustomCntApply">Áp dụng</button>
-        </div>
+        <div class="examCustomCntRow"><label class="examCustomCntLabel">Tùy chỉnh:</label><input type="number" id="examCustomCnt" class="examCustomCntInput" min="1" placeholder="Nhập số câu..."><button type="button" class="cnt examCustomCntApply" id="examCustomCntApply">Áp dụng</button></div>
         <button id="start" class="start" type="button">Bắt đầu kiểm tra</button>
-      </div>
-    `;
-    
-    updateMergedCount();
+      </div>`;
 
-    // Bind checkbox toggles
+    const updateMergedCount = () => {
+      const sum = subjects.filter(s => examSelectedCodes.includes(s.code)).reduce((acc, s) => acc + (+s.question_count || 0), 0) || totalCount;
+      const el = $('examTotalCountVal');
+      if (el) el.textContent = sum;
+    };
+    updateMergedCount();
     box.querySelectorAll('.examSubjectChip input[type="checkbox"]').forEach(cb => {
       cb.onchange = () => {
         const code = cb.value;
         const label = cb.closest('.examSubjectChip');
-        if (cb.checked) {
-          if (!examSelectedCodes.includes(code)) examSelectedCodes.push(code);
-          label?.classList.add('checked');
-        } else {
-          examSelectedCodes = examSelectedCodes.filter(c => c !== code);
-          label?.classList.remove('checked');
-        }
+        if (cb.checked) { if (!examSelectedCodes.includes(code)) examSelectedCodes.push(code); label?.classList.add('checked'); }
+        else { examSelectedCodes = examSelectedCodes.filter(c => c !== code); label?.classList.remove('checked'); }
         const choose = label?.querySelector('.examSubjectChipChoose');
         if (choose) choose.textContent = cb.checked ? 'Đã chọn' : 'Chọn';
         updateMergedCount();
       };
     });
-    
-    // Bind click events for question counts
     box.querySelectorAll('[data-exam-cnt]').forEach(b => {
       const cnt = +b.dataset.examCnt;
       b.classList.toggle('sel', cnt === qCnt);
-      b.onclick = () => {
-        qCnt = cnt;
-        box.querySelectorAll('[data-exam-cnt]').forEach(x => x.classList.remove('sel'));
-        b.classList.add('sel');
-        const customInput = $('examCustomCnt');
-        if (customInput) customInput.value = '';
-      };
+      b.onclick = () => { qCnt = cnt; box.querySelectorAll('[data-exam-cnt]').forEach(x => x.classList.remove('sel')); b.classList.add('sel'); const input = $('examCustomCnt'); if (input) input.value = ''; };
     });
-    
-    // Bind custom count input
     const applyBtn = $('examCustomCntApply');
     const customInput = $('examCustomCnt');
     if (applyBtn && customInput) {
-      const applyCustom = () => {
-        const v = parseInt(customInput.value, 10);
-        if (v > 0) {
-          qCnt = v;
-          box.querySelectorAll('[data-exam-cnt]').forEach(x => x.classList.remove('sel'));
-        }
-      };
+      const applyCustom = () => { const v = parseInt(customInput.value, 10); if (v > 0) { qCnt = v; box.querySelectorAll('[data-exam-cnt]').forEach(x => x.classList.remove('sel')); } };
       applyBtn.onclick = applyCustom;
       customInput.onkeydown = e => { if (e.key === 'Enter') applyCustom(); };
     }
-    
-    $('start').onclick = start;
+    const startBtn = $('start');
+    if (startBtn) startBtn.onclick = start;
   }
-  
+
   async function loadQuestionsForCodes(codes) {
-    const HUB_URL = window.APP_CONFIG?.SUPABASE_URL || '';
-    const HUB_KEY = window.APP_CONFIG?.SUPABASE_ANON_KEY || '';
-    if (!window.supabase || !codes.length) return [];
-    const supa = window.supabase.createClient(HUB_URL, HUB_KEY);
-    const { data, error } = await supa
-      .from('questions')
-      .select('id,subject_code,num,question,options,answer,answer_text,images,is_active,updated_at')
-      .eq('is_active', true)
-      .in('subject_code', codes)
-      .order('num', { ascending: true });
+    const c = window.HODSupabase?.__client || (window.supabase && window.APP_CONFIG?.SUPABASE_URL && window.APP_CONFIG?.SUPABASE_ANON_KEY ? window.supabase.createClient(window.APP_CONFIG.SUPABASE_URL, window.APP_CONFIG.SUPABASE_ANON_KEY) : null);
+    if (!c || !codes.length) return [];
+    const { data, error } = await c.from('questions').select('id,subject_code,num,question,options,answer,answer_text,images,is_active,updated_at').eq('is_active', true).in('subject_code', codes).order('num', { ascending: true });
     if (error || !data) { console.warn(error); return []; }
-    return data.map(r => ({
-      id: r.id, subject_code: r.subject_code, num: r.num,
-      question: r.question, options: r.options || {},
-      answer: r.answer, answer_text: r.answer_text,
-      images: (typeof cleanImages === 'function' ? cleanImages(r.images || []) : r.images || [])
-    }));
+    return data.map(r => ({ id: r.id, subject_code: r.subject_code, num: r.num, question: r.question, options: r.options || {}, answer: r.answer, answer_text: r.answer_text, images: (typeof cleanImages === 'function' ? cleanImages(r.images || []) : r.images || []) }));
   }
-  
+
   async function start() {
-    quizMode = 'exam'; examSubmitted = false; examOnlyReview = false; examOnlyIndex = 0;
-    
-    // If multiple subjects selected, load and merge their question pools
-    const activeSubject = localStorage.getItem('learninghub_subject_code_merged_v1') || '';
+    quizMode = 'exam';
+    examSubmitted = false;
+    examOnlyReview = false;
+    examOnlyIndex = 0;
+    const activeSubject = examSubject();
     const extraCodes = examSelectedCodes.filter(c => c && c !== activeSubject);
-    
     let mergedPool = [...(RAW || [])];
-    
-    if (extraCodes.length > 0) {
+    if (extraCodes.length) {
       if (typeof showProgress === 'function') showProgress('Đang tải câu hỏi từ các môn đã chọn...', 0, 100);
       const extraQuestions = await loadQuestionsForCodes(extraCodes);
       if (typeof hideProgress === 'function') hideProgress();
-      // Merge, deduplicate by id
-      const existingIds = new Set(mergedPool.map(q => q.id).filter(Boolean));
-      extraQuestions.forEach(q => {
-        if (!q.id || !existingIds.has(q.id)) {
-          mergedPool.push(q);
-          if (q.id) existingIds.add(q.id);
-        }
-      });
+      const seen = new Set(mergedPool.map(q => q.id || (q.subject_code + ':' + q.num)));
+      extraQuestions.forEach(q => { const key = q.id || (q.subject_code + ':' + q.num); if (!seen.has(key)) { mergedPool.push(q); seen.add(key); } });
     }
-    
+    if (!mergedPool.length) { alert('Chưa có câu hỏi để kiểm tra.'); return; }
     qSet = sample(mergedPool, qCnt || 0);
-    qDone = {}; qSel = {};
-    startTimer(); saveExam(); draw();
+    qDone = {};
+    qSel = {};
+    clearExam();
+    startTimer(0);
+    saveExam();
+    draw();
   }
-  function score() { let ok = 0; (qSet || []).forEach((c, i) => { if (S(qSel[i]) === S(c.answer)) ok++ }); let total = (qSet || []).length, pct = total ? Math.round(ok / total * 100) : 0; return { ok, bad: total - ok, total, pct } }
+
+  function scoreExam() {
+    let ok = 0;
+    (qSet || []).forEach((c, i) => { if (S(qSel[i]) === S(c.answer)) ok++; });
+    const total = (qSet || []).length;
+    const pct = total ? Math.round(ok / total * 100) : 0;
+    return { ok, bad: total - ok, total, pct };
+  }
+
   function draw() {
-    window.__examOnlyRender = draw; const body = $('quizBody'); if (!body) return; setup(); if ((!qSet || !qSet.length)) restoreExam();
+    window.__examOnlyRender = draw;
+    const body = $('quizBody');
+    if (!body) return;
+    if (!qSet || !qSet.length) restoreExam();
     const box = document.querySelector('#quiz .setup');
-    if (!qSet || !qSet.length) {
-      if (box) box.classList.remove('hidden');
-      body.innerHTML = '';
-      return;
-    }
+    if (!qSet || !qSet.length) { setup(); if (box) box.classList.remove('hidden'); body.innerHTML = ''; return; }
     if (box) box.classList.add('hidden');
-    if (examSubmitted) { result(); return }
-    let c = qSet[examOnlyIndex], total = qSet.length, p = Math.round((examOnlyIndex + 1) / total * 100);
-    let opts = Object.entries(c.options || {}).map(([k, v]) => `<button type="button" class="examOnlyOption ${String(qSel[examOnlyIndex] || '').includes(k) ? 'sel' : ''}" data-exam-opt="${E(k)}"><span class="qkey">${E(k)}</span><span class="qtxt">${E(v)}</span></button>`).join('');
+    if (examSubmitted && !examOnlyReview) { result(); return; }
     
+    const c = qSet[examOnlyIndex];
+    const total = qSet.length;
+    const p = Math.round((examOnlyIndex + 1) / total * 100);
+
+    const ch = qSel[examOnlyIndex] || '';
+    const correctAns = c.answer || '';
+    
+    let opts = '';
+    if (examOnlyReview) {
+      opts = Object.entries(c.options || {}).map(([k, v]) => {
+        const isUserChose = ch.includes(k);
+        const isCorrect = correctAns.includes(k);
+        let stateClass = '';
+        let badgeHTML = '';
+        if (isCorrect) {
+          stateClass = 'review-opt-correct';
+          badgeHTML = `<span class="review-opt-badge correct">✓</span>`;
+        } else if (isUserChose && !isCorrect) {
+          stateClass = 'review-opt-incorrect';
+          badgeHTML = `<span class="review-opt-badge incorrect">×</span>`;
+        } else {
+          stateClass = 'review-opt-normal';
+        }
+        return `<button type="button" class="examOnlyOption ${stateClass}" disabled><span class="qkey">${E(k)}</span><span class="qtxt">${E(v)}</span>${badgeHTML}</button>`;
+      }).join('');
+    } else {
+      opts = Object.entries(c.options || {}).map(([k, v]) => `<button type="button" class="examOnlyOption ${String(ch).includes(k) ? 'sel' : ''}" data-exam-opt="${E(k)}"><span class="qkey">${E(k)}</span><span class="qtxt">${E(v)}</span></button>`).join('');
+    }
+
+    const gridItems = (qSet || []).map((q, i) => {
+      let stateClass = '';
+      if (examOnlyReview) {
+        const userAns = qSel[i] || '';
+        const corrAns = q.answer || '';
+        stateClass = (S(userAns) === S(corrAns)) ? 'review-grid-correct' : 'review-grid-incorrect';
+      } else {
+        stateClass = qSel[i] ? 'answered' : '';
+      }
+      return `<button type="button" class="examGridItem ${examOnlyIndex === i ? 'active' : ''} ${stateClass}" data-exam-jump="${i}">${i + 1}</button>`;
+    }).join('');
+
+    const titleHTML = examOnlyReview 
+      ? `Câu ${examOnlyIndex + 1} / ${total} <span class="reviewModeHeaderTag" style="font-size:0.88rem;color:var(--gold2);background:rgba(200,169,110,0.1);padding:3px 8px;border-radius:999px;border:1px solid rgba(200,169,110,0.3);margin-left:8px;vertical-align:middle;font-weight:800;letter-spacing:0.04em;">XEM LẠI</span>`
+      : `Câu ${examOnlyIndex + 1} / ${total}`;
+
+    const subtitleHTML = examOnlyReview
+      ? `Đúng: <b style="color:#72c58c;">${scoreExam().ok}</b> · Sai: <b style="color:#e9877b;">${scoreExam().bad}</b> · Thời gian: <b>${timeText()}</b>`
+      : `Đã làm: ${done()} / ${total} · Thời gian: <span id="examTimer">${timeText()}</span>`;
+
+    const exitBtn = examOnlyReview
+      ? `<button type="button" class="examOnlyExit review-exit-btn" id="examOnlyExitToResult">Xem điểm</button>`
+      : `<button type="button" class="examOnlyExit" id="examOnlyExit">Thoát</button>`;
+
+    const footerHTML = examOnlyReview
+      ? `<div class="examOnlyFooter review-mode"><div class="examOnlyNav" style="grid-column: 1 / -1 !important;"><button type="button" class="btn" id="examPrev" ${examOnlyIndex <= 0 ? 'disabled' : ''}>← Câu trước</button><button type="button" class="btn" id="examNext" ${examOnlyIndex >= total - 1 ? 'disabled' : ''}>Câu tiếp →</button></div></div>`
+      : `<div class="examOnlyFooter"><div class="examOnlyNav"><button type="button" class="btn" id="examPrev" ${examOnlyIndex <= 0 ? 'disabled' : ''}>← Câu trước</button><button type="button" class="btn" id="examNext" ${examOnlyIndex >= total - 1 ? 'disabled' : ''}>Câu tiếp →</button></div><button type="button" class="submitExam" id="examSubmit">Nộp bài</button></div>`;
+
     body.innerHTML = `
       <div class="examOnlyGridContainer">
         <section class="examOnlyCard">
           <div class="examOnlyTopline">
             <div>
-              <div class="examOnlyQuestionNo">Câu ${examOnlyIndex + 1} / ${total}</div>
-              <div class="examOnlyMeta">Đã làm: ${done()} / ${total} · Thời gian: <span id="examTimer">${time()}</span></div>
+              <div class="examOnlyQuestionNo">${titleHTML}</div>
+              <div class="examOnlyMeta">${subtitleHTML}</div>
             </div>
-            <button type="button" class="examOnlyExit" id="examOnlyExit">Thoát</button>
+            ${exitBtn}
           </div>
           <div class="examOnlyProgress"><div style="width:${p}%"></div></div>
-          <div class="qq">${E(c.question)}</div>
-          <div class="qimgs">${IMG(c)}</div>
-          <div class="examOnlyOptions">${opts}</div>
-          <div class="examOnlyNav">
-            <button type="button" class="btn" id="examPrev" ${examOnlyIndex <= 0 ? 'disabled' : ''}>← Câu trước</button>
-            <button type="button" class="btn" id="examNext" ${examOnlyIndex >= total - 1 ? 'disabled' : ''}>Câu tiếp →</button>
+          <div class="examOnlyContentBody">
+            <div class="examOnlyQuestionZone">
+              <div class="qq">${E(c.question)}</div>
+              <div class="qimgs">${IMG(c)}</div>
+            </div>
+            <div class="examOnlyRightZone">
+              <div class="examOnlyOptions">${opts}</div>
+              ${examOnlyReview && (c.answer_text || (c.explain || EXPLAIN(c))) ? `
+                <div class="examOnlyExplain">
+                  <div class="explainTitle">💡 Giải thích đáp án</div>
+                  <div class="explainContent"><b>Đáp án đúng: ${E(c.answer)}</b> · ${E(EXPLAIN(c))}</div>
+                </div>
+              ` : ''}
+            </div>
           </div>
-          <button type="button" class="submitExam" id="examSubmit">Nộp bài</button>
+          ${footerHTML}
         </section>
         <aside class="examOnlySidebar">
-          <div class="examSidebarHead">
-            <h4>Bản đồ câu hỏi</h4>
-          </div>
-          <div class="examSidebarGrid">
-            ${(qSet || []).map((_, i) => {
-              const isCurrent = examOnlyIndex === i;
-              const isAnswered = !!qSel[i];
-              return `<button type="button" class="examGridItem ${isCurrent ? 'active' : ''} ${isAnswered ? 'answered' : ''}" data-exam-jump="${i}">${i + 1}</button>`;
-            }).join('')}
-          </div>
+          <div class="examSidebarHead"><h4>Bản đồ câu hỏi</h4></div>
+          <div class="examSidebarGrid">${gridItems}</div>
         </aside>
       </div>
     `;
+    setTimerText();
   }
-  function result() { const body = $('quizBody'), s = score(), label = s.pct >= 90 ? 'Xuất sắc' : s.pct >= 70 ? 'Khá ổn rồi' : s.pct >= 50 ? 'Cần ôn thêm' : 'Nên làm lại vài vòng'; body.innerHTML = `<section class="examOnlyResult"><div class="examOnlyBadge">KẾT QUẢ KIỂM TRA</div><h2>${s.ok} / ${s.total} câu đúng</h2><div class="examOnlyScore">${s.pct}%</div><p>${label}</p><div class="examOnlyStats"><span>Đúng: <b>${s.ok}</b></span><span>Sai: <b>${s.bad}</b></span><span>Thời gian: <b>${time()}</b></span></div><div class="examOnlyActions"><button type="button" class="primary" id="examReviewBtn">Xem lại bài làm</button><button type="button" class="btn" id="examRetryBtn">Làm lại bộ này</button><button type="button" class="btn" id="examNewBtn">Tạo đề mới</button></div><div id="examReviewList" class="examOnlyReviewList hidden"></div></section>`; if (examOnlyReview) review() }
-  function review() { const list = $('examReviewList'); if (!list) return; list.classList.remove('hidden'); list.innerHTML = (qSet || []).map((c, i) => { let ch = qSel[i] || 'Chưa chọn', ok = S(ch) === S(c.answer); return `<div class="examOnlyReviewItem ${ok ? 'ok' : 'bad'}"><div class="examOnlyReviewHead">Câu ${i + 1} ${ok ? '✅ Đúng' : '❌ Sai'}</div><div class="examOnlyReviewQ">${E(c.question)}</div><div class="examOnlyReviewAns">Bạn chọn: <b>${E(ch)}</b></div><div class="examOnlyReviewAns">Đáp án đúng: <b>${E(c.answer)}</b></div><div class="examOnlyExplain">${E(A(c))}</div></div>` }).join('') }
-  function submit() { if (!confirm('Bạn chắc chắn muốn nộp bài?\n\nĐã làm: ' + done() + ' / ' + (qSet || []).length + ' câu')) return; examSubmitted = true; stopTimer(); saveExam(); result() }
-  function removeOldQuizUI() { document.querySelectorAll('#quiz .modeRow,#quiz .cntGrid:not(.examOnlyCountGrid),#practiceMode,#examMode').forEach(x => x.remove()) }
-  function bind() { markTab(); removeOldQuizUI(); setup(); let l = $('quizModeLabel'); if (l) l.textContent = 'Kiểm tra: nộp bài mới hiện đáp án'; let body = $('quizBody'); if (body && body.dataset.examOnlyBound !== '1') { body.dataset.examOnlyBound = '1'; body.addEventListener('click', e => { let o = e.target.closest('[data-exam-opt]'); if (o && !examSubmitted) { let c = qSet[examOnlyIndex], k = o.dataset.examOpt; if (c && String(c.answer || '').length > 1) { let set = new Set(String(qSel[examOnlyIndex] || '').split('').filter(Boolean)); set.has(k) ? set.delete(k) : set.add(k); qSel[examOnlyIndex] = Array.from(set).sort().join('') } else qSel[examOnlyIndex] = k; saveExam(); draw() } if (e.target.id === 'examPrev') { examOnlyIndex = Math.max(0, examOnlyIndex - 1); saveExam(); draw() } if (e.target.id === 'examNext') { examOnlyIndex = Math.min((qSet || []).length - 1, examOnlyIndex + 1); saveExam(); draw() } if (e.target.id === 'examSubmit') submit(); if (e.target.id === 'examReviewBtn') { examOnlyReview = true; saveExam(); review() } if (e.target.id === 'examRetryBtn') { qSel = {}; examSubmitted = false; examOnlyReview = false; examOnlyIndex = 0; startTimer(); saveExam(); draw() } if (e.target.id === 'examNewBtn' || e.target.id === 'examOnlyExit') { if (e.target.id === 'examOnlyExit' && !confirm('Thoát bài kiểm tra hiện tại?')) return; clearExam(); qSet = []; qSel = {}; examSubmitted = false; examOnlyReview = false; examOnlyIndex = 0; stopTimer(); let t = $('timer'); if (t) t.textContent = '00:00'; draw() } let jump = e.target.closest('[data-exam-jump]'); if (jump) { examOnlyIndex = +jump.dataset.examJump; saveExam(); draw(); } }) } restoreExam(); draw() }
-  try { renderQuiz = function () { setup(); draw() } } catch (e) { window.renderQuiz = function () { setup(); draw() } }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(bind, 120)); else setTimeout(bind, 120); setTimeout(bind, 900);
+  function timeText() { return examElapsed || '00:00'; }
+
+  function result() {
+    const body = $('quizBody');
+    if (!body) return;
+    const s = scoreExam();
+    const label = s.pct >= 90 ? 'Xuất sắc' : s.pct >= 70 ? 'Khá ổn rồi' : s.pct >= 50 ? 'Cần ôn thêm' : 'Nên làm lại vài vòng';
+    body.innerHTML = `<section class="examOnlyResult"><div class="examOnlyBadge">KẾT QUẢ KIỂM TRA</div><h2>${s.ok} / ${s.total} câu đúng</h2><div class="examOnlyScore">${s.pct}%</div><p>${label}</p><div class="examOnlyStats"><span>Đúng: <b>${s.ok}</b></span><span>Sai: <b>${s.bad}</b></span><span>Thời gian: <b>${timeText()}</b></span></div><div class="examOnlyActions"><button type="button" class="primary" id="examReviewBtn">Xem lại bài làm</button><button type="button" class="btn" id="examRetryBtn">Làm lại bộ này</button><button type="button" class="btn" id="examNewBtn">Tạo đề mới</button></div><div id="examReviewList" class="examOnlyReviewList hidden"></div></section>`;
+    if (examOnlyReview) review();
+  }
+
+  function review() {
+    const list = $('examReviewList');
+    if (!list) return;
+    list.classList.remove('hidden');
+    list.innerHTML = (qSet || []).map((c, i) => {
+      const ch = qSel[i] || '';
+      const correctAns = c.answer || '';
+      const ok = S(ch) === S(correctAns);
+      
+      const reviewOpts = Object.entries(c.options || {}).map(([k, v]) => {
+        const isUserChose = ch.includes(k);
+        const isCorrect = correctAns.includes(k);
+        
+        let stateClass = '';
+        let badgeHTML = '';
+        
+        if (isCorrect) {
+          stateClass = 'review-opt-correct';
+          badgeHTML = `<span class="review-opt-badge correct">✓</span>`;
+        } else if (isUserChose && !isCorrect) {
+          stateClass = 'review-opt-incorrect';
+          badgeHTML = `<span class="review-opt-badge incorrect">×</span>`;
+        } else {
+          stateClass = 'review-opt-normal';
+        }
+        
+        return `<div class="examReviewOpt ${stateClass}"><span class="qkey">${k}</span><span class="qtxt">${E(v)}</span>${badgeHTML}</div>`;
+      }).join('');
+
+      return `
+        <div class="examOnlyReviewItem ${ok ? 'item-correct' : 'item-incorrect'}">
+          <div class="examOnlyReviewHeader">
+            <span class="reviewItemNo">CÂU ${i + 1}</span>
+            <span class="reviewStatusBadge ${ok ? 'correct' : 'incorrect'}">${ok ? 'ĐÚNG' : 'SAI'}</span>
+          </div>
+          <div class="examOnlyReviewQ">${E(c.question)}</div>
+          <div class="qimgs">${IMG(c)}</div>
+          <div class="examOnlyReviewOptionsList">${reviewOpts}</div>
+          ${c.answer_text || (c.explain || EXPLAIN(c)) ? `
+            <div class="examOnlyExplain">
+              <div class="explainTitle">💡 Giải thích đáp án</div>
+              <div class="explainContent"><b>Đáp án đúng: ${E(c.answer)}</b> · ${E(EXPLAIN(c))}</div>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }).join('');
+  }
+
+  function submit() {
+    if (!confirm('Bạn chắc chắn muốn nộp bài?\n\nĐã làm: ' + done() + ' / ' + (qSet || []).length + ' câu')) return;
+    examElapsed = FMT(nowTimerMs());
+    examSubmitted = true;
+    stopTimer();
+    saveExam();
+    result();
+  }
+
+  function bind() {
+    markTab();
+    removeOldQuizUI();
+    setup();
+    const label = $('quizModeLabel');
+    if (label) label.textContent = 'Kiểm tra: nộp bài mới hiện đáp án';
+    const body = $('quizBody');
+    if (body && body.dataset.examOnlyBound !== '1') {
+      body.dataset.examOnlyBound = '1';
+
+      // KEYDOWN EVENT LISTENER FOR EXAM PANE (IN CLOSURE SCOPE)
+      document.addEventListener('keydown', e => {
+        if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+        if ($('quiz') && $('quiz').classList.contains('active')) {
+          if (e.key === 'ArrowRight') {
+            if (qSet && qSet.length) {
+              examOnlyIndex = Math.min(qSet.length - 1, examOnlyIndex + 1);
+              saveExam(); draw();
+            }
+            return;
+          }
+          if (e.key === 'ArrowLeft' || e.key === 'Backspace') {
+            if (qSet && qSet.length) {
+              examOnlyIndex = Math.max(0, examOnlyIndex - 1);
+              saveExam(); draw();
+            }
+            if (e.key === 'Backspace') e.preventDefault();
+            return;
+          }
+          if (e.key === 'Escape') {
+            if (examOnlyReview) {
+              examOnlyReview = false;
+              saveExam(); draw();
+            } else {
+              const exitBtn = $('examOnlyExit') || $('examOnlyExitToResult');
+              if (exitBtn) exitBtn.click();
+            }
+            return;
+          }
+          if (e.code === 'Space' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            e.preventDefault();
+          }
+        }
+      }, true);
+
+      body.addEventListener('click', e => {
+        const opt = e.target.closest('[data-exam-opt]');
+        if (opt && !examSubmitted && qSet && qSet.length) {
+          const c = qSet[examOnlyIndex];
+          const k = opt.dataset.examOpt;
+          if (c && String(c.answer || '').length > 1) {
+            const set = new Set(String(qSel[examOnlyIndex] || '').split('').filter(Boolean));
+            set.has(k) ? set.delete(k) : set.add(k);
+            qSel[examOnlyIndex] = Array.from(set).sort().join('');
+          } else qSel[examOnlyIndex] = k;
+          saveExam(); draw(); return;
+        }
+        if (e.target.id === 'examPrev') { examOnlyIndex = Math.max(0, examOnlyIndex - 1); saveExam(); draw(); return; }
+        if (e.target.id === 'examNext') { examOnlyIndex = Math.min((qSet || []).length - 1, examOnlyIndex + 1); saveExam(); draw(); return; }
+        if (e.target.id === 'examSubmit') { submit(); return; }
+        if (e.target.id === 'examReviewBtn') { examOnlyReview = true; saveExam(); draw(); return; }
+        if (e.target.id === 'examOnlyExitToResult') { examOnlyReview = false; saveExam(); draw(); return; }
+        if (e.target.id === 'examRetryBtn') { qSel = {}; examSubmitted = false; examOnlyReview = false; examOnlyIndex = 0; startTimer(0); saveExam(); draw(); return; }
+        if (e.target.id === 'examNewBtn' || e.target.id === 'examOnlyExit') {
+          if (e.target.id === 'examOnlyExit' && !confirm('Thoát bài kiểm tra hiện tại?')) return;
+          clearExam(); qSet = []; qSel = {}; examSubmitted = false; examOnlyReview = false; examOnlyIndex = 0; resetTimer(); draw(); return;
+        }
+        const jump = e.target.closest('[data-exam-jump]');
+        if (jump) { examOnlyIndex = +jump.dataset.examJump; saveExam(); draw(); }
+      });
+    }
+    restoreExam();
+    draw();
+  }
+
+  try { renderQuiz = function () { setup(); draw(); } } catch (e) { window.renderQuiz = function () { setup(); draw(); } }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(bind, 120)); else setTimeout(bind, 120);
+  setTimeout(bind, 900);
 })();
 // ===== FINAL_EXAM_ONLY_QUIZ_UI_20260627 END =====
 
@@ -4461,9 +4605,9 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
   function stats(data) { return { total: data.length, img: data.filter(hasImg).length, high: data.filter(q => risk(q) === 'high').length, medium: data.filter(q => risk(q) === 'medium').length, low: data.filter(q => risk(q) === 'low').length } }
   function ensureToolbar() { const list = $('studyList'); if (!list) return; let tool = $('libraryStableToolbar'); if (!tool) { tool = document.createElement('section'); tool.id = 'libraryStableToolbar'; tool.className = 'libraryStableToolbar'; tool.innerHTML = '<div class="libStableHead libStableHeadCompact"><div class="libStableInfo"><b id="libStableFilterText">Tất cả</b><em id="libStableCount">0 câu</em></div></div><div id="libStableSearchSlot"></div><div id="libStableFilters"></div>'; const searchBox = ($('search') || $('studySearch'))?.closest('.search'); (searchBox?.parentNode || list.parentNode).insertBefore(tool, searchBox || list) } const searchBox = ($('search') || $('studySearch'))?.closest('.search'); if (searchBox && $('libStableSearchSlot') && searchBox.parentNode !== $('libStableSearchSlot')) $('libStableSearchSlot').appendChild(searchBox); const input = $('search') || $('studySearch'); if (input) { input.placeholder = 'Tìm câu hoặc #12...'; if (!input.value) { try { input.value = localStorage.getItem(SEARCH_STORE) || '' } catch (e) { } } if (!$('libStableClear')) { const b = document.createElement('button'); b.id = 'libStableClear'; b.type = 'button'; b.textContent = '×'; b.title = 'Xóa tìm kiếm'; b.onclick = function () { input.value = ''; try { localStorage.removeItem(SEARCH_STORE) } catch (e) { } renderUnified(); input.focus() }; input.insertAdjacentElement('afterend', b) } input.oninput = function () { try { localStorage.setItem(SEARCH_STORE, input.value || '') } catch (e) { } renderUnified() }; $('libStableClear')?.classList.toggle('show', !!input.value.trim()) } }
   function renderFilters(base, shown) { ensureToolbar(); const box = $('libStableFilters'); if (!box) return; const s = stats(base), f = filterVal(); const filters = [['all', 'Tất cả', s.total], ['has_image', 'Có ảnh', s.img], ['high', 'Rủi ro cao', s.high], ['medium', 'Trung bình', s.medium], ['low', 'Thấp', s.low]]; box.innerHTML = '<div class="libStableFilterLine">' + filters.map(x => `<button type="button" class="${f === x[0] ? 'active' : ''}" data-stable-filter="${x[0]}">${x[1]} <small>${x[2]}</small></button>`).join('') + '</div>'; const ft = $('libStableFilterText'), ct = $('libStableCount'); if (ft) ft.textContent = 'Đang lọc: ' + (filters.find(x => x[0] === f)?.[1] || 'Tất cả'); if (ct) ct.textContent = shown.length + ' / ' + base.length + ' câu'; }
-  function miniImg(q) { const imgs = (q.images || []).map(imgSrc).filter(Boolean); return imgs.length ? `<div class="libraryV2Img"><img src="${esc(imgs[0])}" alt="Ảnh câu hỏi">${imgs.length > 1 ? `<span>+${imgs.length - 1}</span>` : ''}</div>` : '<div class="libraryV2Img empty"></div>' }
+  function miniImg(q) { const imgs = (q.images || []).map(imgSrc).filter(Boolean); return imgs.length ? `<div class="libraryV2Img noAutoImg" title="Có ${imgs.length} ảnh"><span>🖼 ${imgs.length}</span></div>` : '<div class="libraryV2Img empty"></div>' }
   function options(q) { const a = ans(q); return Object.entries(q.options || {}).map(([k, v]) => `<div class="libraryOption ${a.includes(String(k).toUpperCase()) ? 'correct' : ''}"><b>${esc(k)}</b><span>${hlt(v)}</span></div>`).join('') }
-  function images(q) { const imgs = (q.images || []).map(imgSrc).filter(Boolean); return imgs.length ? `<div class="libraryV2Images">${imgs.map((s, i) => `<img src="${esc(s)}" alt="Ảnh ${i + 1}">`).join('')}</div>` : '' }
+  function images(q, open) { const imgs = (q.images || []).map(imgSrc).filter(Boolean); if (!open || !imgs.length) return ''; return `<div class="libraryV2Images">${imgs.map((s, i) => `<img loading="lazy" src="${esc(s)}" alt="Ảnh ${i + 1}">`).join('')}</div>` }
   function card(q, i) {
     const a = ans(q) || '?', r = risk(q);
     const rawSearch = ($('search')?.value || $('studySearch')?.value || '').trim();
@@ -4474,7 +4618,7 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
       isMatchInDetails = queryObj.tokens.every(t => detailsText.includes(t));
     }
     const open = viewVal() === 'full' || libraryOpenNums.has(String(q.num)) || isMatchInDetails;
-    return `<article class="libraryV2Card libraryQuestionCard ${open ? 'open' : ''}" data-num="${esc(q.num || '')}" data-stable-index="${i}" style="border-left-color:${riskColor(r)}!important"><div class="libraryV2Row"><div class="libraryV2Num">Câu ${esc(q.num || i + 1)}</div><div class="libraryV2Main"><div class="libraryV2Question">${hlt(q.question || '')}</div><div class="libraryV2Answer"><b>Đáp án: ${esc(a)}</b><span>${hlt(answerText(q))}</span></div></div>${miniImg(q)}<div class="libraryV2Actions"><button type="button" class="libraryV2Study" data-stable-study="${i}" title="Học câu này">Học</button><button type="button" class="libraryV2Report" data-stable-report="${i}" title="Báo cáo / sửa câu">!</button><button type="button" class="libraryV2Toggle" data-stable-toggle="${i}">${open ? 'Thu gọn' : 'Mở'}</button></div></div><div class="libraryV2Details"><div class="libraryOptions">${options(q)}</div>${images(q)}</div></article>`
+    return `<article class="libraryV2Card libraryQuestionCard ${open ? 'open' : ''}" data-num="${esc(q.num || '')}" data-stable-index="${i}" style="border-left-color:${riskColor(r)}!important"><div class="libraryV2Row"><div class="libraryV2Num">Câu ${esc(q.num || i + 1)}</div><div class="libraryV2Main"><div class="libraryV2Question">${hlt(q.question || '')}</div><div class="libraryV2Answer"><b>Đáp án: ${esc(a)}</b><span>${hlt(answerText(q))}</span></div></div>${miniImg(q)}<div class="libraryV2Actions"><button type="button" class="libraryV2Study" data-stable-study="${i}" title="Học câu này">Học</button><button type="button" class="libraryV2Report" data-stable-report="${i}" title="Báo cáo / sửa câu">!</button><button type="button" class="libraryV2Toggle" data-stable-toggle="${i}">${open ? 'Thu gọn' : 'Mở'}</button></div></div><div class="libraryV2Details"><div class="libraryOptions">${options(q)}</div>${images(q, open)}</div></article>`
   }
   function renderUnified() { ensureToolbar(); const base = searchList(); lastList = base.filter(passFilter); renderFilters(base, lastList); const list = $('studyList'); if (!list) return; list.innerHTML = lastList.length ? lastList.map(card).join('') : '<div class="libraryStableEmpty"><b>Không có câu phù hợp.</b><button type="button" data-stable-clear-all>Xóa tìm kiếm & bộ lọc</button></div>'; if ($('libStableClear')) $('libStableClear').classList.toggle('show', !!(($('search') || $('studySearch'))?.value || '').trim()) }
   function setCurrent(q) { let idx = (pool || []).findIndex(x => Number(x.num) === Number(q.num)); if (idx < 0) { pool = [...RAW]; idx = pool.findIndex(x => Number(x.num) === Number(q.num)) } if (idx >= 0) { ci = idx; flipped = false; flipDir = 'horizontal'; try { renderCard() } catch (e) { } return true } return false }
@@ -4586,7 +4730,7 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
   const UPLOAD_FOLDER = window.APP_CONFIG?.CLOUDINARY_UPLOAD_FOLDER || 'learninghub/questions';
   const UPLOAD_URL = window.APP_CONFIG?.CLOUDINARY_UPLOAD_URL || (CLOUD_NAME ? `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload` : '');
   const SUBJECT_STORE = 'learninghub_subject_code_merged_v1';
-  const LIGHT_COLUMNS = 'id,subject_code,num,question,options,answer,answer_text,images,is_active,updated_at,has_image,error_risk,error_risk_reason';
+  const LIGHT_COLUMNS = 'id,subject_code,num,question,options,answer,answer_text,is_active,updated_at,has_image,error_risk,error_risk_reason';
   const FULL_COLUMNS = 'id,subject_code,num,question,options,answer,answer_text,images,is_active,updated_at,has_image,error_risk,error_risk_reason';
   let lastAutoReload = 0;
 
@@ -4752,7 +4896,8 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
       question: r.question, options: r.options || {}, answer: r.answer || '', answer_text: r.answer_text || '',
       images: cleanImages(r.images || []), is_active: r.is_active, updated_at: r.updated_at,
       has_image: r.has_image, error_risk: r.error_risk, error_risk_reason: r.error_risk_reason,
-      __imagesChecked: true, __imagesLoaded: true
+      __imagesChecked: !!(r.images && r.images.length), 
+      __imagesLoaded: !!(r.images && r.images.length)
     }));
     pool = [...RAW];
     const saved = +localStorage.getItem('learninghub_progress_' + code) || 0;
@@ -4761,6 +4906,7 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
     try { renderCard(); renderQuiz(); renderStudy(); } catch (e) { }
   }
 
+  let activeLoadPromises = {};
   async function loadSubjectLight(force = false) {
     const c = supa(), code = subject();
     if (!c || !user() || !code) return false;
@@ -4768,30 +4914,73 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
       const cached = readQuestionCache(code);
       if (cached && cached.length) { applyQuestionRows(cached, code); return true; }
     }
-    const { data, error } = await c.from('questions')
-      .select(LIGHT_COLUMNS)
-      .eq('is_active', true)
-      .eq('subject_code', code)
-      .order('num', { ascending: true });
-    if (error) { console.warn('[loadSubjectLight]', error); return false; }
-    writeQuestionCache(code, data || []);
-    applyQuestionRows(data || [], code);
-    return true;
+    
+    // Nếu môn học này đang được tải từ Supabase, trả về Promise đang chạy đó
+    if (activeLoadPromises[code]) {
+      console.warn('[loadSubjectLight] Trả về promise tải đang chạy cho môn:', code);
+      return activeLoadPromises[code];
+    }
+    
+    activeLoadPromises[code] = (async () => {
+      try {
+        const { data, error } = await c.from('questions')
+          .select(LIGHT_COLUMNS)
+          .eq('is_active', true)
+          .eq('subject_code', code)
+          .order('num', { ascending: true });
+        if (error) { console.warn('[loadSubjectLight]', error); return false; }
+        writeQuestionCache(code, data || []);
+        applyQuestionRows(data || [], code);
+        return true;
+      } finally {
+        delete activeLoadPromises[code];
+      }
+    })();
+    
+    return activeLoadPromises[code];
   }
 
   async function fetchImagesForCurrent(force = false) {
-    if (!force) return true;
     const c = supa();
     const q = (pool && pool[ci]) || null;
     if (!c || !q?.id) return false;
-    if (q.__imagesChecked && !force) return true;
+    
+    // Nếu đã kiểm tra ảnh rồi thì không fetch lại nữa, kể cả images rỗng.
+    if (!force && (q.__imagesLoaded || q.__imagesChecked)) return true;
+    if (q.__imagesLoading) return true;
+    
+    // Nếu câu hỏi không có ảnh và không force thì không cần fetch
+    if (!q.has_image && !force) {
+      q.__imagesChecked = true;
+      q.__imagesLoaded = true;
+      q.images = [];
+      return true;
+    }
+
     q.__imagesChecked = true;
+    q.__imagesLoading = true;
     const { data, error } = await c.from('questions').select('id,images,updated_at').eq('id', q.id).maybeSingle();
-    if (error || !data) return false;
+    q.__imagesLoading = false;
+    if (error || !data) { q.__imagesLoaded = true; return false; }
     q.images = cleanImages(data.images);
     q.updated_at = data.updated_at || q.updated_at;
     q.__imagesLoaded = true;
-    try { renderCard(); renderStudy(); } catch (e) { }
+    
+    // Lưu ngược lại cache localStorage
+    try {
+      const code = subject();
+      if (code && pool) {
+        const cacheData = pool.map(x => ({
+          id: x.id, subject_code: x.subject_code, num: x.num,
+          question: x.question, options: x.options, answer: x.answer, answer_text: x.answer_text,
+          images: x.images, is_active: x.is_active, updated_at: x.updated_at,
+          has_image: x.has_image, error_risk: x.error_risk, error_risk_reason: x.error_risk_reason
+        }));
+        writeQuestionCache(code, cacheData);
+      }
+    } catch(e){}
+
+    // Không renderCard ở đây để tránh render -> fetch ảnh -> render loop.
     return true;
   }
 
@@ -4818,7 +5007,8 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
   if (oldRenderCard && !oldRenderCard.__urlOnlyLazy) {
     renderCard = window.renderCard = function () {
       oldRenderCard.apply(this, arguments);
-      // setTimeout(()=>fetchImagesForCurrent(false), 0); // tắt auto fetch ảnh để tránh nhấp nháy
+      // Gọi fetchImagesForCurrent tự động sau khi render
+      setTimeout(() => fetchImagesForCurrent(false), 50);
     };
     renderCard.__urlOnlyLazy = true;
   }
@@ -5407,48 +5597,6 @@ window.clearLearningHubQuestionCache = function () {
 // ===== END COPILOT_FINAL_UPLOAD_DIAGNOSTIC_LOCK_20260628 =====
 
 
-// ===== COPILOT_FIX_SUBJECT_COUNTS_20260628 =====
-// Hiển thị đúng số câu từng môn bằng count từ bảng questions.
-(function () {
-  const STORE = 'learninghub_subject_code_merged_v1';
-  function $(id) { return document.getElementById(id); }
-  function supa() { return window.HODSupabase?.__client || null; }
-  function user() { return window.HODSupabase?.getUser?.() || null; }
-  async function countOne(code) {
-    const c = supa();
-    if (!c || !code) return null;
-    const { count, error } = await c.from('questions')
-      .select('id', { count: 'exact', head: true })
-      .eq('subject_code', code)
-      .eq('is_active', true);
-    if (error) { console.warn('[count questions]', code, error); return null; }
-    return Number(count) || 0;
-  }
-  async function refreshVisibleSubjectCounts() {
-    if (!user()) return;
-    const cards = [...document.querySelectorAll('.subjectCard[data-code]')];
-    if (!cards.length) return;
-    for (const card of cards) {
-      const code = card.dataset.code;
-      const n = await countOne(code);
-      if (n === null) continue;
-      const meta = card.querySelector('.subjectMeta span:first-child');
-      if (meta) meta.textContent = n + ' câu';
-      card.title = (card.title || code).replace(/(?:\d+|—) câu/g, n + ' câu');
-    }
-  }
-  document.addEventListener('click', e => {
-    if (e.target.closest('#subjectRefresh') || e.target.closest('#hodChangeSubjectBtn') || e.target.closest('#subjectTopChip')) {
-      setTimeout(refreshVisibleSubjectCounts, 800);
-      setTimeout(refreshVisibleSubjectCounts, 1800);
-    }
-  }, true);
-  window.__refreshVisibleSubjectCounts = refreshVisibleSubjectCounts;
-  document.addEventListener('DOMContentLoaded', () => setTimeout(refreshVisibleSubjectCounts, 1800));
-})();
-// ===== END COPILOT_FIX_SUBJECT_COUNTS_20260628 =====
-
-
 // ===== COPILOT_FIX_EDIT_SAVE_UPLOAD_DIRECT_20260628 =====
 // Fix: bấm Sửa flashcard -> chọn ảnh -> Lưu trực tiếp phải upload ảnh trước rồi mới lưu Supabase.
 (function () {
@@ -5608,3 +5756,955 @@ window.clearLearningHubQuestionCache = function () {
   function boot() { bindInput(); bindSave() } if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot(); setTimeout(boot, 500); setTimeout(boot, 1500); setInterval(boot, 1000);
 })();
 // ===== END COPILOT_ULTRA_FINAL_EDIT_UPLOAD_LOCK_20260628 =====
+
+// ===== COPILOT_CLEAN_RUNTIME_GUARD_20260628 =====
+// Bản sạch: gom cache request Supabase + đo băng thông + chống spam profile/question/image vào 1 block duy nhất.
+(function(){
+  if (window.__COPILOT_CLEAN_RUNTIME_GUARD_20260628) return;
+  window.__COPILOT_CLEAN_RUNTIME_GUARD_20260628 = true;
+  if (!window.fetch) return;
+
+  const SUBJECT_STORE = 'learninghub_subject_code_merged_v1';
+  const BW_TABLE = 'bandwidth_usage';
+  const nativeFetch = window.fetch.bind(window);
+  const cache = new Map();
+  const pending = new Map();
+
+  let bwBytes = 0;
+  let bwRequests = 0;
+  let bwReloads = 1;
+  let bwBusy = false;
+  let bwLastFlush = 0;
+  const BW_FLUSH_GAP = 3 * 60 * 1000;
+
+  function monthKey(d = new Date()) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  }
+  function supabaseOrigin() {
+    try { return new URL(window.APP_CONFIG?.SUPABASE_URL || '').origin; } catch(e) { return ''; }
+  }
+  function methodOf(init) {
+    return String(init?.method || 'GET').toUpperCase();
+  }
+  function urlOf(input) {
+    try {
+      const raw = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+      return new URL(raw, location.href);
+    } catch(e) { return null; }
+  }
+  function isSupabase(url) {
+    const origin = supabaseOrigin();
+    return !!url && !!origin && url.origin === origin;
+  }
+  function isRest(url) {
+    return isSupabase(url) && url.pathname.includes('/rest/v1/');
+  }
+  function isBandwidthLog(url) {
+    return isRest(url) && url.pathname.includes('/rest/v1/bandwidth_usage');
+  }
+  function currentSubject() {
+    return (localStorage.getItem(SUBJECT_STORE) || '').trim();
+  }
+  function normalizeUrlForSubject(url, method) {
+    if (!isRest(url)) return url;
+    if (method !== 'GET' && method !== 'HEAD') return url;
+    if (!url.pathname.includes('/rest/v1/questions')) return url;
+    const subject = currentSubject();
+    if (!subject) return url;
+    if (url.searchParams.get('is_active') === 'eq.true' && !url.searchParams.has('subject_code')) {
+      url.searchParams.set('subject_code', 'eq.' + subject);
+    }
+    return url;
+  }
+  function ttlFor(url, method) {
+    if (!isRest(url)) return 0;
+    if (method !== 'GET' && method !== 'HEAD') return 0;
+    if (isBandwidthLog(url)) return 0;
+
+    if (url.pathname.includes('/rest/v1/profiles')) return 10 * 60 * 1000;
+    if (url.pathname.includes('/rest/v1/subjects')) return 2 * 60 * 1000;
+    if (url.pathname.includes('/rest/v1/site_settings')) return 60 * 1000;
+
+    if (url.pathname.includes('/rest/v1/questions')) {
+      const select = url.searchParams.get('select') || '';
+      if (select === 'id') return 2 * 60 * 1000;
+      if (select === 'id,images,updated_at') return 2 * 60 * 1000;
+      if (url.searchParams.get('is_active') === 'eq.true') return 2 * 60 * 1000;
+    }
+    return 0;
+  }
+  function cacheKey(method, url) {
+    const params = Array.from(url.searchParams.entries()).sort((a,b) => (a[0]+'='+a[1]).localeCompare(b[0]+'='+b[1]));
+    return method + ' ' + url.origin + url.pathname + '?' + params.map(x => x[0] + '=' + x[1]).join('&');
+  }
+  async function packResponse(res, countBandwidth) {
+    const body = await res.clone().arrayBuffer();
+    if (countBandwidth) addBandwidth(body.byteLength || 0, 1);
+    return {
+      body,
+      status: res.status,
+      statusText: res.statusText,
+      headers: Array.from(res.headers.entries())
+    };
+  }
+  function unpack(pack) {
+    return new Response(pack.body.slice(0), {
+      status: pack.status,
+      statusText: pack.statusText,
+      headers: new Headers(pack.headers)
+    });
+  }
+  function addBandwidth(bytes, requests) {
+    const n = Number(bytes || 0);
+    if (Number.isFinite(n) && n > 0) bwBytes += n;
+    bwRequests += Number(requests || 0);
+    scheduleBandwidthFlush(false);
+  }
+  function shouldTrackBandwidth(url) {
+    if (!isSupabase(url)) return false;
+    if (isBandwidthLog(url)) return false;
+    return url.pathname.includes('/rest/v1/') ||
+      url.pathname.includes('/auth/v1/') ||
+      url.pathname.includes('/realtime/v1/') ||
+      url.pathname.includes('/storage/v1/') ||
+      url.pathname.includes('/functions/v1/');
+  }
+  function client() { return window.HODSupabase?.__client || null; }
+  function user() { return window.HODSupabase?.getUser?.() || null; }
+  function profile() { return window.HODSupabase?.getProfile?.() || null; }
+
+  async function flushBandwidth() {
+    const c = client();
+    const u = user();
+    if (bwBusy || !c || !u) return;
+    if (!bwBytes && !bwRequests && !bwReloads) return;
+    bwBusy = true;
+    const payload = {
+      period: monthKey(),
+      user_id: u.id,
+      user_email: u.email || profile()?.email || '',
+      page: 'app',
+      bytes: Math.round(bwBytes),
+      requests: Math.round(bwRequests),
+      reloads: Math.round(bwReloads),
+      updated_at: new Date().toISOString()
+    };
+    bwBytes = 0;
+    bwRequests = 0;
+    bwReloads = 0;
+    try { await c.from(BW_TABLE).insert(payload); } catch(e) {}
+    bwBusy = false;
+  }
+  function scheduleBandwidthFlush(force) {
+    const now = Date.now();
+    if (force) return flushBandwidth();
+    if (now - bwLastFlush < BW_FLUSH_GAP) return;
+    bwLastFlush = now;
+    setTimeout(flushBandwidth, 800);
+  }
+
+  window.fetch = async function(input, init) {
+    let url = urlOf(input);
+    const method = methodOf(init);
+    if (!url) return nativeFetch(input, init);
+
+    url = normalizeUrlForSubject(url, method);
+    let nextInput = input;
+    if (typeof input === 'string') nextInput = url.toString();
+    else if (input && input.url && input.url !== url.toString()) nextInput = new Request(url.toString(), input);
+
+    const track = shouldTrackBandwidth(url);
+    const ttl = ttlFor(url, method);
+
+    if (!ttl) {
+      const res = await nativeFetch(nextInput, init);
+      if (track) {
+        const len = Number(res.headers.get('content-length') || 0);
+        addBandwidth(Number.isFinite(len) && len > 0 ? len : 0, 1);
+      }
+      return res;
+    }
+
+    const key = cacheKey(method, url);
+    const hit = cache.get(key);
+    if (hit && Date.now() - hit.t < ttl) return unpack(hit.pack);
+
+    if (pending.has(key)) return unpack(await pending.get(key));
+
+    const job = nativeFetch(nextInput, init)
+      .then(res => packResponse(res, track))
+      .then(pack => {
+        cache.set(key, { t: Date.now(), pack });
+        pending.delete(key);
+        return pack;
+      })
+      .catch(err => {
+        pending.delete(key);
+        throw err;
+      });
+
+    pending.set(key, job);
+    return unpack(await job);
+  };
+
+  // Cache mềm getProfile để các interval UI không gây kiểm tra quyền quá dày.
+  setTimeout(function patchProfileGetter(){
+    const api = window.HODSupabase;
+    if (!api || !api.getProfile || api.__cleanProfileCached) return;
+    const oldGetProfile = api.getProfile.bind(api);
+    let last = null, at = 0;
+    api.getProfile = function(){
+      const now = Date.now();
+      const p = oldGetProfile();
+      if (p) { last = p; at = now; return p; }
+      if (last && now - at < 10000) return last;
+      return p;
+    };
+    api.__cleanProfileCached = true;
+  }, 0);
+
+  setInterval(() => scheduleBandwidthFlush(false), BW_FLUSH_GAP);
+  setTimeout(() => scheduleBandwidthFlush(true), 15000);
+  window.addEventListener('pagehide', () => scheduleBandwidthFlush(true));
+})();
+// ===== END COPILOT_CLEAN_RUNTIME_GUARD_20260628 =====
+
+// ===== COPILOT_FIX_EDIT_IMAGE_VISIBLE_AFTER_SAVE_20260628 =====
+// Fix: thêm ảnh trong form sửa xong không thấy hiện do reload bị cache / cột tải nhẹ thiếu images.
+// Lưu xong cập nhật local ngay, không chờ reload toàn bộ môn.
+(function(){
+  if(window.__COPILOT_FIX_EDIT_IMAGE_VISIBLE_AFTER_SAVE_20260628) return;
+  window.__COPILOT_FIX_EDIT_IMAGE_VISIBLE_AFTER_SAVE_20260628 = true;
+
+  function $(id){ return document.getElementById(id); }
+  function db(){ return window.HODSupabase?.__client || null; }
+  function user(){ return window.HODSupabase?.getUser?.() || null; }
+  function profile(){ return window.HODSupabase?.getProfile?.() || null; }
+  function canDirect(){
+    const r = String(profile()?.role || '').toLowerCase();
+    return !!user() && (r === 'admin' || r === 'editor');
+  }
+  function subjectCode(){ return localStorage.getItem('learninghub_subject_code_merged_v1') || ''; }
+  function currentDraft(){ try { return window.editDraft || editDraft || null; } catch(e){ return window.editDraft || null; } }
+  function imgUrl(im){
+    if(!im) return '';
+    if(typeof im === 'string') return im;
+    return im.src || im.url || im.secure_url || im.publicUrl || im.public_url || '';
+  }
+  function cleanImgs(list){
+    return (list || []).map(im => {
+      const src = imgUrl(im);
+      if(!src || !/^https?:\/\//i.test(src)) return null;
+      return typeof im === 'string' ? {src, url:src} : Object.assign({}, im, {src, url:src});
+    }).filter(Boolean);
+  }
+  function collectDraft(){
+    const d = currentDraft();
+    if(!d) return null;
+    const qEl = $('editQuestion') || document.querySelector('[data-edit-question]');
+    const aEl = $('editAnswer') || document.querySelector('[data-edit-answer]');
+    d.question = (qEl?.value || d.question || '').trim();
+    d.answer = (aEl?.value || d.answer || '').trim().toUpperCase().replace(/[^A-Z]/g,'');
+    const opts = {};
+    document.querySelectorAll('[data-opt],[data-edit-opt]').forEach(inp => {
+      const k = String(inp.dataset.opt || inp.dataset.editOpt || '').toUpperCase();
+      const v = String(inp.value || '').trim();
+      if(k && v) opts[k] = v;
+    });
+    if(Object.keys(opts).length) d.options = opts;
+    d.answer_text = typeof answerText === 'function' ? answerText(d) : (d.answer_text || '');
+    d.subject_code = d.subject_code || subjectCode();
+    d.images = cleanImgs(d.images);
+    return d;
+  }
+  async function getQuestionId(d){
+    if(d.id) return d.id;
+    const c = db();
+    if(!c || !d.num) return null;
+    const r = await c.from('questions').select('id').eq('subject_code', d.subject_code || subjectCode()).eq('num', d.num).maybeSingle();
+    return r.error || !r.data ? null : r.data.id;
+  }
+  function updateLocal(d, id){
+    const patch = Object.assign({}, d, { id, images: cleanImgs(d.images), has_image: !!(d.images && d.images.length), __imagesChecked:true, __imagesLoaded:true });
+    try {
+      if(Array.isArray(RAW)) {
+        const i = RAW.findIndex(q => String(q.id) === String(id) || Number(q.num) === Number(patch.num));
+        if(i >= 0) RAW[i] = Object.assign({}, RAW[i], patch);
+      }
+      if(Array.isArray(pool)) {
+        const j = pool.findIndex(q => String(q.id) === String(id) || Number(q.num) === Number(patch.num));
+        if(j >= 0) pool[j] = Object.assign({}, pool[j], patch);
+      }
+      const active = (pool && pool[ci]) || null;
+      if(active && (String(active.id) === String(id) || Number(active.num) === Number(patch.num))) {
+        Object.assign(active, patch);
+      }
+      if(typeof renderCard === 'function') renderCard();
+      if(typeof renderQuiz === 'function') renderQuiz();
+      if(typeof renderStudy === 'function') renderStudy();
+    } catch(e) { console.warn('[edit image local update]', e); }
+  }
+  async function saveDirectNoReload(){
+    if(!canDirect()) return false;
+    const c = db();
+    const d = collectDraft();
+    if(!c || !d) return false;
+    const id = await getQuestionId(d);
+    if(!id) { alert('Không tìm thấy ID câu hỏi trên Supabase.'); return true; }
+    const payload = {
+      question: d.question,
+      options: d.options || {},
+      answer: d.answer,
+      answer_text: d.answer_text,
+      images: cleanImgs(d.images),
+      has_image: !!(d.images && d.images.length),
+      updated_at: new Date().toISOString()
+    };
+    const r = await c.from('questions').update(payload).eq('id', id);
+    if(r.error) { alert('Lưu trực tiếp thất bại: ' + r.error.message); return true; }
+    d.images = payload.images;
+    $('editModal')?.classList.add('hidden');
+    updateLocal(Object.assign({}, d, payload), id);
+    if(typeof notify === 'function') notify('Đã lưu ảnh và cập nhật câu hiện tại');
+    return true;
+  }
+
+  document.addEventListener('click', async function(e){
+    const btn = e.target.closest?.('#saveEdit,[data-edit-preview-save]');
+    if(!btn || !btn.closest?.('#editModal')) return;
+    if(!canDirect()) return;
+    e.preventDefault?.();
+    e.stopPropagation?.();
+    e.stopImmediatePropagation?.();
+    const oldText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Đang lưu...';
+    try { await saveDirectNoReload(); }
+    finally { btn.disabled = false; btn.textContent = oldText || 'Lưu trực tiếp'; }
+  }, true);
+})();
+// ===== END COPILOT_FIX_EDIT_IMAGE_VISIBLE_AFTER_SAVE_20260628 =====
+
+
+
+// ===== APP_REALTIME_CACHE_INVALIDATE_20260629 =====
+// Khi Supabase questions/subjects đổi, tự xóa cache để F5 lần sau nhận dữ liệu mới.
+(function(){
+  if(window.__APP_REALTIME_CACHE_INVALIDATE_20260629) return;
+  window.__APP_REALTIME_CACHE_INVALIDATE_20260629 = true;
+
+  let channel = null;
+  let tries = 0;
+
+  function getClient(){
+    try{
+      if(window.HODSupabase && window.HODSupabase.__client) return window.HODSupabase.__client;
+      if(window.supabase && window.APP_CONFIG?.SUPABASE_URL && window.APP_CONFIG?.SUPABASE_ANON_KEY){
+        if(!window.__lhCacheRealtimeClient){
+          window.__lhCacheRealtimeClient = window.supabase.createClient(window.APP_CONFIG.SUPABASE_URL, window.APP_CONFIG.SUPABASE_ANON_KEY);
+        }
+        return window.__lhCacheRealtimeClient;
+      }
+    }catch(e){}
+    return null;
+  }
+  function clear(kind){
+    try{
+      if(typeof window.clearLearningHubSupabaseCache === 'function') window.clearLearningHubSupabaseCache(kind);
+      else if(kind === 'questions' && typeof window.clearLearningHubQuestionCache === 'function') window.clearLearningHubQuestionCache();
+      console.info('[LearningHub cache] cleared:', kind);
+    }catch(e){}
+  }
+  function start(){
+    if(channel) return;
+    const c = getClient();
+    if(!c){
+      if(tries++ < 30) setTimeout(start, 500);
+      return;
+    }
+    try{
+      channel = c.channel('learninghub-cache-invalidate-v1')
+        .on('postgres_changes', {event:'*', schema:'public', table:'questions'}, function(){ clear('questions'); })
+        .on('postgres_changes', {event:'*', schema:'public', table:'subjects'}, function(){ clear('subjects'); clear('questions'); })
+        .subscribe(function(status){
+          if(status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED'){
+            channel = null;
+            setTimeout(start, 1500);
+          }
+        });
+    }catch(e){
+      channel = null;
+      if(tries++ < 30) setTimeout(start, 1000);
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function(){ setTimeout(start, 1200); });
+  setTimeout(start, 2000);
+})();
+// ===== END APP_REALTIME_CACHE_INVALIDATE_20260629 =====
+
+
+// ===== TAB_SWITCH_NO_BANDWIDTH_20260629 =====
+// Khi chỉ bấm đổi tab trong app: không gửi last_activity / bandwidth_usage.
+// Mục tiêu: tab qua lại không tạo network nếu không có dữ liệu mới.
+(function(){
+  if(window.__TAB_SWITCH_NO_BANDWIDTH_20260629) return;
+  window.__TAB_SWITCH_NO_BANDWIDTH_20260629 = true;
+
+  const SUPPRESS_MS = 8000;
+  const nativeFetch = window.fetch ? window.fetch.bind(window) : null;
+  if(!nativeFetch) return;
+
+  function markTabSwitch(){
+    window.__LH_SUPPRESS_TAB_NETWORK_UNTIL = Date.now() + SUPPRESS_MS;
+  }
+  function isSuppressed(){
+    return Date.now() < Number(window.__LH_SUPPRESS_TAB_NETWORK_UNTIL || 0);
+  }
+  function methodOf(init){
+    return String(init && init.method ? init.method : 'GET').toUpperCase();
+  }
+  function urlOf(input){
+    try{ return new URL(typeof input === 'string' ? input : input.url, location.href); }catch(e){ return null; }
+  }
+  function bodyOf(init){
+    try{ return String(init && init.body ? init.body : ''); }catch(e){ return ''; }
+  }
+  function isProfileActivity(url, init){
+    const m = methodOf(init);
+    if(m !== 'PATCH' && m !== 'PUT') return false;
+    if(!url || !/\/rest\/v1\/profiles\b/.test(url.pathname)) return false;
+    const body = bodyOf(init);
+    return /last_activity|last_login/.test(body) && !/role|approved|blocked|is_blocked|status/.test(body);
+  }
+  function isBandwidthInsert(url, init){
+    const m = methodOf(init);
+    if(m !== 'POST' && m !== 'PATCH' && m !== 'PUT') return false;
+    return !!url && /\/rest\/v1\/bandwidth_usage\b/.test(url.pathname);
+  }
+
+  window.fetch = function(input, init){
+    const url = urlOf(input);
+    if(isSuppressed() && isProfileActivity(url, init)){
+      return Promise.resolve(new Response(null, {status:204, statusText:'No Content', headers:{'x-learninghub-skip':'tab-profile-activity'}}));
+    }
+    if(isSuppressed() && isBandwidthInsert(url, init)){
+      return Promise.resolve(new Response('[]', {status:201, statusText:'Created', headers:{'content-type':'application/json','x-learninghub-skip':'tab-bandwidth-log'}}));
+    }
+    return nativeFetch(input, init);
+  };
+
+  // Bắt sớm mọi thao tác bấm tab để chặn network phụ.
+  ['pointerdown','mousedown','touchstart','click'].forEach(ev => {
+    document.addEventListener(ev, function(e){
+      if(e.target && e.target.closest && e.target.closest('.tab,[data-tab]')) markTabSwitch();
+    }, true);
+  });
+
+  // Bọc hàm switchTab nếu có.
+  const oldSwitchTab = typeof switchTab === 'function' ? switchTab : null;
+  if(oldSwitchTab && !window.__switchTabNoBandwidthPatched){
+    window.__switchTabNoBandwidthPatched = true;
+    switchTab = function(){
+      markTabSwitch();
+      return oldSwitchTab.apply(this, arguments);
+    };
+    window.switchTab = switchTab;
+  }
+})();
+// ===== END TAB_SWITCH_NO_BANDWIDTH_20260629 =====
+
+
+// ===== PAGE_RETURN_NO_BANDWIDTH_20260629 =====
+// Khi chuyển qua tab trình duyệt khác rồi quay lại trang học: không gửi activity/bandwidth log, ưu tiên cache.
+(function(){
+  if(window.__PAGE_RETURN_NO_BANDWIDTH_20260629) return;
+  window.__PAGE_RETURN_NO_BANDWIDTH_20260629 = true;
+
+  const nativeFetch = window.fetch ? window.fetch.bind(window) : null;
+  if(!nativeFetch) return;
+
+  const SUPPRESS_MS = 90 * 1000;
+  const CACHE_PREFIX = 'lh_f5_cache:';
+
+  function markReturn(){
+    window.__LH_SUPPRESS_PAGE_RETURN_UNTIL = Date.now() + SUPPRESS_MS;
+    window.__LH_LAST_USER_ACTION_KIND = 'page-return';
+  }
+  function suppressed(){
+    return Date.now() < Number(window.__LH_SUPPRESS_PAGE_RETURN_UNTIL || 0);
+  }
+  function methodOf(init){ return String(init && init.method ? init.method : 'GET').toUpperCase(); }
+  function urlOf(input){ try{ return new URL(typeof input === 'string' ? input : input.url, location.href); }catch(e){ return null; } }
+  function bodyOf(init){ try{ return String(init && init.body ? init.body : ''); }catch(e){ return ''; } }
+  function headersOf(obj){
+    const out = {'x-learninghub-cache':'page-return'};
+    try{ Object.entries(obj || {}).forEach(([k,v]) => out[k] = v); }catch(e){}
+    return out;
+  }
+  function cacheKey(url){ return url.origin + url.pathname + url.search; }
+  function readCache(url){
+    try{
+      const key = CACHE_PREFIX + cacheKey(url);
+      const raw = sessionStorage.getItem(key);
+      if(!raw) return null;
+      const entry = JSON.parse(raw);
+      if(!entry || !entry.exp || Date.now() > entry.exp) return null;
+      return entry;
+    }catch(e){ return null; }
+  }
+  function responseFromCache(entry){
+    return new Response(entry.body, {
+      status: entry.status || 200,
+      statusText: entry.statusText || 'OK',
+      headers: headersOf(entry.headers)
+    });
+  }
+  function isCacheableGet(url, init){
+    if(methodOf(init) !== 'GET') return false;
+    if(!url || !/\/rest\/v1\//.test(url.pathname)) return false;
+    return /\/(questions|subjects|profiles|site_settings)\b/.test(url.pathname);
+  }
+  function isProfileActivity(url, init){
+    const m = methodOf(init);
+    if(m !== 'PATCH' && m !== 'PUT') return false;
+    if(!url || !/\/rest\/v1\/profiles\b/.test(url.pathname)) return false;
+    const body = bodyOf(init);
+    if(/last_login/.test(body)) return false; // đăng nhập/mở web phải được ghi nhận
+    return /last_activity|last_login|avatar_url|email/.test(body) && !/role|approved|blocked|is_blocked|status/.test(body);
+  }
+  function isBandwidthWrite(url, init){
+    const m = methodOf(init);
+    if(m !== 'POST' && m !== 'PATCH' && m !== 'PUT') return false;
+    return !!url && /\/rest\/v1\/bandwidth_usage\b/.test(url.pathname);
+  }
+
+  window.fetch = function(input, init){
+    const url = urlOf(input);
+
+    if(suppressed()){
+      if(isProfileActivity(url, init)){
+        return Promise.resolve(new Response(null, {status:204, statusText:'No Content', headers:{'x-learninghub-skip':'page-return-profile'}}));
+      }
+      if(isBandwidthWrite(url, init)){
+        return Promise.resolve(new Response('[]', {status:201, statusText:'Created', headers:{'content-type':'application/json','x-learninghub-skip':'page-return-bandwidth'}}));
+      }
+      if(isCacheableGet(url, init)){
+        const entry = readCache(url);
+        if(entry) return Promise.resolve(responseFromCache(entry));
+      }
+    }
+
+    return nativeFetch(input, init);
+  };
+
+  document.addEventListener('visibilitychange', function(){
+    if(!document.hidden) markReturn();
+  });
+  window.addEventListener('focus', markReturn);
+  window.addEventListener('pageshow', markReturn);
+})();
+// ===== END PAGE_RETURN_NO_BANDWIDTH_20260629 =====
+
+
+// ===== FIX_ARIA_HIDDEN_SUBJECT_GATE_20260629 =====
+// Fix warning: Blocked aria-hidden because focused button stayed inside #subjectGate.
+(function(){
+  if(window.__FIX_ARIA_HIDDEN_SUBJECT_GATE_20260629) return;
+  window.__FIX_ARIA_HIDDEN_SUBJECT_GATE_20260629 = true;
+  function blurInsideGate(){
+    const gate = document.getElementById('subjectGate');
+    const active = document.activeElement;
+    if(gate && active && gate.contains(active)){
+      try{ active.blur(); }catch(e){}
+    }
+  }
+  function patchGate(){
+    const gate = document.getElementById('subjectGate');
+    if(!gate || gate.__ariaFocusPatch) return;
+    gate.__ariaFocusPatch = true;
+    const obs = new MutationObserver(() => {
+      if(gate.classList.contains('hidden') || gate.getAttribute('aria-hidden') === 'true') blurInsideGate();
+    });
+    obs.observe(gate, {attributes:true, attributeFilter:['class','aria-hidden']});
+  }
+  ['click','pointerdown','mousedown','touchstart'].forEach(ev => {
+    document.addEventListener(ev, e => {
+      if(e.target && e.target.closest && e.target.closest('#subjectEnter,#subjectLogout,#subjectGate .close,#subjectGate [data-close]')){
+        setTimeout(blurInsideGate, 0);
+      }
+    }, true);
+  });
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', patchGate); else patchGate();
+  setTimeout(patchGate, 500);
+})();
+// ===== END FIX_ARIA_HIDDEN_SUBJECT_GATE_20260629 =====
+
+
+
+
+// ===== SUBJECT_COUNTS_ONCE_CACHE_20260629 =====
+// Hiện số câu từng môn theo kiểu tiết kiệm:
+// - Lần đầu trong trình duyệt mới đếm các môn chưa có cache.
+// - F5/load lại dùng localStorage, không query lại.
+// - Khi realtime báo questions/subjects đổi thì đánh dấu dirty, lần sau mới cập nhật lại.
+(function(){
+  if(window.__SUBJECT_COUNTS_ONCE_CACHE_20260629) return;
+  window.__SUBJECT_COUNTS_ONCE_CACHE_20260629 = true;
+
+  const STORE = 'learninghub_subject_counts_cache_v3';
+  const DIRTY = 'learninghub_subject_counts_dirty_v3';
+  const pending = new Set();
+
+  function client(){ return window.HODSupabase?.__client || null; }
+  function user(){ return window.HODSupabase?.getUser?.() || null; }
+  function activeSubject(){ return localStorage.getItem('learninghub_subject_code_merged_v1') || ''; }
+  function cssEscape(s){ try { return CSS.escape(String(s)); } catch(e) { return String(s).replace(/"/g,'\\"'); } }
+  function read(){
+    try { return JSON.parse(localStorage.getItem(STORE) || '{}') || {}; } catch(e) { return {}; }
+  }
+  function write(data){
+    try { localStorage.setItem(STORE, JSON.stringify(data || {})); } catch(e) {}
+  }
+  function dirty(){ return localStorage.getItem(DIRTY) === '1'; }
+  function setDirty(on=true){ try { on ? localStorage.setItem(DIRTY,'1') : localStorage.removeItem(DIRTY); } catch(e) {} }
+  function ensureStore(){
+    const x = read();
+    x.counts = x.counts || {};
+    x.confirmed = x.confirmed || {};
+    x.updated_at = x.updated_at || '';
+    return x;
+  }
+  function localCount(code){
+    try{
+      const active = activeSubject();
+      if(active === code && Array.isArray(RAW) && RAW.length) return RAW.length;
+      if(Array.isArray(RAW)){
+        const n = RAW.filter(q => (q.subject_code || active) === code).length;
+        return n > 0 ? n : null;
+      }
+    }catch(e){}
+    return null;
+  }
+  function setCardCount(code, n){
+    const count = Number(n || 0);
+    document.querySelectorAll('.subjectCard[data-code="'+cssEscape(code)+'"]').forEach(card => {
+      const meta = card.querySelector('.subjectMeta span:first-child');
+      if(meta) meta.textContent = count + ' câu';
+      card.title = (card.title || code).replace(/(?:\d+|—) câu/g, count + ' câu');
+    });
+  }
+  function paint(){
+    const store = ensureStore();
+    document.querySelectorAll('.subjectCard[data-code]').forEach(card => {
+      const code = card.dataset.code;
+      const n = localCount(code);
+      if(Number.isFinite(Number(n)) && Number(n) > 0) {
+        setCardCount(code, Number(n));
+        return;
+      }
+      if(store.confirmed[code]) setCardCount(code, Number(store.counts[code] || 0));
+    });
+  }
+  async function countOne(code){
+    const c = client();
+    if(!c || !code) return null;
+    const { count, error } = await c.from('questions')
+      .select('id', { count:'exact', head:true })
+      .eq('subject_code', code)
+      .eq('is_active', true);
+    if(error) { console.warn('[subject count]', code, error); return null; }
+    return Number(count || 0);
+  }
+  async function refresh(force=false){
+    if(!user()) return;
+    const cards = [...document.querySelectorAll('.subjectCard[data-code]')];
+    if(!cards.length) return;
+    const store = ensureStore();
+    const must = force || dirty();
+
+    paint();
+
+    const codes = cards.map(card => card.dataset.code).filter(Boolean);
+    const need = codes.filter(code => {
+      const n = localCount(code);
+      if(Number.isFinite(Number(n)) && Number(n) > 0) return false;
+      return must || !store.confirmed[code];
+    });
+    if(!need.length) return;
+
+    for(const code of need){
+      if(pending.has(code)) continue;
+      pending.add(code);
+      const n = await countOne(code);
+      if(n !== null){
+        store.counts[code] = n;
+        store.confirmed[code] = true;
+        store.updated_at = new Date().toISOString();
+        write(store);
+        setCardCount(code, n);
+      }
+      pending.delete(code);
+    }
+    setDirty(false);
+  }
+
+  const oldClear = window.clearLearningHubSupabaseCache;
+  window.clearLearningHubSupabaseCache = function(kind){
+    if(!kind || kind === 'all' || kind === 'questions' || kind === 'subjects') setDirty(true);
+    return typeof oldClear === 'function' ? oldClear.apply(this, arguments) : undefined;
+  };
+
+  window.refreshSubjectCountsOnce = function(){ return refresh(true); };
+
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(paint, 300);
+    setTimeout(() => refresh(false), 1200);
+    setTimeout(() => refresh(false), 2600);
+  });
+  document.addEventListener('click', e => {
+    if(e.target.closest('#subjectRefresh')) setTimeout(() => refresh(true), 600);
+    if(e.target.closest('#hodChangeSubjectBtn,#subjectTopChip')){
+      setTimeout(paint, 300);
+      setTimeout(() => refresh(false), 1200);
+      setTimeout(() => refresh(false), 2600);
+    }
+  }, true);
+})();
+// ===== END SUBJECT_COUNTS_ONCE_CACHE_20260629 =====
+
+
+// ===== ACTIVE_SUBJECT_COUNT_SYNC_20260629 =====
+// Nếu môn đang chọn đã load câu hỏi, số câu trên thẻ môn phải lấy từ RAW/pool ngay, không để cache 0 đè lên.
+(function(){
+  if(window.__ACTIVE_SUBJECT_COUNT_SYNC_20260629) return;
+  window.__ACTIVE_SUBJECT_COUNT_SYNC_20260629 = true;
+
+  const STORE = 'learninghub_subject_counts_cache_v3';
+  const SUBJECT_STORE = 'learninghub_subject_code_merged_v1';
+
+  function code(){ return localStorage.getItem(SUBJECT_STORE) || ''; }
+  function read(){ try{return JSON.parse(localStorage.getItem(STORE) || '{}') || {};}catch(e){return {};} }
+  function write(x){ try{localStorage.setItem(STORE, JSON.stringify(x || {}));}catch(e){} }
+  function cssEscape(s){ try{return CSS.escape(String(s));}catch(e){return String(s).replace(/"/g,'\\"');} }
+  function loadedCount(){
+    try{
+      if(Array.isArray(RAW) && RAW.length) return RAW.length;
+      if(Array.isArray(pool) && pool.length) return pool.length;
+    }catch(e){}
+    return 0;
+  }
+  function setCardCount(subject, n){
+    if(!subject || !Number.isFinite(Number(n)) || Number(n) <= 0) return;
+    const count = Number(n);
+    document.querySelectorAll('.subjectCard[data-code="'+cssEscape(subject)+'"]').forEach(card => {
+      const meta = card.querySelector('.subjectMeta span:first-child');
+      if(meta) meta.textContent = count + ' câu';
+      card.title = (card.title || subject).replace(/(?:\d+|—|0) câu/g, count + ' câu');
+    });
+    const store = read();
+    store.counts = store.counts || {};
+    store.confirmed = store.confirmed || {};
+    store.counts[subject] = count;
+    store.confirmed[subject] = true;
+    store.updated_at = new Date().toISOString();
+    write(store);
+  }
+  function syncActiveSubjectCount(){
+    const subject = code();
+    const n = loadedCount();
+    if(subject && n > 0) setCardCount(subject, n);
+  }
+
+  window.syncActiveSubjectCount = syncActiveSubjectCount;
+
+  const oldLoadCurrent = window.loadCurrentSubjectOnly;
+  if(typeof oldLoadCurrent === 'function' && !oldLoadCurrent.__activeCountPatched){
+    window.loadCurrentSubjectOnly = async function(){
+      const out = await oldLoadCurrent.apply(this, arguments);
+      setTimeout(syncActiveSubjectCount, 50);
+      setTimeout(syncActiveSubjectCount, 300);
+      return out;
+    };
+    window.loadCurrentSubjectOnly.__activeCountPatched = true;
+  }
+
+  const oldLoadBySubject = window.loadBySubject;
+  if(typeof oldLoadBySubject === 'function' && !oldLoadBySubject.__activeCountPatched){
+    window.loadBySubject = async function(){
+      const out = await oldLoadBySubject.apply(this, arguments);
+      setTimeout(syncActiveSubjectCount, 50);
+      setTimeout(syncActiveSubjectCount, 300);
+      return out;
+    };
+    window.loadBySubject.__activeCountPatched = true;
+  }
+
+  const oldRenderCard = typeof renderCard === 'function' ? renderCard : null;
+  if(oldRenderCard && !window.__renderCardActiveCountPatched){
+    window.__renderCardActiveCountPatched = true;
+    renderCard = function(){
+      const out = oldRenderCard.apply(this, arguments);
+      setTimeout(syncActiveSubjectCount, 0);
+      return out;
+    };
+    window.renderCard = renderCard;
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(syncActiveSubjectCount, 500);
+    setTimeout(syncActiveSubjectCount, 1500);
+  });
+  setInterval(() => {
+    const gate = document.getElementById('subjectGate');
+    if(gate && !gate.classList.contains('hidden')) syncActiveSubjectCount();
+  }, 800);
+})();
+// ===== END ACTIVE_SUBJECT_COUNT_SYNC_20260629 =====
+
+
+// ===== SUBJECTS_CACHE_BUST_AFTER_ADD_20260629 =====
+// Sau khi thêm môn, ép request subjects đi network 1 lần để danh sách cập nhật ngay, không bị cache cũ giữ lại.
+(function(){
+  if(window.__SUBJECTS_CACHE_BUST_AFTER_ADD_20260629) return;
+  window.__SUBJECTS_CACHE_BUST_AFTER_ADD_20260629 = true;
+  const nativeFetch = window.fetch ? window.fetch.bind(window) : null;
+  if(!nativeFetch) return;
+  function methodOf(init){ return String(init && init.method ? init.method : 'GET').toUpperCase(); }
+  function urlOf(input){ try { return new URL(typeof input === 'string' ? input : input.url, location.href); } catch(e){ return null; } }
+  function isDirty(){
+    const n = Number(localStorage.getItem('learninghub_subjects_dirty_v3') || 0);
+    return n && Date.now() - n < 2 * 60 * 1000;
+  }
+  window.fetch = function(input, init){
+    let url = urlOf(input);
+    if(url && methodOf(init) === 'GET' && /\/rest\/v1\/subjects\b/.test(url.pathname) && isDirty()){
+      // offset=0 là tham số hợp lệ của PostgREST, dùng để đổi cache key nhưng không đổi dữ liệu.
+      if(!url.searchParams.has('offset')) url.searchParams.set('offset','0');
+      if(!url.searchParams.has('limit')) url.searchParams.set('limit','1000');
+      const next = typeof input === 'string' ? url.toString() : new Request(url.toString(), input);
+      return nativeFetch(next, init).then(res => {
+        try { localStorage.removeItem('learninghub_subjects_dirty_v3'); } catch(e) {}
+        return res;
+      });
+    }
+    return nativeFetch(input, init);
+  };
+})();
+// ===== END SUBJECTS_CACHE_BUST_AFTER_ADD_20260629 =====
+
+
+// ===== COPILOT_BANDWIDTH_DISCORD_ALERT_20260629 =====
+// Gửi cảnh báo Discord khi user vượt ngưỡng băng thông đã đặt trong Admin > Băng thông.
+// Chạy ít: chỉ kiểm tra sau lần ghi bandwidth, tối đa 1 cảnh báo / user / tháng / ngưỡng trên trình duyệt đó.
+(function(){
+  if(window.__COPILOT_BANDWIDTH_DISCORD_ALERT_20260629) return;
+  window.__COPILOT_BANDWIDTH_DISCORD_ALERT_20260629 = true;
+
+  const SETTING_KEY = 'bandwidth_alert_threshold_mb';
+  const MB = 1024 * 1024;
+  const DISCORD_URL = 'https://discord.com/api/webhooks/1519452717947420732/j-EVKdyuRYHRXU6MJbW9z_2lAy-wV2XnEOVULJEtDSgtignSVh2fWTTJKFgHj2MgoTJQ';
+  let checking = false;
+
+  function api(){ return window.HODSupabase || null; }
+  function client(){ return api()?.__client || null; }
+  function user(){ return api()?.getUser?.() || null; }
+  function profile(){ return api()?.getProfile?.() || null; }
+  function monthKey(d = new Date()){ return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
+  function fmtBytes(n){
+    n = Number(n || 0);
+    if(n >= 1073741824) return (n / 1073741824).toFixed(2) + ' GB';
+    if(n >= 1048576) return (n / 1048576).toFixed(2) + ' MB';
+    if(n >= 1024) return (n / 1024).toFixed(1) + ' KB';
+    return n + ' B';
+  }
+
+  async function getThresholdMb(){
+    const c = client();
+    if(!c) return 0;
+    try{
+      const r = await c.from('site_settings').select('value').eq('key', SETTING_KEY).maybeSingle();
+      if(r.error || !r.data) return 0;
+      const v = r.data.value;
+      const mb = Number(typeof v === 'object' ? (v.mb ?? v.value ?? 0) : String(v).replace(/"/g,''));
+      return Number.isFinite(mb) ? mb : 0;
+    }catch(e){ return 0; }
+  }
+
+  async function getUserMonthUsage(period, uid){
+    const c = client();
+    if(!c) return 0;
+    const r = await c.from('bandwidth_usage')
+      .select('bytes')
+      .eq('period', period)
+      .eq('user_id', uid)
+      .eq('page', 'app')
+      .limit(5000);
+    if(r.error) throw r.error;
+    return (r.data || []).reduce((sum, x) => sum + Number(x.bytes || 0), 0);
+  }
+
+  async function sendDiscord(totalBytes, thresholdMb){
+    const u = user();
+    const p = profile();
+    const email = u?.email || p?.email || 'Không rõ email';
+    const payload = {
+      embeds: [{
+        title: '🚨 CẢNH BÁO BĂNG THÔNG USER',
+        color: 15158332,
+        fields: [
+          { name: 'Tài khoản', value: String(email), inline: true },
+          { name: 'Đã dùng', value: fmtBytes(totalBytes), inline: true },
+          { name: 'Ngưỡng', value: thresholdMb + ' MB / tháng', inline: true },
+          { name: 'Tháng', value: monthKey(), inline: true },
+          { name: 'Thời điểm', value: new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }), inline: false }
+        ]
+      }]
+    };
+    try{ await fetch(DISCORD_URL, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)}); }
+    catch(e){ console.warn('[bandwidth discord alert]', e); }
+  }
+
+  async function checkBandwidthAlert(force=false){
+    const c = client();
+    const u = user();
+    if(!c || !u || checking) return false;
+    checking = true;
+    try{
+      const thresholdMb = await getThresholdMb();
+      if(!thresholdMb || thresholdMb <= 0) return false;
+      const period = monthKey();
+      const total = await getUserMonthUsage(period, u.id);
+      if(total < thresholdMb * MB) return false;
+      const sentKey = 'lh_bw_discord_alert_sent:' + period + ':' + u.id + ':' + thresholdMb;
+      if(!force && localStorage.getItem(sentKey)) return false;
+      localStorage.setItem(sentKey, String(Date.now()));
+      await sendDiscord(total, thresholdMb);
+      return true;
+    }catch(e){
+      console.warn('[bandwidth alert check]', e?.message || e);
+      return false;
+    }finally{
+      checking = false;
+    }
+  }
+
+  window.LH_checkBandwidthAlertNow = function(){ return checkBandwidthAlert(true); };
+
+  // Hook vào hàm ghi băng thông chắc chắn nếu đang có.
+  const oldWrite = window.LH_writeAppBandwidthNow;
+  if(typeof oldWrite === 'function' && !oldWrite.__bwAlertHooked){
+    const wrapped = async function(){
+      const out = await oldWrite.apply(this, arguments);
+      setTimeout(() => checkBandwidthAlert(false), 1500);
+      return out;
+    };
+    wrapped.__bwAlertHooked = true;
+    window.LH_writeAppBandwidthNow = wrapped;
+  }
+
+  // Kiểm tra sau khi app vừa mở/ghi heartbeat.
+  setTimeout(() => checkBandwidthAlert(false), 12000);
+  window.addEventListener('pagehide', () => { try{ checkBandwidthAlert(false); }catch(e){} });
+})();
+// ===== END_COPILOT_BANDWIDTH_DISCORD_ALERT_20260629 =====

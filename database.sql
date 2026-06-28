@@ -1,3 +1,10 @@
+-- =========================================================
+-- FILE CHÍNH: database.sql
+-- Đã gộp database.sql + schema.sql thành 1 file.
+-- Từ giờ chỉ dùng file này để setup/vá Supabase.
+-- schema.sql không cần dùng nữa.
+-- =========================================================
+
 
 
 -- ===== FILE: setup_supabase.sql =====
@@ -223,16 +230,28 @@ notify pgrst, 'reload schema';
 
 
 -- ===== FINAL_USER_LAST_ACTIVITY_20260613 =====
+-- Theo dõi hoạt động gần nhất của người dùng trên web
 alter table public.profiles add column if not exists last_activity timestamptz;
-update public.profiles set last_activity = coalesce(last_activity, last_login, created_at, now()) where last_activity is null;
-create index if not exists idx_profiles_last_activity on public.profiles(last_activity desc);
+
+-- Điền tạm dữ liệu cũ để admin không bị trống
+update public.profiles
+set last_activity = coalesce(last_activity, last_login, created_at, now())
+where last_activity is null;
+
+create index if not exists idx_profiles_last_activity
+on public.profiles(last_activity desc);
+
 notify pgrst, 'reload schema';
 
 
 -- ===== ACCESS_APPROVAL_20260624 =====
+-- Tài khoản mới cần admin phê duyệt trước khi sử dụng web
 alter table public.profiles add column if not exists approved boolean default false;
+
+-- Grandfather: tất cả user hiện tại đều được approved
 update public.profiles set approved = true where approved is null or approved = false;
 
+-- Cập nhật is_not_blocked: check cả approved
 create or replace function public.is_not_blocked()
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (
@@ -247,6 +266,7 @@ notify pgrst, 'reload schema';
 
 
 -- ===== SUBJECT_REQUESTS_AND_TRASH_20260625 =====
+-- Yêu cầu thêm môn học từ user thường (cần admin duyệt)
 create table if not exists public.subject_requests (
   id bigserial primary key,
   code text not null,
@@ -280,6 +300,7 @@ create policy "subject_requests editor update" on public.subject_requests
   using (public.is_editor_or_admin())
   with check (public.is_editor_or_admin());
 
+-- Thùng rác môn học (admin xóa môn)
 create table if not exists public.deleted_subjects (
   id bigserial primary key,
   original_data jsonb not null,
@@ -296,6 +317,7 @@ create policy "deleted_subjects admin only" on public.deleted_subjects
   using (public.is_admin())
   with check (public.is_admin());
 
+-- Cài đặt web (admin toggle đăng ký mới)
 create table if not exists public.site_settings (
   key text primary key,
   value jsonb not null default '{}'::jsonb,
@@ -319,6 +341,7 @@ insert into public.site_settings (key, value) values
   ('registration_mode', '"approval"'::jsonb)
 on conflict (key) do nothing;
 
+-- Cho phép editor/admin insert vào subjects
 drop policy if exists "subjects editor write" on public.subjects;
 create policy "subjects editor write" on public.subjects
   for all to authenticated
@@ -341,20 +364,172 @@ create policy "profiles admin delete" on public.profiles
   for delete to authenticated
   using (public.is_admin());
 
+create or replace function public.sync_profile_from_auth()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (id, email, avatar_url, role, approved)
+  values (new.id, new.email, coalesce(new.raw_user_meta_data ->> 'avatar_url', new.raw_user_meta_data ->> 'picture'), 'user', false)
+  on conflict (id) do update set
+    email = coalesce(excluded.email, public.profiles.email),
+    avatar_url = coalesce(excluded.avatar_url, public.profiles.avatar_url);
+  return new;
+end;
+$$;
+
+drop trigger if exists sync_profile_from_auth_trigger on auth.users;
+create trigger sync_profile_from_auth_trigger
+after insert or update of email, raw_user_meta_data on auth.users
+for each row execute function public.sync_profile_from_auth();
+
+notify pgrst, 'reload schema';
+
+-- =========================================================
+-- SUPABASE SECURITY LINT FIX - Learning Hub
+-- Chạy file này trong Supabase SQL Editor.
+-- Mục tiêu:
+-- 1) Khóa search_path cho các function bị Supabase cảnh báo.
+-- 2) Chặn anon/public gọi các function nhạy cảm qua RPC.
+-- 3) Chặn user thường gọi trực tiếp các function admin/notification qua RPC.
+-- Ghi chú: "Leaked Password Protection" phải bật thủ công trong Supabase Auth, SQL không bật được.
+-- =========================================================
+
+-- 1) Khóa search_path cho các function nếu function đang tồn tại
+DO $$
+DECLARE
+  fn text;
+  rp regprocedure;
+  funcs text[] := ARRAY[
+    'public.is_admin()',
+    'public.is_admin(uuid)',
+    'public.is_editor(uuid)',
+    'public.is_editor_or_admin()',
+    'public.is_editor_or_admin(uuid)',
+    'public.is_not_blocked()',
+    'public.is_not_blocked(uuid)',
+    'public.approve_edit_request(bigint)',
+    'public.reject_edit_request(bigint,text)',
+    'public.sync_profile_from_auth()',
+    'public.notify_discord_new_users()',
+    'public.notify_discord_subject_deleted()',
+    'public.notify_discord_settings_changed()',
+    'public.notify_discord_user_blocked()',
+    'public.notify_discord_user_login()',
+    'public.handle_learning_hub_notifications()',
+    'public.notify_discord_real_login()',
+    'public.notify_discord_auth_login()',
+    'public.notify_discord_edit_requests()'
+  ];
+BEGIN
+  FOREACH fn IN ARRAY funcs LOOP
+    rp := to_regprocedure(fn);
+    IF rp IS NOT NULL THEN
+      EXECUTE format('ALTER FUNCTION %s SET search_path = public', rp);
+    END IF;
+  END LOOP;
+END $$;
+
+-- 2) Function dùng trong RLS: chặn anon/public, vẫn cho authenticated dùng để web không lỗi
+DO $$
+DECLARE
+  fn text;
+  rp regprocedure;
+  funcs text[] := ARRAY[
+    'public.is_admin()',
+    'public.is_admin(uuid)',
+    'public.is_editor(uuid)',
+    'public.is_editor_or_admin()',
+    'public.is_editor_or_admin(uuid)',
+    'public.is_not_blocked()',
+    'public.is_not_blocked(uuid)'
+  ];
+BEGIN
+  FOREACH fn IN ARRAY funcs LOOP
+    rp := to_regprocedure(fn);
+    IF rp IS NOT NULL THEN
+      EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC', rp);
+      EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM anon', rp);
+      EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO authenticated', rp);
+    END IF;
+  END LOOP;
+END $$;
+
+-- 3) Function nhạy cảm/admin/trigger/discord: không cho gọi trực tiếp từ web qua RPC
+DO $$
+DECLARE
+  fn text;
+  rp regprocedure;
+  funcs text[] := ARRAY[
+    'public.approve_edit_request(bigint)',
+    'public.reject_edit_request(bigint,text)',
+    'public.sync_profile_from_auth()',
+    'public.notify_discord_new_users()',
+    'public.notify_discord_subject_deleted()',
+    'public.notify_discord_settings_changed()',
+    'public.notify_discord_user_blocked()',
+    'public.notify_discord_user_login()',
+    'public.handle_learning_hub_notifications()',
+    'public.notify_discord_real_login()',
+    'public.notify_discord_auth_login()',
+    'public.notify_discord_edit_requests()'
+  ];
+BEGIN
+  FOREACH fn IN ARRAY funcs LOOP
+    rp := to_regprocedure(fn);
+    IF rp IS NOT NULL THEN
+      EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC', rp);
+      EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM anon', rp);
+      EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM authenticated', rp);
+    END IF;
+  END LOOP;
+END $$;
+
+-- 4) Đảm bảo policy xóa user chờ duyệt vẫn hoạt động cho admin
+DROP POLICY IF EXISTS "profiles admin delete" ON public.profiles;
+CREATE POLICY "profiles admin delete" ON public.profiles
+  FOR DELETE TO authenticated
+  USING (public.is_admin());
+
+NOTIFY pgrst, 'reload schema';
+
+-- ===== REALTIME FIX FOR ADMIN =====
+-- Chạy 1 lần trong Supabase SQL Editor.
+-- Bật realtime cho các bảng admin cần nghe thay đổi.
+
+do $$
+begin
+  begin alter publication supabase_realtime add table public.edit_requests; exception when duplicate_object then null; end;
+  begin alter publication supabase_realtime add table public.profiles; exception when duplicate_object then null; end;
+  begin alter publication supabase_realtime add table public.question_history; exception when duplicate_object then null; end;
+  begin alter publication supabase_realtime add table public.questions; exception when duplicate_object then null; end;
+  if to_regclass('public.subject_requests') is not null then
+    begin alter publication supabase_realtime add table public.subject_requests; exception when duplicate_object then null; end;
+  end if;
+  if to_regclass('public.admin_logs') is not null then
+    begin alter publication supabase_realtime add table public.admin_logs; exception when duplicate_object then null; end;
+  end if;
+end $$;
+
 notify pgrst, 'reload schema';
 
 
 -- ===== REGISTRATION_GATE_SERVER_SIDE_20260626 =====
 -- Fix 1: Trigger sync_profile_from_auth đọc registration_mode từ site_settings
--- Fix 2: Chuẩn hóa value (bỏ ngoặc kép thừa do JSON.stringify cũ)
--- Fix 3: RLS server-side: user chưa approved không đọc được questions/subjects
--- Fix 4: Realtime cho site_settings
+--         để quyết định approved = true/false, thay vì luôn set false.
+-- Fix 2: Chuẩn hóa value trong site_settings (bỏ ngoặc kép thừa do JSON.stringify cũ).
+-- Fix 3: RLS server-side: user chưa approved không đọc được questions/subjects.
+-- Fix 4: Realtime cho site_settings.
 
+-- Chuẩn hóa giá trị registration_mode: loại bỏ ngoặc kép thừa nếu có
 update public.site_settings
 set value = to_jsonb(trim(both '"' from (value #>> '{}')))
 where key = 'registration_mode'
   and (value #>> '{}') like '"%"';
 
+-- Trigger: đọc registration_mode trước khi tạo profile mới
 create or replace function public.sync_profile_from_auth()
 returns trigger
 language plpgsql
@@ -394,6 +569,7 @@ create trigger sync_profile_from_auth_trigger
 after insert or update of email, raw_user_meta_data on auth.users
 for each row execute function public.sync_profile_from_auth();
 
+-- Function kiểm tra user đã approved (dùng trong RLS)
 create or replace function public.is_approved()
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (
@@ -404,6 +580,7 @@ returns boolean language sql stable security definer set search_path = public as
   );
 $$;
 
+-- RLS: user chưa approved không đọc được câu hỏi
 drop policy if exists "questions read by subject" on public.questions;
 create policy "questions read by subject" on public.questions
   for select to authenticated
@@ -412,6 +589,7 @@ create policy "questions read by subject" on public.questions
     or public.is_editor_or_admin()
   );
 
+-- RLS: user chưa approved không thấy danh sách môn
 drop policy if exists "subjects read authenticated" on public.subjects;
 create policy "subjects read authenticated" on public.subjects
   for select to authenticated
@@ -420,10 +598,12 @@ create policy "subjects read authenticated" on public.subjects
     and (public.is_approved() or public.is_editor_or_admin())
   );
 
+-- Bảo mật: chặn anon gọi is_approved
 revoke all on function public.is_approved() from public;
 revoke execute on function public.is_approved() from anon;
 grant execute on function public.is_approved() to authenticated;
 
+-- Realtime cho site_settings
 do $$
 begin
   if to_regclass('public.site_settings') is not null then
@@ -610,3 +790,219 @@ execute function public.ensure_admin_editor_approved();
 notify pgrst, 'reload schema';
 -- ===== END FIX_ADMIN_EDITOR_SKIP_APPROVAL_20260628 =====
 
+-- ===== BANDWIDTH_USAGE_SETUP_20260628 =====
+-- Bảng thống kê băng thông theo tài khoản.
+
+create table if not exists public.bandwidth_usage (
+  id bigserial primary key,
+  period text not null,
+  user_id uuid,
+  user_email text,
+  page text default 'app',
+  bytes bigint not null default 0,
+  requests integer not null default 0,
+  reloads integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint bandwidth_usage_bytes_nonnegative check (bytes >= 0),
+  constraint bandwidth_usage_requests_nonnegative check (requests >= 0),
+  constraint bandwidth_usage_reloads_nonnegative check (reloads >= 0)
+);
+
+alter table public.bandwidth_usage add column if not exists period text;
+alter table public.bandwidth_usage add column if not exists user_id uuid;
+alter table public.bandwidth_usage add column if not exists user_email text;
+alter table public.bandwidth_usage add column if not exists page text default 'app';
+alter table public.bandwidth_usage add column if not exists bytes bigint not null default 0;
+alter table public.bandwidth_usage add column if not exists requests integer not null default 0;
+alter table public.bandwidth_usage add column if not exists reloads integer not null default 0;
+alter table public.bandwidth_usage add column if not exists created_at timestamptz not null default now();
+alter table public.bandwidth_usage add column if not exists updated_at timestamptz not null default now();
+
+create index if not exists idx_bandwidth_usage_period_bytes
+  on public.bandwidth_usage(period, bytes desc);
+
+create index if not exists idx_bandwidth_usage_user_period
+  on public.bandwidth_usage(user_id, period);
+
+create index if not exists idx_bandwidth_usage_updated_at
+  on public.bandwidth_usage(updated_at desc);
+
+alter table public.bandwidth_usage enable row level security;
+
+drop policy if exists "bandwidth_usage insert own" on public.bandwidth_usage;
+create policy "bandwidth_usage insert own"
+  on public.bandwidth_usage
+  for insert to authenticated
+  with check (
+    user_id = auth.uid()
+    and public.is_not_blocked()
+  );
+
+drop policy if exists "bandwidth_usage read own or editor" on public.bandwidth_usage;
+create policy "bandwidth_usage read own or editor"
+  on public.bandwidth_usage
+  for select to authenticated
+  using (
+    user_id = auth.uid()
+    or public.is_editor_or_admin()
+  );
+
+drop policy if exists "bandwidth_usage admin delete" on public.bandwidth_usage;
+create policy "bandwidth_usage admin delete"
+  on public.bandwidth_usage
+  for delete to authenticated
+  using (public.is_admin());
+
+do $$
+begin
+  if to_regclass('public.bandwidth_usage') is not null then
+    begin
+      alter publication supabase_realtime add table public.bandwidth_usage;
+    exception when duplicate_object then null;
+    end;
+  end if;
+end $$;
+
+notify pgrst, 'reload schema';
+-- ===== END BANDWIDTH_USAGE_SETUP_20260628 =====
+
+-- ===== SUPABASE_USAGE_BASELINE_SETTING_20260628 =====
+-- Lưu mốc Usage gốc lấy từ Supabase Dashboard, ví dụ Egress 1.557/5GB.
+-- Dùng bảng site_settings có sẵn, không tạo thêm bảng mới.
+
+insert into public.site_settings (key, value)
+values (
+  'supabase_usage_baseline',
+  jsonb_build_object(
+    'period', to_char(now(), 'YYYY-MM'),
+    'used_gb', 0,
+    'limit_gb', 5,
+    'used_bytes', 0,
+    'limit_bytes', 5368709120,
+    'billing_start', null,
+    'billing_end', null,
+    'saved_at', now()
+  )
+)
+on conflict (key) do nothing;
+
+notify pgrst, 'reload schema';
+-- ===== END SUPABASE_USAGE_BASELINE_SETTING_20260628 =====
+
+-- ===== DISCORD_APPROVAL_BUTTONS_20260629 =====
+-- Bổ sung hỗ trợ duyệt / từ chối user qua nút Discord.
+-- Lưu ý: phần bấm nút xử lý bằng Supabase Edge Function, SQL chỉ bổ sung dữ liệu/log cần thiết.
+
+alter table public.profiles add column if not exists discord_approval_message_id text;
+alter table public.profiles add column if not exists discord_approval_notified_at timestamptz;
+alter table public.profiles add column if not exists approval_reviewed_at timestamptz;
+alter table public.profiles add column if not exists approval_reviewed_by_discord text;
+
+create table if not exists public.discord_approval_logs (
+  id bigserial primary key,
+  user_id uuid,
+  user_email text,
+  discord_user_id text,
+  discord_username text,
+  action text not null,
+  message_id text,
+  details jsonb default '{}'::jsonb,
+  created_at timestamptz default now()
+);
+
+alter table public.discord_approval_logs enable row level security;
+
+drop policy if exists "discord_approval_logs admin read" on public.discord_approval_logs;
+create policy "discord_approval_logs admin read"
+  on public.discord_approval_logs
+  for select to authenticated
+  using (public.is_admin());
+
+-- Edge Function dùng service_role nên không cần policy insert cho user web.
+-- Chặn gọi ghi log trực tiếp từ frontend.
+drop policy if exists "discord_approval_logs no client insert" on public.discord_approval_logs;
+create policy "discord_approval_logs no client insert"
+  on public.discord_approval_logs
+  for insert to authenticated
+  with check (false);
+
+create index if not exists idx_profiles_pending_discord_approval
+  on public.profiles(approved, created_at desc)
+  where coalesce(approved, false) = false;
+
+create index if not exists idx_discord_approval_logs_user_id
+  on public.discord_approval_logs(user_id, created_at desc);
+
+-- RPC an toàn để Edge Function duyệt user bằng service_role.
+create or replace function public.discord_approve_user(
+  target_user_id uuid,
+  discord_user_id text default null,
+  discord_username text default null,
+  message_id text default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  target_email text;
+begin
+  select email into target_email from public.profiles where id = target_user_id;
+
+  update public.profiles
+  set approved = true,
+      blocked = false,
+      approval_reviewed_at = now(),
+      approval_reviewed_by_discord = discord_user_id,
+      discord_approval_message_id = coalesce(message_id, discord_approval_message_id)
+  where id = target_user_id;
+
+  insert into public.discord_approval_logs(user_id, user_email, discord_user_id, discord_username, action, message_id)
+  values(target_user_id, target_email, discord_user_id, discord_username, 'approve', message_id);
+
+  insert into public.admin_logs(admin_id, admin_email, action, target_type, target_id, details)
+  values(null, coalesce(discord_username, 'Discord'), 'discord_approve_user', 'profiles', target_user_id::text,
+    jsonb_build_object('discord_user_id', discord_user_id, 'message_id', message_id));
+end;
+$$;
+
+create or replace function public.discord_reject_user(
+  target_user_id uuid,
+  discord_user_id text default null,
+  discord_username text default null,
+  message_id text default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  target_email text;
+begin
+  select email into target_email from public.profiles where id = target_user_id;
+
+  insert into public.discord_approval_logs(user_id, user_email, discord_user_id, discord_username, action, message_id)
+  values(target_user_id, target_email, discord_user_id, discord_username, 'reject', message_id);
+
+  insert into public.admin_logs(admin_id, admin_email, action, target_type, target_id, details)
+  values(null, coalesce(discord_username, 'Discord'), 'discord_reject_user', 'profiles', target_user_id::text,
+    jsonb_build_object('discord_user_id', discord_user_id, 'message_id', message_id, 'email', target_email));
+
+  delete from public.profiles where id = target_user_id;
+end;
+$$;
+
+-- Không cho frontend gọi trực tiếp 2 RPC này.
+revoke all on function public.discord_approve_user(uuid,text,text,text) from public;
+revoke execute on function public.discord_approve_user(uuid,text,text,text) from anon;
+revoke execute on function public.discord_approve_user(uuid,text,text,text) from authenticated;
+
+revoke all on function public.discord_reject_user(uuid,text,text,text) from public;
+revoke execute on function public.discord_reject_user(uuid,text,text,text) from anon;
+revoke execute on function public.discord_reject_user(uuid,text,text,text) from authenticated;
+
+notify pgrst, 'reload schema';
+-- ===== END DISCORD_APPROVAL_BUTTONS_20260629 =====

@@ -1,3 +1,47 @@
+/* AI_LANDING_CSS_MAP_START
+Mục đích: Bản đồ nhanh cho AI đọc landing.css đỡ tốn token. Không ảnh hưởng giao diện web.
+Quy tắc sửa: giữ nguyên 1 file landing.css, chỉ sửa nhóm liên quan, tránh vá chồng.
+
+NHÓM CHÍNH TRONG landing.css
+1) Nền tảng landing
+- Tìm: :root, .hodLoginGate, .hodLoginGate.hidden
+- Dùng cho: font, khung full-screen, nền cơ bản.
+
+2) Background động
+- Tìm: FINAL_LANDING_OBVIOUS_SWAY_FIX, .hodLoginGate::before, .hodLoginGate::after, landingMainBgClearlyMove, landingBeforeBgClearlyMove, landingOverlayClearlyMove
+- Dùng cho: background.webp đung đưa rõ, overlay ánh sáng, motion nền.
+
+3) Particles canvas
+- Tìm: #landingParticles
+- Dùng cho: canvas hạt bay trên nền landing.
+
+4) Panel landing
+- Tìm: .hodLoginGatePanel.simpleLanding, .hodLoginBrandRow, .hodLogoClean, .hodLoginTagline, .simpleLanding h1, .simpleLanding p
+- Dùng cho: khung kính landing, logo, headline, mô tả.
+
+5) Feature list
+- Tìm: .hodLoginFeatureLine, .hodLoginFeatureLine::before, .hodLoginFeatureLine::after, .hodLoginFeatureLine span
+- Dùng cho: cột tính năng bên phải.
+
+6) Nút Google
+- Tìm: FINAL_GOOGLE_BUTTON_SMALL_ATTACH_FIX, .hodGoogleClean#hodGateLoginBtn, #authGoogle
+- Dùng cho: nút đăng nhập Google dính rìa phải, hover/active, responsive.
+
+7) Pending approval screen
+- Tìm: PENDING_APPROVAL_SCREEN, .hodPendingApproval, .hodPendingPanel, .hodPendingIcon, .hodPendingEmail, .hodPendingActions
+- Dùng cho: màn hình chờ admin duyệt tài khoản.
+
+8) Mobile / Responsive
+- Tìm: @media(max-width:860px), @media(max-width:480px), prefers-reduced-motion
+- Dùng cho: mobile landing, nút Google mobile, pending approval mobile.
+
+GỢI Ý AI
+- Lỗi nền landing: xem nhóm 2 + 3 + 8.
+- Lỗi nút Google: xem nhóm 6 + 8.
+- Lỗi layout panel/title: xem nhóm 4 + 5 + 8.
+- Lỗi màn hình chờ duyệt: xem nhóm 7 + 8.
+AI_LANDING_CSS_MAP_END */
+
 /* ===== landing.css - màn hình đăng nhập / landing ===== */
 :root{
   --landing-font:'Segoe UI',Tahoma,Arial,Roboto,Helvetica,sans-serif;
@@ -152,73 +196,6 @@
   .hodGoogleClean#hodGateLoginBtn,#authGoogle{left:22px!important;right:22px!important;bottom:22px!important;width:auto!important;height:52px!important;min-height:52px!important;font-size:.94rem!important;}
 }
 
-/* ===== FINAL_GOOGLE_BUTTON_STICK_RIGHT_EDGE_20260614 ===== */
-/* Nút Đăng nhập Google dán vào rìa bên phải giống mẫu */
-.hodGoogleClean#hodGateLoginBtn{
-  position:absolute!important;
-  right:0!important;
-  bottom:38px!important;
-  left:auto!important;
-  width:min(360px,36vw)!important;
-  height:66px!important;
-  min-height:66px!important;
-  justify-content:flex-start!important;
-  padding:0 34px 0 20px!important;
-  border-radius:999px 0 0 999px!important;
-  border-right:0!important;
-  background:linear-gradient(135deg,#ffffff 0%,#e9fbff 58%,#dff6ff 100%)!important;
-  color:#102233!important;
-  font-size:1rem!important;
-  font-weight:950!important;
-  box-shadow:0 20px 55px rgba(0,0,0,.26),inset 0 1px 0 rgba(255,255,255,.86)!important;
-}
-.hodGoogleClean#hodGateLoginBtn span{
-  width:30px!important;
-  height:30px!important;
-  min-width:30px!important;
-  margin-right:2px!important;
-}
-.hodGoogleClean#hodGateLoginBtn:hover{
-  transform:translateX(-6px) translateY(-2px)!important;
-  border-color:rgba(255,255,255,.72)!important;
-  border-right:0!important;
-  background:linear-gradient(135deg,#ffffff 0%,#f4fdff 50%,#fff1bd 100%)!important;
-  box-shadow:0 28px 72px rgba(0,0,0,.38),0 0 36px rgba(117,218,255,.20),inset 0 1px 0 rgba(255,255,255,.92)!important;
-}
-
-/* Dòng mô tả vàng nằm phía trên nút, cũng canh phải cho hợp bố cục */
-.simpleLanding p::after{
-  width:max-content!important;
-  max-width:min(440px,36vw)!important;
-  margin-left:auto!important;
-  margin-right:54px!important;
-  text-align:right!important;
-}
-
-@media(max-width:860px){
-  .hodGoogleClean#hodGateLoginBtn{
-    left:auto!important;
-    right:0!important;
-    bottom:18px!important;
-    width:min(340px,88vw)!important;
-    height:56px!important;
-    min-height:56px!important;
-    padding:0 22px 0 16px!important;
-    border-radius:999px 0 0 999px!important;
-  }
-  .hodGoogleClean#hodGateLoginBtn span{
-    width:26px!important;
-    height:26px!important;
-    min-width:26px!important;
-  }
-  .simpleLanding p::after{
-    max-width:calc(100vw - 44px)!important;
-    margin-left:0!important;
-    margin-right:0!important;
-    text-align:left!important;
-  }
-}
-
 /* ===== FINAL_GOOGLE_BUTTON_SMALL_ATTACH_FIX_20260614 ===== */
 /* Thu nhỏ nút Google và giữ dính sát viền phải khi hover */
 .hodGoogleClean#hodGateLoginBtn{
@@ -295,293 +272,6 @@
   }
   .hodLoginGatePanel.simpleLanding::after{
     bottom:76px!important;
-  }
-}
-
-/* ===== FINAL_LANDING_BACKGROUND_SWAY_RESTORE_20260614 =====
-   Khôi phục background landing đung đưa nhẹ. Ghi đè rule app.css cũ chỉ breath filter.
-*/
-.hodLoginGate{
-  --landing-sway-x:0px!important;
-  --landing-sway-y:0px!important;
-  overflow:hidden!important;
-}
-
-.hodLoginGate::before,
-.hodLoginGate:before{
-  content:''!important;
-  display:block!important;
-  position:fixed!important;
-  left:-7vw!important;
-  top:-7vh!important;
-  width:114vw!important;
-  height:114vh!important;
-  inset:auto!important;
-  z-index:0!important;
-  pointer-events:none!important;
-  background:
-    linear-gradient(90deg,rgba(3,10,20,.78) 0%,rgba(3,10,20,.46) 46%,rgba(3,10,20,.18) 100%),
-    radial-gradient(circle at 70% 20%,rgba(88,219,255,.18),transparent 26%),
-    radial-gradient(circle at 54% 84%,rgba(255,211,126,.16),transparent 34%),
-    url('background.webp') center/cover no-repeat!important;
-  transform-origin:center center!important;
-  animation:landingBackgroundSwayRestore 20s ease-in-out infinite alternate!important;
-  will-change:transform,filter!important;
-  filter:saturate(1.06) contrast(1.04) brightness(.98)!important;
-}
-
-@keyframes landingBackgroundSwayRestore{
-  0%{
-    transform:translate3d(-14px,-8px,0) scale(1.075);
-    filter:saturate(1.04) contrast(1.03) brightness(.97);
-  }
-  25%{
-    transform:translate3d(10px,-12px,0) scale(1.082);
-    filter:saturate(1.08) contrast(1.04) brightness(1.00);
-  }
-  55%{
-    transform:translate3d(-8px,12px,0) scale(1.086);
-    filter:saturate(1.07) contrast(1.04) brightness(.99);
-  }
-  100%{
-    transform:translate3d(14px,8px,0) scale(1.078);
-    filter:saturate(1.10) contrast(1.05) brightness(1.02);
-  }
-}
-
-/* Lớp phủ ánh sáng vẫn chuyển động nhẹ nhưng không tạo chấm cố định */
-.hodLoginGate::after,
-.hodLoginGate:after{
-  content:''!important;
-  display:block!important;
-  position:fixed!important;
-  inset:0!important;
-  z-index:1!important;
-  pointer-events:none!important;
-  opacity:.36!important;
-  background:
-    radial-gradient(circle at 52% 44%,rgba(130,225,255,.11),transparent 24%),
-    radial-gradient(circle at 42% 78%,rgba(255,226,170,.075),transparent 27%),
-    linear-gradient(180deg,rgba(3,7,13,.04),rgba(3,7,13,.18))!important;
-  animation:landingGlowSwayRestore 12s ease-in-out infinite alternate!important;
-}
-
-@keyframes landingGlowSwayRestore{
-  0%{opacity:.30;filter:blur(0) brightness(.98);transform:translate3d(-3px,0,0)}
-  100%{opacity:.42;filter:blur(.35px) brightness(1.04);transform:translate3d(3px,2px,0)}
-}
-
-/* Canvas hạt bay vẫn nằm trên background */
-#landingParticles{
-  display:block!important;
-  position:fixed!important;
-  inset:0!important;
-  width:100%!important;
-  height:100%!important;
-  z-index:2!important;
-  pointer-events:none!important;
-  opacity:.70!important;
-}
-
-@media (prefers-reduced-motion: reduce){
-  .hodLoginGate::before,
-  .hodLoginGate:before,
-  .hodLoginGate::after,
-  .hodLoginGate:after{
-    animation:none!important;
-  }
-}
-
-/* ===== FINAL_KEEP_BACKGROUND_WEBP_20260614 =====
-   Giữ đúng ảnh nền của bạn: background.webp + background vẫn đung đưa nhẹ.
-*/
-.hodLoginGate::before,
-.hodLoginGate:before{
-  background:
-    linear-gradient(90deg,rgba(3,10,20,.78) 0%,rgba(3,10,20,.46) 46%,rgba(3,10,20,.18) 100%),
-    radial-gradient(circle at 70% 20%,rgba(88,219,255,.18),transparent 26%),
-    radial-gradient(circle at 54% 84%,rgba(255,211,126,.16),transparent 34%),
-    url('background.webp') center/cover no-repeat!important;
-  animation:landingBackgroundSwayRestore 20s ease-in-out infinite alternate!important;
-}
-
-.hodLoginGate{
-  background:#03070d!important;
-}
-
-/* ===== FINAL_LANDING_VISIBLE_SWAY_20260614 =====
-   Làm background.webp đung đưa rõ hơn, không bị app.css/patch cũ ghi đè.
-*/
-.hodLoginGate{
-  position:fixed!important;
-  inset:0!important;
-  overflow:hidden!important;
-  background:#03070d!important;
-  isolation:isolate!important;
-}
-
-.hodLoginGate::before,
-.hodLoginGate:before{
-  content:''!important;
-  display:block!important;
-  position:fixed!important;
-  left:-10vw!important;
-  top:-10vh!important;
-  width:120vw!important;
-  height:120vh!important;
-  inset:auto!important;
-  z-index:0!important;
-  pointer-events:none!important;
-  background:
-    linear-gradient(180deg,rgba(3,7,13,.08),rgba(3,7,13,.58)),
-    url('background.webp') center/cover no-repeat!important;
-  transform-origin:center center!important;
-  animation:landingVisibleSway 8s ease-in-out infinite alternate!important;
-  will-change:transform,background-position,filter!important;
-  backface-visibility:hidden!important;
-}
-
-@keyframes landingVisibleSway{
-  0%{
-    transform:translate3d(-26px,-16px,0) scale(1.13) rotate(-.18deg);
-    background-position:46% 47%;
-    filter:saturate(1.04) contrast(1.02) brightness(.98);
-  }
-  35%{
-    transform:translate3d(22px,-20px,0) scale(1.145) rotate(.16deg);
-    background-position:54% 46%;
-    filter:saturate(1.08) contrast(1.04) brightness(1.01);
-  }
-  70%{
-    transform:translate3d(-18px,20px,0) scale(1.14) rotate(-.12deg);
-    background-position:47% 55%;
-    filter:saturate(1.07) contrast(1.03) brightness(1);
-  }
-  100%{
-    transform:translate3d(26px,16px,0) scale(1.135) rotate(.18deg);
-    background-position:55% 53%;
-    filter:saturate(1.09) contrast(1.04) brightness(1.02);
-  }
-}
-
-/* Lớp phủ chỉ đổi sáng nhẹ, không che chuyển động nền */
-.hodLoginGate::after,
-.hodLoginGate:after{
-  content:''!important;
-  display:block!important;
-  position:fixed!important;
-  inset:0!important;
-  z-index:1!important;
-  pointer-events:none!important;
-  opacity:.25!important;
-  background:
-    radial-gradient(circle at 54% 42%,rgba(130,225,255,.10),transparent 24%),
-    radial-gradient(circle at 42% 78%,rgba(255,226,170,.06),transparent 28%),
-    linear-gradient(90deg,rgba(3,10,20,.34),rgba(3,10,20,.16),rgba(3,10,20,.08))!important;
-  animation:landingOverlayBreathe 6s ease-in-out infinite alternate!important;
-}
-
-@keyframes landingOverlayBreathe{
-  from{opacity:.20;transform:translate3d(-4px,0,0)}
-  to{opacity:.32;transform:translate3d(4px,2px,0)}
-}
-
-#landingParticles{
-  display:block!important;
-  position:fixed!important;
-  inset:0!important;
-  width:100%!important;
-  height:100%!important;
-  z-index:2!important;
-  pointer-events:none!important;
-  opacity:.70!important;
-}
-
-.hodLoginGatePanel.simpleLanding{
-  position:relative!important;
-  z-index:3!important;
-}
-
-/* ===== FINAL_FORCE_VISIBLE_BACKGROUND_WEBP_SWAY_20260614 =====
-   Ép background.webp đung đưa rõ ràng. Đặt ở CUỐI file để không bị rule cũ ghi đè.
-*/
-.hodLoginGate{
-  position:fixed!important;
-  inset:0!important;
-  overflow:hidden!important;
-  background:
-    linear-gradient(180deg,rgba(3,7,13,.05),rgba(3,7,13,.28)),
-    url('background.webp') 50% 50% / 118% auto no-repeat!important;
-  animation:landingGateBgMoveHard 7s ease-in-out infinite alternate!important;
-  will-change:background-position,background-size,filter!important;
-  isolation:isolate!important;
-}
-
-.hodLoginGate::before,
-.hodLoginGate:before{
-  content:''!important;
-  display:block!important;
-  position:fixed!important;
-  left:-16vw!important;
-  top:-16vh!important;
-  width:132vw!important;
-  height:132vh!important;
-  inset:auto!important;
-  z-index:0!important;
-  pointer-events:none!important;
-  background:
-    linear-gradient(180deg,rgba(3,7,13,.06),rgba(3,7,13,.48)),
-    url('background.webp') 50% 50% / cover no-repeat!important;
-  transform-origin:center center!important;
-  animation:landingPseudoBgMoveHard 7s ease-in-out infinite alternate!important;
-  will-change:transform,background-position,filter!important;
-  backface-visibility:hidden!important;
-}
-
-@keyframes landingGateBgMoveHard{
-  0%{background-position:42% 45%;background-size:120% auto;filter:saturate(1.03) contrast(1.02) brightness(.98);}
-  50%{background-position:58% 53%;background-size:124% auto;filter:saturate(1.08) contrast(1.04) brightness(1.02);}
-  100%{background-position:45% 58%;background-size:122% auto;filter:saturate(1.06) contrast(1.03) brightness(1);}
-}
-
-@keyframes landingPseudoBgMoveHard{
-  0%{transform:translate3d(-46px,-28px,0) scale(1.16) rotate(-.35deg);background-position:42% 45%;filter:saturate(1.03) contrast(1.02) brightness(.98);}
-  50%{transform:translate3d(42px,-34px,0) scale(1.20) rotate(.28deg);background-position:58% 48%;filter:saturate(1.09) contrast(1.04) brightness(1.02);}
-  100%{transform:translate3d(46px,30px,0) scale(1.17) rotate(.35deg);background-position:55% 58%;filter:saturate(1.07) contrast(1.03) brightness(1);}
-}
-
-.hodLoginGate::after,
-.hodLoginGate:after{
-  content:''!important;
-  display:block!important;
-  position:fixed!important;
-  inset:0!important;
-  z-index:1!important;
-  pointer-events:none!important;
-  opacity:.18!important;
-  background:linear-gradient(90deg,rgba(3,10,20,.20),rgba(3,10,20,.06),rgba(3,10,20,.16))!important;
-  animation:landingOverlayMoveHard 5s ease-in-out infinite alternate!important;
-}
-
-@keyframes landingOverlayMoveHard{
-  from{opacity:.14;transform:translate3d(-12px,0,0);}
-  to{opacity:.26;transform:translate3d(12px,5px,0);}
-}
-
-.hodLoginGatePanel.simpleLanding{
-  position:relative!important;
-  z-index:3!important;
-}
-
-/* Kể cả máy đang bật Reduce Motion vẫn cho background động vì user yêu cầu */
-@media (prefers-reduced-motion: reduce){
-  .hodLoginGate,
-  .hodLoginGate::before,
-  .hodLoginGate:before,
-  .hodLoginGate::after,
-  .hodLoginGate:after{
-    animation-duration:7s!important;
-    animation-iteration-count:infinite!important;
   }
 }
 
@@ -808,3 +498,54 @@
   .hodPendingPanel{padding:28px 20px!important;}
   .hodPendingActions{flex-direction:column!important;}
 }
+
+
+/* ===== LH_INTRO_FINAL_NO_LOGO_OVERLAP_20260628 ===== */
+#lhCinematicIntro{position:fixed!important;inset:0!important;z-index:2147483600!important;}
+.lhStep05Logo{pointer-events:none!important;user-select:none!important;}
+body.lhIntroRunning .hodLoginGate{filter:brightness(.82)!important;}
+body.lhIntroRunning .hodLoginGatePanel.simpleLanding{opacity:0!important;transform:translate3d(0,20px,0) scale(.988)!important;filter:brightness(.9)!important;}
+body.lhIntroRunning .simpleLanding h1,
+body.lhIntroRunning .simpleLanding p,
+body.lhIntroRunning .hodLoginTagline,
+body.lhIntroRunning .hodLoginBrandRow .hodLogoClean,
+body.lhIntroRunning .hodLoginFeatureLine::before,
+body.lhIntroRunning .hodLoginFeatureLine::after,
+body.lhIntroRunning .hodLoginFeatureLine span,
+body.lhIntroRunning .hodGoogleClean#hodGateLoginBtn,
+body.lhIntroRunning #authGoogle{opacity:0!important;}
+
+body.lhIntroDone .hodLoginGate{animation:lhFinalBgReveal 1s cubic-bezier(.22,.75,.12,1) both!important;}
+body.lhIntroDone .hodLoginGatePanel.simpleLanding{animation:lhFinalPanelLift 1.05s cubic-bezier(.18,.82,.16,1) .08s both!important;transform-origin:center center!important;backface-visibility:hidden!important;will-change:opacity,transform,filter!important;}
+body.lhIntroDone .hodLoginGatePanel.simpleLanding::before{animation:lhFinalPanelGlow 1.15s cubic-bezier(.22,.75,.12,1) .18s both!important;}
+body.lhIntroDone .hodLoginGatePanel.simpleLanding::after{content:''!important;position:absolute!important;inset:0!important;z-index:1!important;pointer-events:none!important;border-radius:inherit!important;opacity:0!important;background:linear-gradient(115deg,transparent 0%,rgba(255,255,255,.14) 34%,rgba(255,255,255,.34) 48%,rgba(255,255,255,.10) 62%,transparent 100%)!important;transform:translateX(-120%) skewX(-10deg)!important;animation:lhFinalPanelSweep .95s ease .38s both!important;}
+body.lhIntroDone .hodLoginBrandRow .hodLogoClean{animation:lhFinalTextIn .55s cubic-bezier(.22,.75,.12,1) .18s both!important;}
+body.lhIntroDone .hodLoginTagline{animation:lhFinalTextIn .55s cubic-bezier(.22,.75,.12,1) .24s both!important;}
+body.lhIntroDone .simpleLanding h1{animation:lhFinalTitleIn .78s cubic-bezier(.18,.82,.16,1) .32s both!important;}
+body.lhIntroDone .simpleLanding p{animation:lhFinalTextIn .62s cubic-bezier(.22,.75,.12,1) .46s both!important;}
+body.lhIntroDone .simpleLanding p::after{animation:lhFinalTextGlow .68s cubic-bezier(.22,.75,.12,1) .62s both!important;}
+body.lhIntroDone .hodLoginFeatureLine::before{animation:lhFinalTextIn .55s cubic-bezier(.22,.75,.12,1) .54s both!important;}
+body.lhIntroDone .hodLoginFeatureLine::after{animation:lhFinalTextIn .55s cubic-bezier(.22,.75,.12,1) .62s both!important;}
+body.lhIntroDone .hodLoginFeatureLine span:nth-child(1){animation:lhFinalFeatureIn .55s cubic-bezier(.22,.75,.12,1) .72s both!important;}
+body.lhIntroDone .hodLoginFeatureLine span:nth-child(2){animation:lhFinalFeatureIn .55s cubic-bezier(.22,.75,.12,1) .82s both!important;}
+body.lhIntroDone .hodLoginFeatureLine span:nth-child(3){animation:lhFinalFeatureIn .55s cubic-bezier(.22,.75,.12,1) .92s both!important;}
+body.lhIntroDone .hodLoginFeatureLine span:nth-child(4){animation:lhFinalFeatureIn .55s cubic-bezier(.22,.75,.12,1) 1.02s both!important;}
+body.lhIntroDone .hodGoogleClean#hodGateLoginBtn,
+body.lhIntroDone #authGoogle{animation:lhFinalGoogleIn .95s cubic-bezier(.22,.75,.12,1) .42s both!important;will-change:opacity,filter,transform!important;}
+body.lhIntroDone .hodGoogleClean#hodGateLoginBtn::after,
+body.lhIntroDone #authGoogle::after{content:''!important;position:absolute!important;inset:-3px!important;z-index:1!important;pointer-events:none!important;border-radius:inherit!important;opacity:0!important;transform:translateX(-130%) skewX(-18deg)!important;background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.18) 38%,rgba(255,255,255,.68) 50%,rgba(255,255,255,.18) 62%,transparent 100%)!important;animation:lhFinalGoogleShine .9s ease .82s both!important;}
+.hodGoogleClean#hodGateLoginBtn:hover,#authGoogle:hover{transform:translate3d(0,-2px,0) scale(1.012)!important;filter:brightness(1.04)!important;}
+.hodGoogleClean#hodGateLoginBtn:active,#authGoogle:active{transform:translate3d(0,0,0) scale(.995)!important;filter:brightness(.98)!important;}
+@keyframes lhFinalBgReveal{0%{filter:brightness(.82) saturate(.94)}100%{filter:none}}
+@keyframes lhFinalPanelLift{0%{opacity:0;transform:translate3d(0,24px,0) scale(.988);filter:brightness(.88)}48%{opacity:.82;transform:translate3d(0,7px,0) scale(.997);filter:brightness(.97)}76%{opacity:1;transform:translate3d(0,-2px,0) scale(1.002);filter:brightness(1.02)}100%{opacity:1;transform:translate3d(0,0,0) scale(1);filter:none}}
+@keyframes lhFinalPanelGlow{0%{opacity:.28;filter:brightness(.95)}45%{opacity:.72;filter:brightness(1.06)}100%{opacity:1;filter:none}}
+@keyframes lhFinalPanelSweep{0%{opacity:0;transform:translateX(-120%) skewX(-10deg)}18%{opacity:.5}72%{opacity:.32}100%{opacity:0;transform:translateX(120%) skewX(-10deg)}}
+@keyframes lhFinalTextIn{0%{opacity:0;transform:translate3d(0,12px,0);filter:brightness(.92)}100%{opacity:1;transform:translate3d(0,0,0);filter:none}}
+@keyframes lhFinalTitleIn{0%{opacity:0;transform:translate3d(0,16px,0) scale(.992);filter:brightness(.9)}55%{opacity:.88;transform:translate3d(0,5px,0) scale(.998);filter:brightness(1.03)}100%{opacity:1;transform:translate3d(0,0,0) scale(1);filter:none}}
+@keyframes lhFinalTextGlow{0%{opacity:0;transform:translate3d(0,8px,0);filter:brightness(.9)}55%{opacity:1;filter:brightness(1.16)}100%{opacity:1;transform:translate3d(0,0,0);filter:none}}
+@keyframes lhFinalFeatureIn{0%{opacity:0;transform:translate3d(12px,0,0);filter:brightness(.92)}100%{opacity:1;transform:translate3d(0,0,0);filter:none}}
+@keyframes lhFinalGoogleIn{0%{opacity:0;transform:translate3d(18px,0,0) scale(.985);filter:brightness(.88)}45%{opacity:.72;transform:translate3d(6px,0,0) scale(.995);filter:brightness(1.02)}72%{opacity:1;transform:translate3d(0,0,0) scale(1.006);filter:brightness(1.08)}100%{opacity:1;transform:translate3d(0,0,0) scale(1);filter:none}}
+@keyframes lhFinalGoogleShine{0%{opacity:0;transform:translateX(-130%) skewX(-18deg)}18%{opacity:.72}78%{opacity:.5}100%{opacity:0;transform:translateX(130%) skewX(-18deg)}}
+@media(max-width:680px){.lhStep05Logo{transform:translate3d(-50%,-50%,0) scale(.92)!important;}body.lhIntroDone .hodLoginGatePanel.simpleLanding{animation-duration:.9s!important;}body.lhIntroDone .simpleLanding h1{animation-delay:.24s!important;animation-duration:.68s!important;}body.lhIntroDone .simpleLanding p{animation-delay:.36s!important;animation-duration:.56s!important;}body.lhIntroDone .hodGoogleClean#hodGateLoginBtn,body.lhIntroDone #authGoogle{animation-duration:.82s!important;animation-delay:.32s!important;}}
+@media(prefers-reduced-motion:reduce){body.lhIntroDone *{animation-duration:.2s!important;animation-delay:0s!important;}}
+/* ===== LH_INTRO_FINAL_NO_LOGO_OVERLAP_20260628_END ===== */

@@ -1,3 +1,78 @@
+/* AI_ADMIN_CSS_MAP_START
+Mục đích: Bản đồ nhanh cho AI đọc admin.css đỡ tốn token. Không ảnh hưởng giao diện web.
+Quy tắc sửa: giữ nguyên 1 file admin.css, chỉ sửa nhóm liên quan, tránh vá chồng.
+
+NHÓM CHÍNH TRONG admin.css
+1) Biến chung / nền tảng
+- Tìm: :root, *, html, body, button, input
+- Dùng cho: màu, font, reset, nền admin.
+
+2) Sidebar / menu trái
+- Tìm: .side, .brand, .seal, .nav, .adminSideGroup, .adminSideGroupTitle, .adminSideGroupBody, .navBadge
+- Dùng cho: thanh menu trái, nhóm menu, trạng thái active, responsive sidebar.
+
+3) Top bar / tìm kiếm
+- Tìm: .top, .topTools, .searchWrap, #search, .searchClear, .filterCount
+- Dùng cho: thanh trên, ô tìm kiếm, nút reload/export, chip realtime.
+
+4) Layout chính / page / panel
+- Tìm: .main, .workspace, .page, .page.active, .panel, .grid, .stats, .stat
+- Dùng cho: bố cục dashboard, các tab admin, thống kê.
+
+5) Danh sách câu hỏi admin
+- Tìm: #questions, #questionList, .questionToolbar, .compactQuestionToolbar, .questionAdminItem, .compactQuestionCard, .questionSubjectTabs, .subjectTab, .questionResultNote
+- Dùng cho: tab Câu hỏi, lọc môn, phân trang, card câu hỏi.
+
+6) Ảnh câu hỏi admin
+- Tìm: .adminQuestionImages, .adminQuestionImageWrap, .questionAdminImageSide, .adminSearchImageSide, .adminImagePreview
+- Dùng cho: ảnh trong danh sách câu hỏi, ảnh bên phải, popup xem ảnh.
+
+7) Form sửa trực tiếp
+- Tìm: .directEditAppStyle, .directEditPolished, .directEditGrid, .directTopBar, .directPanel, .dqEditImgs, .dqEditImg, .directSaveBtn
+- Dùng cho: modal sửa câu hỏi trực tiếp, upload ảnh, nút lưu.
+
+8) Request / duyệt báo cáo sửa câu
+- Tìm: #requests, #requestList, .reqItem, .compactDiffList, .compactDiffBlock, .compactCompare, .adminReqImageGrid
+- Dùng cho: danh sách báo cáo, so sánh trước/sau, ảnh trong request.
+
+9) User / avatar / menu 3 chấm
+- Tìm: #users, #userList, .userRow, .lhUserRowFinal, .lhUserAvatar, .lhDotsBtn, #lhActionMenuFloat, #lhActionBackdrop
+- Dùng cho: danh sách user, avatar, role badge, menu thao tác.
+
+10) Duyệt tài khoản
+- Tìm: #approvals, .approvalFilter, .approvalCard, .approvalAvatar, .approvalCardActions, .approvedUsersNote
+- Dùng cho: tab duyệt user, thu hồi quyền, trạng thái pending.
+
+11) Import AI / thêm môn
+- Tìm: .aiImportWrap, .aiImportTabs, .aiTab, .aiPromptBox, .aiToolLinks, .aiImportForm, .subjectRequestItem
+- Dùng cho: popup import câu hỏi AI, preview, yêu cầu thêm môn.
+
+12) Quản lý môn học
+- Tìm: #subjectsAdmin, .subjectAdminPanel, .subjectAdminItem, .subjectAdminCode, .subjectAdminActions, .editSubjectForm
+- Dùng cho: danh sách môn, sửa/xóa môn.
+
+13) Thùng rác
+- Tìm: #trash, .trashCompactWrap, .compactTrashGroup, .compactTrashItem, .trashActions
+- Dùng cho: danh sách đã xóa, khôi phục/xóa vĩnh viễn.
+
+14) Modal / toast / progress
+- Tìm: .modal, .modalBox, .modalBodyScroll, .toast, .errorBox, .adminProgressOverlay, .adminProgressBox, .adminProgressBar
+- Dùng cho: popup, thông báo, loading/progress khi import hoặc xử lý lâu.
+
+15) Responsive
+- Tìm: @media (max-width:1180px), @media (max-width:980px), @media (max-width:900px), @media (max-width:760px), @media (max-width:680px), @media (max-width:480px)
+- Dùng cho: tablet/mobile, sidebar thu gọn, bố cục user/card.
+
+GỢI Ý AI
+- Lỗi sidebar/menu: xem nhóm 2 + 15.
+- Lỗi câu hỏi/ảnh câu hỏi: xem nhóm 5 + 6 + 15.
+- Lỗi sửa trực tiếp: xem nhóm 7 + 14.
+- Lỗi request/báo cáo: xem nhóm 8 + 14.
+- Lỗi user/avatar/menu 3 chấm: xem nhóm 9 + 10.
+- Lỗi import/thêm môn: xem nhóm 11 + 12.
+- Lỗi thùng rác: xem nhóm 13.
+AI_ADMIN_CSS_MAP_END */
+
 :root{--bg:#080605;--fog:#f5f0e8;--mist:#c9bfaa;--gold:#c8a96e;--gold2:#e8d4a8;--bd:rgba(200,169,110,.22);--ok:#72c58c;--bad:#e9877b;--r:18px;--font:Arial,"Segoe UI",Roboto,sans-serif;}
 *{box-sizing:border-box;}
 html,body,button,input{font-family:var(--font)!important;}

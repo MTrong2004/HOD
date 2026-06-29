@@ -1091,9 +1091,9 @@ async function getSubjects() {
   }
   function renderSubjects() { const list = $('subjectList'); if (!list) return; const q = (($('subjectSearch')?.value) || '').trim().toLowerCase(); const arr = subjectsCache.filter(s => !q || `${s.code || ''} ${s.name || ''} ${s.description || ''}`.toLowerCase().includes(q)); list.innerHTML = arr.map(card).join(''); $('subjectEmpty')?.classList.toggle('hidden', !!arr.length); list.querySelectorAll('.subjectCard').forEach(x => x.onclick = () => { pickedCode = x.dataset.code; applyPicked(); }); applyPicked(); }
   let lastRefreshTime = 0;
-  async function refreshSubjects() {
+  async function refreshSubjects(force = false) {
     const now = Date.now();
-    if (now - lastRefreshTime < 5000) {
+    if (!force && (now - lastRefreshTime < 5000)) {
       console.warn('[refreshSubjects] Bị chặn do gọi quá nhanh (throttle 5s)');
       return;
     }
@@ -1194,7 +1194,7 @@ async function getSubjects() {
     patchSave();
     patchSignOut();
     syncSubjectTexts();
-    $('subjectRefresh')?.addEventListener('click', refreshSubjects);
+    $('subjectRefresh')?.addEventListener('click', () => refreshSubjects(true));
     $('subjectSearch')?.addEventListener('input', renderSubjects);
     $('subjectEnter')?.addEventListener('click', enterSubject);
     $('subjectLogout')?.addEventListener('click', logoutGate);

@@ -20,8 +20,8 @@ export default async function handler(req) {
     });
 
     const userProfile = userRes.rows?.[0];
-    const adminEmail = getAdminEmail();
-    const isConfiguredAdmin = adminEmail && userProfile && userProfile.email && userProfile.email.toLowerCase().trim() === adminEmail;
+    const adminEmail = String(getAdminEmail() || '').toLowerCase().trim();
+    const isConfiguredAdmin = adminEmail && userProfile && userProfile.email && String(userProfile.email).toLowerCase().trim() === adminEmail;
     
     const isBlocked = userProfile?.blocked === 1 || userProfile?.blocked === true;
     const isApproved = userProfile?.approved === 1 || userProfile?.approved === true;
@@ -39,6 +39,26 @@ export default async function handler(req) {
 
     const adminEmailStr = userProfile?.email || 'N/A';
     const now = new Date().toISOString();
+
+    const safeParse = (value, fallback) => {
+      if (value === null || value === undefined || value === '') return fallback;
+      if (typeof value !== 'string') return value;
+      try { return JSON.parse(value); } catch { return fallback; }
+    };
+    const toJsonText = (value, fallback) => {
+      const v = value === undefined ? fallback : value;
+      return typeof v === 'string' ? v : JSON.stringify(v ?? fallback);
+    };
+    const subjectCoverWithNewBadge = (coverValue, enabled = true) => {
+      let meta = {};
+      if (coverValue) {
+        if (typeof coverValue === 'string') {
+          try { meta = JSON.parse(coverValue) || {}; } catch { meta = { url: coverValue }; }
+        } else if (typeof coverValue === 'object') meta = { ...coverValue };
+      }
+      meta.new_badge = !!enabled;
+      return JSON.stringify(meta);
+    };
 
     // Hàm tiện ích để ghi log admin
     const logAdminAction = async (actionName, targetType, targetId, details = {}) => {
@@ -65,8 +85,8 @@ export default async function handler(req) {
         const request = reqRes.rows?.[0];
         if (!request) return json({ error: 'Request not found' }, 404);
 
-        const new_data = JSON.parse(request.new_data || '{}');
-        const old_data = JSON.parse(request.old_data || '{}');
+        const new_data = safeParse(request.new_data, {});
+        const old_data = safeParse(request.old_data, {});
 
         // Cập nhật câu hỏi
         await db.execute({
@@ -223,7 +243,7 @@ export default async function handler(req) {
 
         // Thêm vào deleted_questions
         await db.execute({
-          sql: `insert into deleted_questions (id, original_data, deleted_at, deleted_by, deleted_by_email)
+          sql: `insert or replace into deleted_questions (id, original_data, deleted_at, deleted_by, deleted_by_email)
                 values (?, ?, ?, ?, ?)`,
           args: [question_id, JSON.stringify(q), now, user_id, adminEmailStr]
         });
@@ -285,7 +305,7 @@ export default async function handler(req) {
         const res = await db.execute({
           sql: `insert into subjects (code, name, description, cover, sort_order, is_active, created_at)
                 values (?, ?, ?, ?, ?, 1, ?)`,
-          args: [finalCode, name, description || '', cover || '', finalSortOrder, now]
+          args: [finalCode, name, description || '', subjectCoverWithNewBadge(cover, true), finalSortOrder, now]
         });
 
         const newId = Number(res.lastInsertRowid);
@@ -341,33 +361,98 @@ export default async function handler(req) {
         const sub = subRes.rows?.[0];
         if (!sub) return json({ error: 'Subject not found' }, 404);
 
+        const qRes = await db.execute({
+          sql: 'select * from questions where subject_code = ? order by num asc',
+          args: [sub.code]
+        });
+        const backup = { subject: sub, questions: qRes.rows || [] };
+
         await db.execute({
           sql: 'update subjects set is_active = 0 where id = ?',
           args: [subject_id]
+        });
+        await db.execute({
+          sql: 'update questions set is_active = 0, updated_at = ? where subject_code = ?',
+          args: [now, sub.code]
         });
 
         await db.execute({
           sql: `insert into deleted_subjects (original_data, deleted_by, deleted_by_email, deleted_at)
                 values (?, ?, ?, ?)`,
-          args: [JSON.stringify(sub), user_id, adminEmailStr, now]
+          args: [JSON.stringify(backup), user_id, adminEmailStr, now]
         });
 
-        await logAdminAction('delete_subject', 'subjects', subject_id, { code: sub.code });
+        await logAdminAction('delete_subject', 'subjects', subject_id, { code: sub.code, questions: backup.questions.length });
         return json({ ok: true });
       }
 
       case 'restore_subject': {
         const { subject_id, code } = payload;
-        await db.execute({
-          sql: 'update subjects set is_active = 1 where id = ?',
+        const delRes = await db.execute({
+          sql: 'select * from deleted_subjects where id = ?',
           args: [subject_id]
         });
-        await db.execute({
-          sql: "delete from deleted_subjects where json_extract(original_data, '$.id') = ?",
-          args: [subject_id]
-        });
+        const trash = delRes.rows?.[0];
+        const backup = trash ? safeParse(trash.original_data, {}) : {};
+        const sub = backup.subject || backup || null;
 
-        await logAdminAction('restore_subject', 'subjects', subject_id, { code });
+        if (sub?.code) {
+          await db.execute({
+            sql: `insert into subjects (code, name, description, cover, sort_order, is_active, created_at)
+                  values (?, ?, ?, ?, ?, 1, ?)
+                  on conflict(code) do update set
+                    name = excluded.name,
+                    description = excluded.description,
+                    cover = excluded.cover,
+                    sort_order = excluded.sort_order,
+                    is_active = 1`,
+            args: [sub.code, sub.name || sub.code, sub.description || '', sub.cover || '', sub.sort_order || 0, sub.created_at || now]
+          });
+
+          const questions = Array.isArray(backup.questions) ? backup.questions : [];
+          for (const q of questions) {
+            await db.execute({
+              sql: `insert into questions (subject_code, num, question, options, answer, answer_text, images, is_active, has_image, error_risk, error_risk_reason, created_at, updated_at)
+                    values (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
+                    on conflict(subject_code, num) do update set
+                      question = excluded.question,
+                      options = excluded.options,
+                      answer = excluded.answer,
+                      answer_text = excluded.answer_text,
+                      images = excluded.images,
+                      is_active = 1,
+                      has_image = excluded.has_image,
+                      error_risk = excluded.error_risk,
+                      error_risk_reason = excluded.error_risk_reason,
+                      updated_at = excluded.updated_at`,
+              args: [
+                q.subject_code || sub.code,
+                q.num,
+                q.question || '',
+                toJsonText(q.options, {}),
+                q.answer || '',
+                q.answer_text || '',
+                toJsonText(q.images, []),
+                q.has_image ? 1 : 0,
+                q.error_risk || 'low',
+                q.error_risk_reason || null,
+                q.created_at || now,
+                now
+              ]
+            });
+          }
+        } else {
+          await db.execute({
+            sql: 'update subjects set is_active = 1 where id = ?',
+            args: [subject_id]
+          });
+        }
+
+        await db.execute({
+          sql: 'delete from deleted_subjects where id = ?',
+          args: [subject_id]
+        });
+        await logAdminAction('restore_subject', 'subjects', subject_id, { code: code || sub?.code });
         return json({ ok: true });
       }
 
@@ -384,12 +469,12 @@ export default async function handler(req) {
         // 1. Thêm môn học
         const subRes = await db.execute({
           sql: `insert into subjects (code, name, description, cover, sort_order, is_active, created_at)
-                values (?, ?, ?, '', 99, 1, ?)`,
-          args: [request.code.toUpperCase().trim(), request.name, request.description || '', now]
+                values (?, ?, ?, ?, 99, 1, ?)`,
+          args: [request.code.toUpperCase().trim(), request.name, request.description || '', subjectCoverWithNewBadge('', true), now]
         });
 
         // 2. Thêm các câu hỏi đính kèm (nếu có)
-        const qList = JSON.parse(request.questions_data || '[]');
+        const qList = safeParse(request.questions_data, []);
         if (qList && qList.length > 0) {
           for (const q of qList) {
             await db.execute({
@@ -435,8 +520,8 @@ export default async function handler(req) {
       case 'toggle_user_block': {
         const { target_user_id, blocked } = payload;
         await db.execute({
-          sql: 'update profiles set blocked = ?, last_activity = ? where id = ?',
-          args: [blocked ? 1 : 0, now, target_user_id]
+          sql: 'update profiles set blocked = ? where id = ?',
+          args: [blocked ? 1 : 0, target_user_id]
         });
 
         await logAdminAction(blocked ? 'block_user' : 'unblock_user', 'profiles', target_user_id);
@@ -445,9 +530,10 @@ export default async function handler(req) {
 
       case 'set_user_role': {
         const { target_user_id, role } = payload;
+        if (!['user', 'editor', 'admin'].includes(role)) return json({ error: 'Invalid role' }, 400);
         await db.execute({
-          sql: 'update profiles set role = ?, last_activity = ? where id = ?',
-          args: [role, now, target_user_id]
+          sql: 'update profiles set role = ? where id = ?',
+          args: [role, target_user_id]
         });
 
         await logAdminAction('set_user_role', 'profiles', target_user_id, { role });
@@ -457,8 +543,8 @@ export default async function handler(req) {
       case 'approve_user_registration': {
         const { target_user_id } = payload;
         await db.execute({
-          sql: 'update profiles set approved = 1, last_activity = ? where id = ?',
-          args: [now, target_user_id]
+          sql: 'update profiles set approved = 1 where id = ?',
+          args: [target_user_id]
         });
 
         await logAdminAction('approve_user_registration', 'profiles', target_user_id);
@@ -496,7 +582,7 @@ export default async function handler(req) {
             code.toUpperCase().trim(),
             name,
             description || '',
-            JSON.stringify(questions_data || []),
+            toJsonText(questions_data, []),
             user_id,
             adminEmailStr,
             now

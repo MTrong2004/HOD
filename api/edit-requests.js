@@ -9,11 +9,12 @@ export default async function handler(req) {
     const body = await req.json();
     await db.execute({
       sql: `insert into edit_requests
-            (question_id, question_num, user_id, user_email, old_data, new_data, reason, status, created_at)
-            values (?, ?, ?, ?, ?, ?, ?, 'pending', datetime('now'))`,
+            (question_id, question_num, subject_code, user_id, user_email, old_data, new_data, reason, status, created_at)
+            values (?, ?, ?, ?, ?, ?, ?, ?, 'pending', datetime('now'))`,
       args: [
         body.question_id || null,
         body.question_num || null,
+        body.subject_code || body.old_data?.subject_code || body.new_data?.subject_code || '',
         body.user_id || null,
         body.user_email || '',
         JSON.stringify(body.old_data || {}),

@@ -1048,6 +1048,15 @@ async function getSubjects() {
     }
   }
   const supa = c(); if (!supa || !logged()) return fallbackSubjects(); const { data, error } = await supa.from('subjects').select('*').eq('is_active', true).order('sort_order', { ascending: true }).order('code', { ascending: true }); if (error || !data || !data.length) { console.warn(error || 'No subjects'); showErr('Không tải được danh sách môn học. Đang dùng môn mặc định.'); return fallbackSubjects(); } return await addQuestionCounts(data); }
+  function subjectCoverMeta(s) {
+    const raw = s?.cover || '';
+    if (!raw || typeof raw !== 'string') return {};
+    try { return JSON.parse(raw) || {}; } catch(e) { return { url: raw }; }
+  }
+  function subjectIsNew(s) {
+    const m = subjectCoverMeta(s);
+    return m.new_badge === true || m.is_new === true || m.new === true || s?.new_badge === true || s?.is_new === true;
+  }
   function card(s) {
     const rawCode = String(s.code || '');
     const code = esc2(displayCode(rawCode));
@@ -1057,7 +1066,9 @@ async function getSubjects() {
     const countText = Number.isFinite(rawCount) ? `${rawCount} câu` : '— câu';
     const status = s.is_active === false ? 'Tạm ẩn' : countText;
     const chosen = pickedCode === s.code;
-    return `<button class="subjectCard ${chosen ? 'active' : ''}" data-code="${esc2(rawCode)}" type="button" title="${code} - ${name} - ${countText}">
+    const newBadge = subjectIsNew(s) ? '<span class="subjectNewBadge">NEW</span>' : '';
+    return `<button class="subjectCard ${chosen ? 'active' : ''} ${subjectIsNew(s) ? 'hasNewBadge' : ''}" data-code="${esc2(rawCode)}" type="button" title="${code} - ${name} - ${countText}">
+      ${newBadge}
       <span class="subjectCardCode"><span>${code}</span></span>
       <span class="subjectCardTitle">${name}</span>
       <span class="subjectCardDesc">${desc}</span>

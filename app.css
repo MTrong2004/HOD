@@ -2712,3 +2712,108 @@ body:not(.hod-is-admin-final) #adminOpenBtn,body:not(.hod-is-admin-final) #hodFl
 .addQuestionModal.dragImageOver .box,#editModal.dragImageOver .box,#importPreviewModal.dragImageOver .box{outline:2px dashed var(--gold2);outline-offset:-10px;}
 .editPasteImageHint,.importPasteImageHint,.addPasteImageHint{margin:8px 0 10px!important;}
 /* ===== END PASTE_IMAGE_UPLOAD_HINT_MINIMAL_20260629 ===== */
+
+
+/* ===== COPILOT_SUBJECT_NEW_BADGE_20260630 ===== */
+.subjectCard{position:relative!important;overflow:hidden!important;}
+.subjectNewBadge{
+  position:absolute!important;
+  top:10px!important;
+  right:10px!important;
+  z-index:8!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  min-width:48px!important;
+  height:24px!important;
+  padding:0 10px!important;
+  border-radius:999px!important;
+  border:1px solid rgba(255,235,170,.78)!important;
+  background:linear-gradient(135deg,#ffe98a,#ffd05a 45%,#fff6c8)!important;
+  color:#211304!important;
+  font-size:.68rem!important;
+  font-weight:950!important;
+  letter-spacing:.08em!important;
+  box-shadow:0 0 14px rgba(255,218,91,.55),0 0 32px rgba(255,218,91,.24)!important;
+  animation:subjectNewBadgeGlow 1.35s ease-in-out infinite alternate, subjectNewBadgeFloat 2.2s ease-in-out infinite!important;
+  pointer-events:none!important;
+}
+.subjectNewBadge::after{
+  content:""!important;
+  position:absolute!important;
+  inset:-2px!important;
+  border-radius:999px!important;
+  background:linear-gradient(110deg,transparent 0%,rgba(255,255,255,.92) 45%,transparent 68%)!important;
+  transform:translateX(-120%) skewX(-18deg)!important;
+  animation:subjectNewBadgeShine 1.65s ease-in-out infinite!important;
+}
+@keyframes subjectNewBadgeGlow{
+  from{filter:saturate(1) brightness(1);box-shadow:0 0 10px rgba(255,218,91,.42),0 0 22px rgba(255,218,91,.18);}
+  to{filter:saturate(1.25) brightness(1.12);box-shadow:0 0 18px rgba(255,238,150,.82),0 0 42px rgba(255,218,91,.32);}
+}
+@keyframes subjectNewBadgeShine{
+  0%{transform:translateX(-130%) skewX(-18deg);opacity:0;}
+  35%{opacity:1;}
+  70%,100%{transform:translateX(130%) skewX(-18deg);opacity:0;}
+}
+@keyframes subjectNewBadgeFloat{
+  0%,100%{transform:translateY(0) scale(1);}
+  50%{transform:translateY(-1px) scale(1.035);}
+}
+@media (max-width:760px){
+  .subjectNewBadge{top:8px!important;right:8px!important;height:22px!important;min-width:44px!important;font-size:.62rem!important;}
+}
+/* ===== END_COPILOT_SUBJECT_NEW_BADGE_20260630 ===== */
+
+
+/* ===== COPILOT_FIX_SUBJECT_NEW_BADGE_POSITION_20260630 ===== */
+/* Định vị huy hiệu NEW nằm gọn trong thẻ để không bị cắt bóng, chừa khoảng trống cho tiêu đề */
+.subjectCard.hasNewBadge,
+.subjectCard:has(.subjectNewBadge){
+  padding-top:14px!important;
+  padding-right:16px!important;
+}
+.subjectCard.hasNewBadge .subjectCardTitle,
+.subjectCard:has(.subjectNewBadge) .subjectCardTitle{
+  padding-right:68px!important; /* Chừa khoảng trống bên phải cho tiêu đề không đè lên huy hiệu NEW */
+}
+.subjectCard.hasNewBadge .subjectCardCode,
+.subjectCard:has(.subjectNewBadge) .subjectCardCode{
+  margin-right:0!important; /* Bỏ margin-right để nhường toàn bộ không gian cho tiêu đề hiển thị đầy đủ */
+}
+.subjectNewBadge{
+  top:10px!important;
+  right:12px!important; /* Cho lùi vào trong thẻ 12px để không bị container cắt bóng */
+  min-width:54px!important;
+  height:26px!important;
+  padding:0 10px!important;
+  border-radius:999px!important;
+  overflow:hidden!important;
+  isolation:isolate!important;
+  transform:none!important;
+  box-shadow:0 4px 12px rgba(0,0,0,.30),0 0 14px rgba(255,224,92,.55)!important;
+  animation:subjectNewBadgeGlowFixed 1.45s ease-in-out infinite alternate!important;
+}
+.subjectNewBadge::after{
+  inset:0!important;
+  border-radius:999px!important;
+  transform:translateX(-115%) skewX(-18deg)!important;
+  animation:subjectNewBadgeShineFixed 1.8s ease-in-out infinite!important;
+}
+@keyframes subjectNewBadgeGlowFixed{
+  from{filter:saturate(1) brightness(1);box-shadow:0 4px 12px rgba(0,0,0,.30),0 0 10px rgba(255,224,92,.32);}
+  to{filter:saturate(1.18) brightness(1.08);box-shadow:0 5px 14px rgba(0,0,0,.34),0 0 16px rgba(255,224,92,.52);}
+}
+@keyframes subjectNewBadgeShineFixed{
+  0%{transform:translateX(-125%) skewX(-18deg);opacity:0;}
+  35%{opacity:.9;}
+  70%,100%{transform:translateX(125%) skewX(-18deg);opacity:0;}
+}
+@media (max-width:760px){
+  .subjectCard.hasNewBadge,
+  .subjectCard:has(.subjectNewBadge){padding-top:14px!important;padding-right:12px!important;}
+  .subjectNewBadge{top:8px!important;right:8px!important;min-width:48px!important;height:22px!important;font-size:.62rem!important;}
+  .subjectCard.hasNewBadge .subjectCardTitle,
+  .subjectCard:has(.subjectNewBadge) .subjectCardTitle{padding-right:58px!important;}
+}
+/* ===== END_COPILOT_FIX_SUBJECT_NEW_BADGE_POSITION_20260630 ===== */

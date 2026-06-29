@@ -14,8 +14,8 @@ export default async function handler(req) {
     }
 
     const trimmedEmail = email.toLowerCase().trim();
-    const adminEmail = getAdminEmail();
-    const isAdmin = adminEmail && trimmedEmail === adminEmail;
+    const adminEmail = String(getAdminEmail() || '').toLowerCase().trim();
+    const isAdmin = !!adminEmail && trimmedEmail === adminEmail;
 
     console.log('[profile] Admin matching debug:', {
       trimmedEmail,
@@ -35,6 +35,7 @@ export default async function handler(req) {
       // Đã tồn tại -> Cập nhật login/activity
       let role = existing.rows[0].role || 'user';
       let approved = existing.rows[0].approved;
+      if (approved === null || approved === undefined) approved = 0;
 
       // Nếu email khớp với admin email cấu hình trên Vercel, tự nâng cấp lên Admin
       if (isAdmin) {
@@ -44,7 +45,10 @@ export default async function handler(req) {
 
       await db.execute({
         sql: `update profiles 
-              set email = ?, full_name = ?, avatar_url = ?, role = ?, approved = ?, last_login = ?, last_activity = ?
+              set email = ?,
+                  full_name = coalesce(?, full_name),
+                  avatar_url = coalesce(?, avatar_url),
+                  role = ?, approved = ?, last_login = ?, last_activity = ?
               where id = ?`,
         args: [trimmedEmail, full_name || null, avatar_url || null, role, approved, now, now, id]
       });

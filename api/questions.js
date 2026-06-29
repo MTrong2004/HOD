@@ -13,8 +13,8 @@ function cleanRow(row) {
     ...row,
     options: parseJson(row.options, {}),
     images: parseJson(row.images, []),
-    is_active: row.is_active === 1 || row.is_active === true,
-    has_image: row.has_image === 1 || row.has_image === true
+    is_active: row.is_active === 1 || row.is_active === true || row.is_active === '1',
+    has_image: row.has_image === 1 || row.has_image === true || row.has_image === '1'
   };
 }
 
@@ -23,7 +23,7 @@ export default async function handler(req) {
 
   try {
     const url = new URL(req.url);
-    const subject = (url.searchParams.get('subject_code') || '').trim();
+    const subject = (url.searchParams.get('subject_code') || '').trim().toUpperCase();
 
     let sql = `select id, subject_code, num, question, options, answer, answer_text,
                       images, is_active, created_at, updated_at, has_image,

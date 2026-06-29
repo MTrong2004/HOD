@@ -181,6 +181,7 @@ function createTursoClientMock(supaClient) {
         const res = await fetch('/api/admin-dashboard');
         const data = await res.json();
         if (data.error) throw new Error(data.error);
+        normalizeDashboardData(data);
         localCache = data;
         return data;
       } catch (err) {
@@ -197,6 +198,44 @@ function createTursoClientMock(supaClient) {
     return user?.id || supaClient.auth.getUser()?.id || '';
   }
 
+  function parseMaybeJson(v, fallback) {
+    if (v === null || v === undefined || v === '') return fallback;
+    if (typeof v !== 'string') return v;
+    try { return JSON.parse(v); } catch (e) { return fallback; }
+  }
+
+  function normalizeDashboardData(data) {
+    if (!data) return data;
+    const normalizeQuestion = q => {
+      if (!q) return q;
+      q.options = parseMaybeJson(q.options, {});
+      q.images = parseMaybeJson(q.images, []);
+      q.is_active = !(q.is_active === 0 || q.is_active === false || q.is_active === '0');
+      q.has_image = q.has_image === 1 || q.has_image === true || q.has_image === '1';
+      return q;
+    };
+    const normalizeJsonCols = row => {
+      if (!row) return row;
+      ['old_data','new_data','previous_data','questions_data','original_data','details'].forEach(k => {
+        if (k in row) row[k] = parseMaybeJson(row[k], k === 'questions_data' ? [] : {});
+      });
+      return row;
+    };
+    data.questions = (data.questions || []).map(normalizeQuestion);
+    data.requests = (data.requests || []).map(normalizeJsonCols);
+    data.history = (data.history || []).map(normalizeJsonCols);
+    data.logs = (data.logs || []).map(normalizeJsonCols);
+    data.subject_requests = (data.subject_requests || []).map(normalizeJsonCols);
+    data.deleted_questions = (data.deleted_questions || []).map(normalizeJsonCols);
+    data.deleted_subjects = (data.deleted_subjects || []).map(normalizeJsonCols);
+    data.profiles = (data.profiles || []).map(p => {
+      p.approved = p.approved === 1 || p.approved === true || p.approved === '1';
+      p.blocked = p.blocked === 1 || p.blocked === true || p.blocked === '1';
+      return p;
+    });
+    return data;
+  }
+
   const builder = (tableName) => {
     let queryType = '';
     let selectCols = '';
@@ -205,6 +244,8 @@ function createTursoClientMock(supaClient) {
     let orderCol = '';
     let orderOpts = {};
     let limitVal = null;
+    let singleMode = false;
+    let maybeSingleMode = false;
 
     const chain = {
       select: (cols) => {
@@ -257,9 +298,11 @@ function createTursoClientMock(supaClient) {
         return chain;
       },
       single: () => {
+        singleMode = true;
         return chain;
       },
       maybeSingle: () => {
+        maybeSingleMode = true;
         return chain;
       },
       then: async (onfulfilled, onrejected) => {
@@ -341,6 +384,9 @@ function createTursoClientMock(supaClient) {
           }
         }
 
+        if (singleMode || maybeSingleMode) {
+          return filtered[0] || null;
+        }
         return filtered;
       }
 
@@ -395,7 +441,8 @@ function createTursoClientMock(supaClient) {
             apiPayload = { subject_id: idVal, code: payload.code };
           } else {
             apiAction = 'edit_subject';
-            apiPayload = { id: idVal, name: payload.name, description: payload.description, sort_order: payload.sort_order };
+            const subjectId = idVal || (codeVal && (localCache?.subjects || []).find(s => String(s.code) === String(codeVal))?.id);
+            apiPayload = { id: subjectId, name: payload.name, description: payload.description, cover: payload.cover, sort_order: payload.sort_order };
           }
         } else if (tableName === 'subject_requests') {
           if (payload.status === 'approved') {
@@ -2813,11 +2860,16 @@ Bắt đầu ngay từ câu 1.`;
     setBusy(true, 'Đang lưu môn...');
     try{
       if(newCode === oldCode){
+        if(!subject.id) return alert('Không tìm thấy ID môn học. Bấm Tải lại rồi thử lại.');
         const {error} = await client.from('subjects').update({
           name,
-          description: description || null
-        }).eq('code', oldCode);
+          description: description || '',
+          cover: subject.cover || '',
+          sort_order: subject.sort_order || 0
+        }).eq('id', subject.id);
         if(error) return alert('Không lưu được môn: ' + error.message);
+        subject.name = name;
+        subject.description = description || '';
       } else {
         const check = await client.from('subjects').select('code').eq('code', newCode).maybeSingle();
         if(check.error) return alert('Không kiểm tra được mã môn mới: ' + check.error.message);
@@ -5476,3 +5528,293 @@ ${E(val)}</pre>`;
 })();
 // ===== END KILL_LEGACY_ADMIN_REALTIME_PROFILES_LOOP_20260629 =====
 
+
+
+// ===== COPILOT_COMPACT_DRAG_SUBJECT_ORDER_20260630 =====
+// Quản lý môn học: card nhỏ gọn + kéo thả đổi thứ tự, kéo lên đầu = vị trí 1.
+(function(){
+  if(window.__COPILOT_COMPACT_DRAG_SUBJECT_ORDER_20260630) return;
+  window.__COPILOT_COMPACT_DRAG_SUBJECT_ORDER_20260630 = true;
+
+  let dragSubjectCache = [];
+  let dragFromIndex = -1;
+
+  function injectCompactSubjectStyle(){
+    if(document.getElementById('compactDragSubjectStyle')) return;
+    const style = document.createElement('style');
+    style.id = 'compactDragSubjectStyle';
+    style.textContent = `
+      #subjectsAdmin .subjectAdminPanel{padding:16px!important;}
+      #subjectsAdmin .subjectAdminHead{padding-bottom:10px!important;margin-bottom:10px!important;}
+      #subjectsAdmin .subjectAdminHead h3{font-size:1.02rem!important;margin-bottom:4px!important;}
+      #subjectsAdmin .subjectAdminHead p{font-size:.86rem!important;}
+      #subjectsAdmin .subjectAdminList{gap:7px!important;padding-right:6px!important;}
+      #subjectsAdmin .subjectAdminItem{
+        min-height:58px!important;
+        padding:9px 12px!important;
+        border-radius:14px!important;
+        display:grid!important;
+        grid-template-columns:34px 88px minmax(0,1fr) auto!important;
+        gap:10px!important;
+        align-items:center!important;
+        cursor:grab!important;
+        transition:transform .14s ease,border-color .14s ease,background .14s ease,opacity .14s ease!important;
+      }
+      #subjectsAdmin .subjectAdminItem:active{cursor:grabbing!important;}
+      #subjectsAdmin .subjectAdminItem.dragging{opacity:.45!important;transform:scale(.985)!important;border-color:rgba(232,212,168,.55)!important;}
+      #subjectsAdmin .subjectDragHandle{
+        width:30px!important;height:30px!important;border-radius:10px!important;
+        display:grid!important;place-items:center!important;
+        border:1px solid rgba(200,169,110,.22)!important;
+        background:rgba(255,255,255,.035)!important;color:rgba(232,212,168,.82)!important;
+        font-weight:950!important;font-size:1rem!important;user-select:none!important;
+      }
+      #subjectsAdmin .subjectAdminCode{
+        min-width:78px!important;max-width:88px!important;height:30px!important;
+        padding:0 9px!important;font-size:.78rem!important;
+      }
+      #subjectsAdmin .subjectAdminInfo b{font-size:.92rem!important;line-height:1.15!important;}
+      #subjectsAdmin .subjectAdminInfo p{
+        margin-top:3px!important;font-size:.80rem!important;line-height:1.25!important;
+        -webkit-line-clamp:1!important;
+      }
+      #subjectsAdmin .subjectAdminActions{gap:6px!important;flex-wrap:nowrap!important;}
+      #subjectsAdmin .subjectAdminActions .act{min-height:31px!important;padding:6px 10px!important;font-size:.82rem!important;}
+      #subjectsAdmin .subjectOrderHint{font-size:.82rem!important;color:rgba(245,240,232,.62)!important;margin:0 0 8px!important;}
+      @media (max-width:760px){
+        #subjectsAdmin .subjectAdminItem{grid-template-columns:32px minmax(0,1fr) auto!important;gap:8px!important;}
+        #subjectsAdmin .subjectAdminCode{display:none!important;}
+        #subjectsAdmin .subjectAdminActions{grid-column:2 / -1!important;justify-content:flex-start!important;}
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function escJs(s){ return String(s || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+  function subjectKey(s){ return String(s.id ?? s.code ?? ''); }
+
+  function filteredSubjects(){
+    const q = String(document.getElementById('search')?.value || '').trim().toLowerCase();
+    const arr = dragSubjectCache.slice().sort((a,b)=>(Number(a.sort_order)||0)-(Number(b.sort_order)||0) || String(a.code||'').localeCompare(String(b.code||'')));
+    if(!q) return arr;
+    return arr.filter(s => `${s.code||''} ${s.name||''} ${s.description||''}`.toLowerCase().includes(q));
+  }
+
+  async function saveSubjectOrder(){
+    if(!isAdmin()) return toast('Chỉ admin được đổi thứ tự môn.');
+    setBusy(true, 'Đang lưu thứ tự môn...');
+    try{
+      for(let i=0;i<dragSubjectCache.length;i++){
+        const s = dragSubjectCache[i];
+        const newOrder = i + 1;
+        s.sort_order = newOrder;
+        const r = await client.from('subjects').update({
+          name: s.name || s.code || '',
+          description: s.description || '',
+          cover: s.cover || '',
+          sort_order: newOrder
+        }).eq('id', s.id);
+        if(r.error) throw new Error(r.error.message || r.error);
+      }
+      if(client.clearCache) client.clearCache();
+      toast('Đã lưu thứ tự môn');
+      if(typeof loadAll === 'function') loadAll();
+    }catch(e){
+      alert('Không lưu được thứ tự môn: ' + (e.message || e));
+    }finally{
+      setBusy(false);
+    }
+  }
+
+  window.renderSubjectAdminList = function(){
+    injectCompactSubjectStyle();
+    const list = document.getElementById('subjectAdminList');
+    if(!list) return;
+    const arr = filteredSubjects();
+    if(!arr.length){
+      list.innerHTML = '<p class="muted">Không có môn học phù hợp.</p>';
+      return;
+    }
+    list.innerHTML = '<p class="subjectOrderHint">Kéo dấu ☰ để đổi vị trí. Kéo môn lên đầu danh sách = vị trí 1.</p>' + arr.map((s, idx) => `
+      <div class="subjectAdminItem" draggable="true" data-subject-key="${esc(subjectKey(s))}" data-visible-index="${idx}">
+        <div class="subjectDragHandle" title="Kéo để đổi vị trí">☰</div>
+        <div class="subjectAdminCode">${esc(s.code || '')}</div>
+        <div class="subjectAdminInfo">
+          <b>${idx + 1}. ${esc(s.name || s.code || 'Chưa có tên môn')}</b>
+          <p>${esc(s.description || 'Môn học chưa có mô tả.')}</p>
+        </div>
+        <div class="subjectAdminActions">
+          <button class="act warn" type="button" onclick="openEditSubjectAdmin('${escJs(s.code)}')">Sửa</button>
+          ${isAdmin() ? `<button class="act bad" type="button" onclick="deleteSubjectAdmin('${escJs(s.code)}')">Xóa</button>` : ''}
+        </div>
+      </div>`).join('');
+    bindSubjectDragEvents();
+  };
+
+  function bindSubjectDragEvents(){
+    const list = document.getElementById('subjectAdminList');
+    if(!list) return;
+    list.querySelectorAll('.subjectAdminItem').forEach(item => {
+      item.addEventListener('dragstart', e => {
+        const key = item.dataset.subjectKey;
+        dragFromIndex = dragSubjectCache.findIndex(s => subjectKey(s) === key);
+        item.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      item.addEventListener('dragend', () => {
+        item.classList.remove('dragging');
+        dragFromIndex = -1;
+      });
+      item.addEventListener('dragover', e => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+      });
+      item.addEventListener('drop', async e => {
+        e.preventDefault();
+        const targetKey = item.dataset.subjectKey;
+        const toIndex = dragSubjectCache.findIndex(s => subjectKey(s) === targetKey);
+        if(dragFromIndex < 0 || toIndex < 0 || dragFromIndex === toIndex) return;
+        const [moved] = dragSubjectCache.splice(dragFromIndex, 1);
+        dragSubjectCache.splice(toIndex, 0, moved);
+        dragSubjectCache.forEach((s,i) => s.sort_order = i + 1);
+        renderSubjectAdminList();
+        await saveSubjectOrder();
+      });
+    });
+  }
+
+  const oldLoadSubjectsAdmin = window.loadSubjectsAdmin;
+  window.loadSubjectsAdmin = async function(){
+    injectCompactSubjectStyle();
+    if(!isEditor()) return alert('Admin hoặc Editor mới được sửa môn học.');
+    const list = document.getElementById('subjectAdminList');
+    if(list) list.innerHTML = '<p class="muted">Đang tải môn học...</p>';
+    setBusy(true, 'Đang tải môn...');
+    try{
+      const {data, error} = await client.from('subjects').select('*').order('sort_order',{ascending:true}).order('code',{ascending:true});
+      if(error) return alert('Không tải được danh sách môn: ' + error.message);
+      dragSubjectCache = (data || []).slice();
+      renderSubjectAdminList();
+    }finally{
+      setBusy(false);
+    }
+  };
+
+  document.addEventListener('DOMContentLoaded', () => {
+    injectCompactSubjectStyle();
+    setTimeout(() => {
+      if(document.getElementById('subjectsAdmin')?.classList.contains('active')) window.loadSubjectsAdmin?.();
+    }, 600);
+  });
+})();
+// ===== END_COPILOT_COMPACT_DRAG_SUBJECT_ORDER_20260630 =====
+
+
+// ===== COPILOT_ADMIN_SUBJECT_NEW_BADGE_TOGGLE_20260630 =====
+// Admin có thể bật/tắt chữ NEW lấp lánh cho từng môn. Lưu trong subjects.cover dạng JSON.
+(function(){
+  if(window.__COPILOT_ADMIN_SUBJECT_NEW_BADGE_TOGGLE_20260630) return;
+  window.__COPILOT_ADMIN_SUBJECT_NEW_BADGE_TOGGLE_20260630 = true;
+
+  const oldOpenEditSubjectAdmin = window.openEditSubjectAdmin;
+  const oldSaveSubjectAdmin = window.saveSubjectAdmin;
+  let currentSubjectForNewBadge = null;
+
+  function parseCoverMeta(cover){
+    if(!cover) return {};
+    if(typeof cover === 'object') return {...cover};
+    try { return JSON.parse(String(cover)) || {}; } catch(e) { return { url:String(cover) }; }
+  }
+  function makeCoverWithNewBadge(cover, enabled){
+    const meta = parseCoverMeta(cover);
+    meta.new_badge = !!enabled;
+    return JSON.stringify(meta);
+  }
+  function hasNewBadge(subject){
+    const m = parseCoverMeta(subject?.cover || '');
+    return m.new_badge === true || m.is_new === true || m.new === true;
+  }
+
+  window.openEditSubjectAdmin = async function(code){
+    if(!isEditor()) return alert('Admin hoặc Editor mới được sửa môn học.');
+    const res = await client.from('subjects').select('*').eq('code', code).maybeSingle();
+    if(res.error || !res.data) {
+      if(typeof oldOpenEditSubjectAdmin === 'function') return oldOpenEditSubjectAdmin.apply(this, arguments);
+      return alert('Không tìm thấy môn học.');
+    }
+    const s = res.data;
+    currentSubjectForNewBadge = s;
+    openModal('Sửa môn học', `
+      <div class="editSubjectForm">
+        <div class="editSubjectNotice">
+          Nếu đổi <b>mã môn</b>, hệ thống cũng sẽ chuyển toàn bộ câu hỏi của môn cũ sang mã môn mới.
+        </div>
+        <div class="formGrid2">
+          <div class="field">
+            <label>Mã môn</label>
+            <input id="editSubjectOldCode" type="hidden" value="${esc(s.code || '')}">
+            <input id="editSubjectCode" value="${esc(s.code || '')}" maxlength="20" placeholder="VD: MLN111">
+          </div>
+          <div class="field">
+            <label>Tên môn học</label>
+            <input id="editSubjectName" value="${esc(s.name || '')}" maxlength="120" placeholder="VD: Triết học Mác - Lênin">
+          </div>
+        </div>
+        <div class="field">
+          <label>Nội dung / mô tả môn</label>
+          <textarea id="editSubjectDesc" rows="5" maxlength="600" placeholder="Mô tả ngắn hiển thị ở thẻ môn...">${esc(s.description || '')}</textarea>
+        </div>
+        <label class="newBadgeToggleBox" style="display:flex;align-items:center;gap:10px;border:1px solid rgba(200,169,110,.22);border-radius:14px;padding:11px 13px;background:rgba(255,255,255,.035);cursor:pointer;">
+          <input id="editSubjectNewBadge" type="checkbox" ${hasNewBadge(s) ? 'checked' : ''} style="width:18px;height:18px;">
+          <span><b style="color:var(--gold2);">Hiện chữ NEW lấp lánh</b><br><span class="muted">Bật/tắt nhãn NEW ở góc phải thẻ môn trong màn hình chọn môn.</span></span>
+        </label>
+        <div class="editSubjectMeta">
+          <span>Trạng thái: ${s.is_active === false ? 'Đang ẩn' : 'Đang hiện'}</span>
+          <span>Thứ tự: ${esc(s.sort_order ?? '')}</span>
+        </div>
+        <div class="actions editSubjectActions">
+          <button class="act ok" type="button" onclick="saveSubjectAdmin()">Lưu thay đổi</button>
+          <button class="act" type="button" onclick="closeModal()">Đóng</button>
+        </div>
+      </div>`);
+    setTimeout(() => {
+      const input = document.getElementById('editSubjectCode');
+      if(input){
+        input.oninput = function(){ this.value = this.value.toUpperCase().replace(/[^A-Z0-9_]/g,''); };
+        input.focus();
+      }
+    },0);
+  };
+
+  window.saveSubjectAdmin = async function(){
+    if(!isEditor()) return alert('Admin hoặc Editor mới được sửa môn học.');
+    const oldCode = (document.getElementById('editSubjectOldCode')?.value || '').trim().toUpperCase();
+    const newCode = (document.getElementById('editSubjectCode')?.value || '').trim().toUpperCase();
+    if(newCode !== oldCode && typeof oldSaveSubjectAdmin === 'function') return oldSaveSubjectAdmin.apply(this, arguments);
+
+    const subject = currentSubjectForNewBadge || {};
+    const name = (document.getElementById('editSubjectName')?.value || '').trim();
+    const description = (document.getElementById('editSubjectDesc')?.value || '').trim();
+    const newBadge = !!document.getElementById('editSubjectNewBadge')?.checked;
+    if(!subject.id) return alert('Không tìm thấy ID môn học. Bấm Tải lại rồi thử lại.');
+    if(!name) return alert('Tên môn học không được để trống.');
+
+    setBusy(true, 'Đang lưu môn...');
+    try{
+      const r = await client.from('subjects').update({
+        name,
+        description: description || '',
+        cover: makeCoverWithNewBadge(subject.cover || '', newBadge),
+        sort_order: subject.sort_order || 0
+      }).eq('id', subject.id);
+      if(r.error) return alert('Không lưu được môn: ' + r.error.message);
+      if(client.clearCache) client.clearCache();
+      closeModal();
+      await window.loadSubjectsAdmin?.();
+      toast('Đã lưu môn học');
+    }finally{
+      setBusy(false);
+    }
+  };
+})();
+// ===== END_COPILOT_ADMIN_SUBJECT_NEW_BADGE_TOGGLE_20260630 =====

@@ -143,7 +143,7 @@ if (location.protocol === 'file:') {
     if(/\/questions\b/.test(p)) return 10 * 60 * 1000;
     if(/\/subjects\b/.test(p)) return 10 * 60 * 1000;
     if(/\/profiles\b/.test(p) && /id=eq\./.test(q)) return 10 * 60 * 1000;
-    if(/\/site_settings\b/.test(p)) return 0;
+    if(/\/site_settings\b/.test(p)) return 10 * 60 * 1000;
     return 0;
   }
   function keyOf(url){ return url.origin + url.pathname + url.search; }
@@ -327,11 +327,6 @@ window.HODSupabase = (() => {
   const configured = () => CONFIG.SUPABASE_URL.startsWith('https://') && !CONFIG.SUPABASE_ANON_KEY.startsWith('PASTE_');
   const isReady = () => !!client && !!currentUser;
   const isAdmin = () => currentProfile?.role === 'admin';
-  const isEditor = () => {
-    const role = String(currentProfile?.role || '').toLowerCase();
-    const blocked = currentProfile?.blocked || currentProfile?.is_blocked || currentProfile?.status === 'blocked';
-    return ['admin', 'editor'].includes(role) && !blocked;
-  };
   const $id = id => document.getElementById(id);
 
   function safeJson(obj) {
@@ -375,7 +370,7 @@ window.HODSupabase = (() => {
 
   function openAuth() { $id('authModal')?.classList.remove('hidden'); }
   function closeAuth() { $id('authModal')?.classList.add('hidden'); }
-  function openAdmin() { if (!isEditor()) { alert('Tài khoản Google này chưa có quyền quản trị.'); return; } window.open('admin.html', '_blank'); }
+  function openAdmin() { if (!isAdmin()) { alert('Tài khoản Google này chưa có quyền admin.'); return; } window.open('admin.html', '_blank'); }
   function closeAdmin() { $id('adminModal')?.classList.add('hidden'); }
 
   function setupHeaderAuthUI() {
@@ -493,191 +488,75 @@ window.HODSupabase = (() => {
   }
   let activeProfilePromise = null;
   async function loadProfile() {
-    if (!client || !currentUser) { currentProfile = null; updateAuthUI(); return null; }
-    
-    if (window.APP_CONFIG?.USE_TURSO_API) {
-      if (activeProfilePromise) return activeProfilePromise;
-      activeProfilePromise = (async () => {
-        try {
-          const res = await fetch('/api/profile', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              id: currentUser.id,
-              email: currentUser.email,
-              full_name: currentUser.user_metadata?.full_name || '',
-              avatar_url: currentUser.user_metadata?.avatar_url || ''
-            })
-          });
-          const data = await res.json();
-          if (data.error) throw new Error(data.error);
-          currentProfile = data.data;
-          
-          if (currentProfile?.blocked || currentProfile?.is_blocked || currentProfile?.status === 'blocked') {
-            alert('Tài khoản của bạn đã bị khóa.');
-            await signOut();
-            return null;
-          }
-          await notifyLoginToDiscordOnce();
-          if (currentProfile?.approved === 0 || currentProfile?.approved === false || currentProfile?.approved === '0') {
-            showPendingApproval();
-            return null;
-          }
-          hidePendingApproval();
-          updateAuthUI();
-          return currentProfile;
-        } catch (e) {
-          console.error('[loadProfile API Error]', e);
-          return null;
-        } finally {
-          activeProfilePromise = null;
-        }
-      })();
-      return activeProfilePromise;
-    }
-
+    if (!currentUser) { currentProfile = null; updateAuthUI(); return null; }
+    if (activeProfilePromise) return activeProfilePromise;
     activeProfilePromise = (async () => {
       try {
-        const now = new Date().toISOString();
-        const base = { id: currentUser.id, email: currentUser.email, last_login: now, last_activity: now };
-
-        // Role/quyền phải luôn lấy mới, không dùng cache cũ kẻo admin bị hiện thành user.
-        try { window.clearLearningHubSupabaseCache?.('profiles'); } catch(e) {}
-
-        let existing = null;
-        const sel = await client.from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
-        if (!sel.error) existing = sel.data;
-        else console.warn('Không đọc được profile:', sel.error);
-
-        if (!existing) {
-          let regMode = 'approval';
-          try {
-            try { window.clearLearningHubSupabaseCache?.('site_settings'); } catch(e) {}
-            const { data: setting } = await client.from('site_settings').select('value').eq('key', 'registration_mode').maybeSingle();
-            if (setting && setting.value !== undefined && setting.value !== null) {
-              regMode = setting.value;
-              if (typeof regMode === 'string') { try { regMode = JSON.parse(regMode); } catch(e) {} }
-              if (typeof regMode !== 'string') regMode = String(regMode || 'approval');
-              regMode = regMode.replace(/^"+|"+$/g, '').trim() || 'approval';
-            }
-          } catch (e) { console.warn('Không đọc được registration_mode, mặc định approval:', e); }
-          if (!['open','approval','closed'].includes(regMode)) regMode = 'approval';
-
-          if (regMode === 'closed') {
-            alert('Hệ thống hiện không cho phép đăng ký mới. Vui lòng liên hệ admin.');
-            await signOut();
-            return null;
-          }
-
-          const autoApprove = (regMode === 'open');
-          const ins = await client.from('profiles')
-            .insert({ ...base, role: 'user', blocked: false, approved: autoApprove })
-            .select('*')
-            .single();
-          if (ins.error) {
-            console.warn('Không tạo được profile mới:', ins.error);
-            currentProfile = { ...base, role: 'user', blocked: false, approved: autoApprove };
-          } else currentProfile = ins.data;
-        } else {
-          // Giới hạn cập nhật last_login tối đa 1 lần mỗi 5 phút để tránh spam khi reload trang liên tục
-          const lastLoginUpdateKey = 'lh_last_login_update_' + currentUser.id;
-          const lastUpdate = sessionStorage.getItem(lastLoginUpdateKey);
-          let updData = existing;
-
-          if (!lastUpdate || Date.now() - Number(lastUpdate) > 5 * 60 * 1000) {
-            const upd = await client.from('profiles')
-              .update({ email: currentUser.email, last_login: now, last_activity: now })
-              .eq('id', currentUser.id)
-              .select('*')
-              .single();
-            if (upd.error) {
-              console.warn('Không cập nhật last_login:', upd.error);
-            } else {
-              updData = upd.data;
-              sessionStorage.setItem(lastLoginUpdateKey, String(Date.now()));
-            }
-          }
-
-          currentProfile = { ...existing, ...(updData || {}) };
-          if (existing?.role && (!updData?.role || updData.role === 'user')) currentProfile.role = existing.role;
-          if (existing?.approved !== undefined && updData?.approved === undefined) currentProfile.approved = existing.approved;
-          if (existing?.blocked !== undefined && updData?.blocked === undefined) currentProfile.blocked = existing.blocked;
-        }
-
+        const res = await fetch('/api/profile?turso=1&ts=' + Date.now(), {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store',
+          body: JSON.stringify({
+            id: currentUser.id,
+            email: currentUser.email || '',
+            full_name: currentUser.user_metadata?.full_name || '',
+            avatar_url: currentUser.user_metadata?.avatar_url || currentUser.user_metadata?.picture || '',
+            last_login: new Date().toISOString(),
+            last_activity: new Date().toISOString()
+          })
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || json.error) throw new Error(json.error || 'Không tải được profile từ Turso');
+        currentProfile = json.data || json.profile || json;
         if (currentProfile?.blocked || currentProfile?.is_blocked || currentProfile?.status === 'blocked') {
           alert('Tài khoản của bạn đã bị khóa.');
           await signOut();
           return null;
         }
-
         await notifyLoginToDiscordOnce();
-
         if (currentProfile?.approved === false || currentProfile?.approved === 0 || currentProfile?.approved === '0') {
           showPendingApproval();
+          updateAuthUI();
           return null;
         }
         hidePendingApproval();
-
         updateAuthUI();
         return currentProfile;
-      } finally {
-        activeProfilePromise = null;
-      }
+      } catch (e) {
+        console.error('[Turso profile]', e);
+        currentProfile = null;
+        updateAuthUI();
+        return null;
+      } finally { activeProfilePromise = null; }
     })();
-
     return activeProfilePromise;
   }
 
   async function loadQuestionsFromSupabase() {
-    if (!client || !currentUser) return false;
+    if (!currentUser) return false;
     if (currentProfile && (currentProfile.approved === false || currentProfile.approved === 0 || currentProfile.approved === '0')) { showPendingApproval(); return false; }
-
-    if (window.APP_CONFIG?.USE_TURSO_API) {
-      try {
-        const activeSubject = localStorage.getItem('learninghub_subject_code_merged_v1') || '';
-        const res = await fetch(`/api/questions?subject_code=${activeSubject}`);
-        const r = await res.json();
-        if (r.error) throw new Error(r.error);
-        RAW = (r.data || []).map(rowToQuestion);
-        pool = [...RAW];
-        var _asub = localStorage.getItem('learninghub_subject_code_merged_v1') || '';
-        var _sci = _asub ? (+localStorage.getItem('learninghub_progress_' + _asub) || 0) : ci;
-        ci = Math.max(0, Math.min(_sci, pool.length - 1));
-        flipped = false;
-        if ($id('total')) $id('total').textContent = pool.length;
-        renderCard();
-        renderQuiz();
-        renderStudy();
-        notify2('Đã tải câu hỏi từ Turso');
-        return true;
-      } catch (e) {
-        console.error('[loadQuestions API Error]', e);
-        notify2('Không tải được câu hỏi từ Turso.');
-        return false;
-      }
-    }
-
     const activeSubject = localStorage.getItem('learninghub_subject_code_merged_v1') || '';
-    let query = client.from('questions').select('id,subject_code,num,question,options,answer,answer_text,is_active,updated_at,has_image,error_risk,error_risk_reason').eq('is_active', true);
-    if (activeSubject) query = query.eq('subject_code', activeSubject);
-    const { data, error } = await query.order('num', { ascending: true });
-    if (error) { console.warn(error); notify2('Không tải được questions từ Supabase.'); return false; }
-    if (!data?.length) { notify2(activeSubject ? `Môn ${activeSubject} chưa có câu hỏi.` : 'Supabase chưa có câu hỏi. Hãy import seed trước.'); return false; }
-    const mapped = data.map(rowToQuestion);
-    RAW = mapped;
-    pool = [...RAW];
-    var _asub = localStorage.getItem('learninghub_subject_code_merged_v1') || '';
-    var _sci = _asub ? (+localStorage.getItem('learninghub_progress_' + _asub) || 0) : ci;
-    ci = Math.max(0, Math.min(_sci, pool.length - 1));
-    flipped = false;
-    if ($id('total')) $id('total').textContent = pool.length;
-    renderCard();
-    renderQuiz();
-    renderStudy();
-    notify2('Đã tải câu hỏi từ Supabase');
-    return true;
+    if (!activeSubject) return false;
+    try {
+      const res = await fetch('/api/questions?subject_code=' + encodeURIComponent(activeSubject) + '&ts=' + Date.now(), { cache: 'no-store' });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json.error) throw new Error(json.error || 'Không tải được questions từ Turso');
+      const rows = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
+      RAW = rows.map(rowToQuestion);
+      pool = [...RAW];
+      var _sci = +localStorage.getItem('learninghub_progress_' + activeSubject) || 0;
+      ci = Math.max(0, Math.min(_sci, Math.max(0, pool.length - 1)));
+      flipped = false;
+      if ($id('total')) $id('total').textContent = pool.length;
+      try { renderCard(); } catch(e) {}
+      try { renderQuiz(); } catch(e) {}
+      try { renderStudy(); } catch(e) {}
+      notify2('Đã tải câu hỏi từ Turso');
+      return true;
+    } catch (e) {
+      console.warn('[Turso questions]', e);
+      notify2('Không tải được câu hỏi từ Turso.');
+      return false;
+    }
   }
-
 
   async function signInGoogle() {
     if (!window.supabase) return alert('Không tải được Supabase. Kiểm tra mạng hoặc CDN.');
@@ -697,8 +576,8 @@ window.HODSupabase = (() => {
     const { data, error } = await client.auth.signInWithPassword({ email, password });
     if (error) return alert(error.message);
     currentUser = data.user;
-    const prof = await loadProfile();
-    if (prof) await loadQuestionsFromSupabase();
+    await loadProfile();
+    await loadQuestionsFromSupabase();
     closeAuth();
     notify2('Đã đăng nhập');
   }
@@ -730,34 +609,6 @@ window.HODSupabase = (() => {
       alert('Câu hỏi hiện đang lấy từ data local. Hãy đăng nhập và tải questions từ Supabase trước khi gửi yêu cầu sửa.');
       return;
     }
-
-    if (window.APP_CONFIG?.USE_TURSO_API) {
-      const payload = {
-        question_id: oldQ.id,
-        question_num: oldQ.num,
-        user_id: currentUser.id,
-        user_email: currentUser.email || currentProfile?.email || '',
-        old_data: questionToRow(oldQ),
-        new_data: questionToRow(newDraft),
-        reason: '',
-        status: 'pending'
-      };
-      try {
-        const res = await fetch('/api/edit-requests', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        const r = await res.json();
-        if (r.error) throw new Error(r.error);
-        $id('editModal')?.classList.add('hidden');
-        notify2('Đã gửi yêu cầu sửa, đang chờ admin duyệt');
-      } catch (e) {
-        alert('Gửi yêu cầu sửa thất bại: ' + e.message);
-      }
-      return;
-    }
-
     const payload = {
       question_id: oldQ.id,
       question_num: oldQ.num,
@@ -880,7 +731,7 @@ window.HODSupabase = (() => {
       const btn = $id('hodPendingRefresh');
       if (btn) { btn.disabled = true; btn.textContent = 'Đang kiểm tra...'; }
       await loadProfile();
-      if (!(currentProfile?.approved === false || currentProfile?.approved === 0 || currentProfile?.approved === '0')) await loadQuestionsFromSupabase();
+      if (currentProfile?.approved !== false) await loadQuestionsFromSupabase();
       if (btn) { btn.disabled = false; btn.textContent = 'Kiểm tra lại'; }
     });
     $id('hodPendingLogout')?.addEventListener('click', async () => {
@@ -905,7 +756,7 @@ window.HODSupabase = (() => {
 
   document.addEventListener('DOMContentLoaded', init);
 
-  return { init, isReady, isAdmin, isEditor, submitEditRequest, loadQuestionsFromSupabase, openAuth, openAdmin, signOut, signInGoogle, getUser: () => currentUser, getProfile: () => currentProfile, get __client() { return client; } };
+  return { init, isReady, isAdmin, submitEditRequest, loadQuestionsFromSupabase, openAuth, openAdmin, signOut, signInGoogle, getUser: () => currentUser, getProfile: () => currentProfile, get __client() { return client; } };
 })();
 
 // ===== HOD Login + Admin UI (added) =====
@@ -932,12 +783,45 @@ window.HODSupabase = (() => {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind); else bind();
 })();
 
+// ===== Admin visibility hard fix =====
+(function () {
+  function applyAdminGuard() {
+    const isAdmin = !!window.HODSupabase?.isAdmin?.();
+    document.body?.classList.toggle('hod-is-admin', isAdmin);
+    ['adminOpenBtn', 'hodFloatAdmin'].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.classList.toggle('hidden', !isAdmin);
+      el.style.display = isAdmin ? '' : 'none';
+    });
+    const modal = document.getElementById('adminModal');
+    if (modal && !isAdmin) modal.classList.add('hidden');
+  }
+  function patchOpenAdmin() {
+    if (!window.HODSupabase || window.HODSupabase.__adminGuardPatched) return;
+    const oldOpen = window.HODSupabase.openAdmin;
+    window.HODSupabase.openAdmin = function () {
+      if (!window.HODSupabase.isAdmin?.()) {
+        document.getElementById('adminModal')?.classList.add('hidden');
+        alert('Tài khoản Google này chưa có quyền admin.');
+        applyAdminGuard();
+        return;
+      }
+      return oldOpen?.apply(this, arguments);
+    };
+    window.HODSupabase.__adminGuardPatched = true;
+  }
+  function tick() { patchOpenAdmin(); applyAdminGuard(); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', tick); else tick();
+  setInterval(tick, 500);
+})();
+
 // ===== ACCOUNT AVATAR CLEAN FINAL =====
 (function () {
   function $(id) { return document.getElementById(id) }
   function user() { return window.HODSupabase?.getUser?.() || null }
   function profile() { return window.HODSupabase?.getProfile?.() || null }
-  function isAdmin() { return !!window.HODSupabase?.isAdmin?.() || !!window.HODSupabase?.isEditor?.() }
+  function isAdmin() { return !!window.HODSupabase?.isAdmin?.() }
   function email() { return profile()?.email || user()?.email || '' }
   function meta() { return user()?.user_metadata || {} }
   function avatarHTML() { const u = meta().avatar_url || meta().picture || ''; const e = email(); const l = (e || 'U').trim().charAt(0).toUpperCase(); return u ? '<img src="' + esc(u) + '" alt="avatar">' : l }
@@ -947,10 +831,10 @@ window.HODSupabase = (() => {
   function hideLogin() { document.body?.classList.remove('hod-locked'); $('hodLoginGate')?.classList.add('hidden'); }
   function login() { const api = window.HODSupabase; if (!api) { alert('Supabase chưa sẵn sàng, hãy tải lại trang.'); return } if (api.signInGoogle) { api.signInGoogle(); return } api.openAuth?.() }
   async function logout() { await window.HODSupabase?.signOut?.(); showLogin(); updateAll() }
-  function openDash() { if (isAdmin()) window.open('admin.html', '_blank'); else alert('Tài khoản này không có quyền quản trị.') }
-  function updateMenu() { const admin = isAdmin(); const mail = $('hodAccountEmail'); if (mail) mail.textContent = email() || 'Chưa đăng nhập'; const role = $('hodAccountRole'); if (role) { const r = profile()?.role; role.textContent = r === 'admin' ? 'Admin' : (r === 'editor' ? 'Editor' : 'Người học'); } const av = $('hodAccountAvatarBig'); if (av) av.innerHTML = avatarHTML(); $('hodAccountDashboard')?.classList.toggle('hidden', !admin) }
-  function updateAll() { ensureAvatar(); const u = user(); const p = profile(); const admin = isAdmin(); const pending = u && p && (p.approved === false || p.approved === 0 || p.approved === '0'); document.body?.classList.toggle('hod-is-admin-final', admin); if (pending) { $('hodLoginGate')?.classList.add('hidden'); $('hodPendingApproval')?.classList.remove('hidden'); document.body?.classList.add('hod-locked'); const emailEl = $('hodPendingEmail'); if (emailEl) emailEl.textContent = p.email || u.email || ''; } else if (u) { hideLogin(); $('hodPendingApproval')?.classList.add('hidden'); } else { showLogin(); } const top = $('hodTopAvatar'); if (top) { top.innerHTML = avatarHTML(); top.style.display = (u && !pending) ? 'grid' : 'none' } const headerAdmin = $('adminOpenBtn'); if (headerAdmin) { headerAdmin.remove(); } if (!admin) $('adminModal')?.classList.add('hidden'); updateMenu() }
-  function patchAdmin() { if (!window.HODSupabase || window.HODSupabase.__avatarCleanPatch) return; const old = window.HODSupabase.openAdmin; window.HODSupabase.openAdmin = function () { if (!window.HODSupabase.isAdmin?.() && !window.HODSupabase.isEditor?.()) { $('adminModal')?.classList.add('hidden'); alert('Tài khoản này không có quyền quản trị.'); return } return old?.apply(this, arguments) }; window.HODSupabase.__avatarCleanPatch = true }
+  function openDash() { if (isAdmin()) window.open('admin.html', '_blank'); else alert('Tài khoản này không có quyền admin.') }
+  function updateMenu() { const admin = isAdmin(); const mail = $('hodAccountEmail'); if (mail) mail.textContent = email() || 'Chưa đăng nhập'; const role = $('hodAccountRole'); if (role) role.textContent = admin ? 'Admin' : 'Người học'; const av = $('hodAccountAvatarBig'); if (av) av.innerHTML = avatarHTML(); $('hodAccountDashboard')?.classList.toggle('hidden', !admin) }
+  function updateAll() { ensureAvatar(); const u = user(); const p = profile(); const admin = isAdmin(); const pending = u && p && p.approved === false; document.body?.classList.toggle('hod-is-admin-final', admin); if (pending) { $('hodLoginGate')?.classList.add('hidden'); $('hodPendingApproval')?.classList.remove('hidden'); document.body?.classList.add('hod-locked'); const emailEl = $('hodPendingEmail'); if (emailEl) emailEl.textContent = p.email || u.email || ''; } else if (u) { hideLogin(); $('hodPendingApproval')?.classList.add('hidden'); } else { showLogin(); } const top = $('hodTopAvatar'); if (top) { top.innerHTML = avatarHTML(); top.style.display = (u && !pending) ? 'grid' : 'none' } const headerAdmin = $('adminOpenBtn'); if (headerAdmin) { headerAdmin.remove(); } if (!admin) $('adminModal')?.classList.add('hidden'); updateMenu() }
+  function patchAdmin() { if (!window.HODSupabase || window.HODSupabase.__avatarCleanPatch) return; const old = window.HODSupabase.openAdmin; window.HODSupabase.openAdmin = function () { if (!window.HODSupabase.isAdmin?.()) { $('adminModal')?.classList.add('hidden'); alert('Tài khoản này không có quyền admin.'); return } return old?.apply(this, arguments) }; window.HODSupabase.__avatarCleanPatch = true }
   function bind() { $('hodGateLoginBtn')?.addEventListener('click', login); $('hodLogoutBtn')?.addEventListener('click', logout); $('hodAccountDashboard')?.addEventListener('click', openDash); document.addEventListener('click', e => { const m = $('hodAccountMenu'), a = $('hodTopAvatar'); if (m && !m.contains(e.target) && a && !a.contains(e.target)) m.classList.add('hidden') }); setInterval(() => { patchAdmin(); updateAll() }, 500); setTimeout(() => { patchAdmin(); updateAll() }, 250) }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind); else bind();
 })();
@@ -989,84 +873,45 @@ window.HODSupabase = (() => {
   function fallbackSubjects() { return [{ code: 'HOD102', name: 'HOD102 Learning', description: 'Môn mặc định để bắt đầu học.', cover: '', is_active: true, question_count: 0 }, { code: 'MLN111', name: 'MLN111 Learning', description: 'Bộ câu hỏi và tài liệu MLN111.', cover: '', is_active: true, question_count: 0 }]; }
   async function addQuestionCounts(subjects) {
 const list = subjects || [];
-const codes = list.map(s => String(s.code || '')).filter(Boolean);
-const counts = {};
-
-// Ưu tiên số câu máy chủ trả về từ /api/subjects để không bị lệch do cache trình duyệt.
-list.forEach(s => {
-  const n = Number(s.question_count ?? s.questions_count ?? s.count);
-  if (Number.isFinite(n)) counts[String(s.code || '')] = n;
-});
-
-async function countByTursoApi(code) {
-  const res = await fetch('/api/questions?subject_code=' + encodeURIComponent(code) + '&_count_fix=' + Date.now(), { cache: 'no-store' });
-  const r = await res.json();
-  if (r.error) throw new Error(r.error);
-  return Array.isArray(r.data) ? r.data.filter(q => !(q?.is_active === false || q?.is_active === 0 || q?.is_active === '0')).length : 0;
-}
-
-async function countBySupabase(code) {
-  const supa = c();
-  if (!supa) return 0;
-  const res = await supa.from('questions')
-    .select('id', { count: 'exact', head: true })
-    .eq('subject_code', code)
-    .eq('is_active', true);
-  if (res.error) throw res.error;
-  return Number(res.count || 0);
-}
-
+// Giảm gọi Supabase: không query questions ở bước render môn.
+// Số câu lấy từ subjects nếu có, hoặc cache localStorage đã đếm một lần.
+let store = { counts: {}, confirmed: {} };
+try { store = JSON.parse(localStorage.getItem('learninghub_subject_counts_cache_v3') || '{}') || store; } catch(e) {}
+store.counts = store.counts || {};
+store.confirmed = store.confirmed || {};
+const active = localStorage.getItem('learninghub_subject_code_merged_v1') || '';
+const current = {};
 try {
-  const missing = codes.filter(code => counts[code] === undefined || counts[code] === null || !Number.isFinite(Number(counts[code])));
-  if (missing.length) {
-    try { window.clearLearningHubSupabaseCache?.('questions'); } catch(e) {}
-    const pairs = await Promise.all(missing.map(async code => {
-      try {
-        const n = window.APP_CONFIG?.USE_TURSO_API ? await countByTursoApi(code) : await countBySupabase(code);
-        return [code, Number(n) || 0];
-      } catch(e) {
-        console.warn('Không đếm được số câu môn ' + code + ':', e);
-        return [code, 0];
-      }
-    }));
-    pairs.forEach(([code, n]) => counts[code] = n);
-  }
-} catch(e) {
-  console.warn('Không cập nhật được số câu môn học:', e);
-}
-
-try { localStorage.removeItem('learninghub_subject_counts_cache_v3'); } catch(e) {}
-
+  (RAW || []).forEach(q => {
+    const code = q.subject_code || active || '';
+    if(code) current[code] = (current[code] || 0) + 1;
+  });
+} catch(e) {}
 return list.map(s => {
-  const code = String(s.code || '');
-  let n = Number(counts[code]);
-  if (!Number.isFinite(n)) n = 0;
-  return { ...s, question_count: n, questions_count: n, count: n };
+  const code = s.code || '';
+  let n = s.question_count ?? s.questions_count ?? s.count;
+  if(n === undefined || n === null || Number(n) === 0) n = current[code] ?? store.counts[code] ?? 0;
+  n = Number(n);
+  if(!Number.isFinite(n)) n = 0;
+  return { ...s, question_count: n };
 });
 }
 async function getSubjects() {
-  if (window.APP_CONFIG?.USE_TURSO_API && logged()) {
+    if (!logged()) return fallbackSubjects();
     try {
-      const res = await fetch('/api/subjects');
-      const r = await res.json();
-      if (r.error) throw new Error(r.error);
-      return await addQuestionCounts(r.data || []);
+      const res = await fetch('/api/subjects?ts=' + Date.now(), { cache: 'no-store' });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json.error) throw new Error(json.error || 'Không tải được subjects từ Turso');
+      const rows = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
+      if (!rows.length) return fallbackSubjects();
+      return await addQuestionCounts(rows);
     } catch (e) {
-      console.error('[getSubjects API Error]', e);
-      showErr('Không tải được danh sách môn học. Đang dùng môn mặc định.');
+      console.warn('[Turso subjects]', e);
+      showErr('Không tải được danh sách môn học từ Turso. Đang dùng môn mặc định.');
       return fallbackSubjects();
     }
   }
-  const supa = c(); if (!supa || !logged()) return fallbackSubjects(); const { data, error } = await supa.from('subjects').select('*').eq('is_active', true).order('sort_order', { ascending: true }).order('code', { ascending: true }); if (error || !data || !data.length) { console.warn(error || 'No subjects'); showErr('Không tải được danh sách môn học. Đang dùng môn mặc định.'); return fallbackSubjects(); } return await addQuestionCounts(data); }
-  function subjectCoverMeta(s) {
-    const raw = s?.cover || '';
-    if (!raw || typeof raw !== 'string') return {};
-    try { return JSON.parse(raw) || {}; } catch(e) { return { url: raw }; }
-  }
-  function subjectIsNew(s) {
-    const m = subjectCoverMeta(s);
-    return m.new_badge === true || m.is_new === true || m.new === true || s?.new_badge === true || s?.is_new === true;
-  }
+
   function card(s) {
     const rawCode = String(s.code || '');
     const code = esc2(displayCode(rawCode));
@@ -1076,9 +921,7 @@ async function getSubjects() {
     const countText = Number.isFinite(rawCount) ? `${rawCount} câu` : '— câu';
     const status = s.is_active === false ? 'Tạm ẩn' : countText;
     const chosen = pickedCode === s.code;
-    const newBadge = subjectIsNew(s) ? '<span class="subjectNewBadge">NEW</span>' : '';
-    return `<button class="subjectCard ${chosen ? 'active' : ''} ${subjectIsNew(s) ? 'hasNewBadge' : ''}" data-code="${esc2(rawCode)}" type="button" title="${code} - ${name} - ${countText}">
-      ${newBadge}
+    return `<button class="subjectCard ${chosen ? 'active' : ''}" data-code="${esc2(rawCode)}" type="button" title="${code} - ${name} - ${countText}">
       <span class="subjectCardCode"><span>${code}</span></span>
       <span class="subjectCardTitle">${name}</span>
       <span class="subjectCardDesc">${desc}</span>
@@ -1101,9 +944,9 @@ async function getSubjects() {
   }
   function renderSubjects() { const list = $('subjectList'); if (!list) return; const q = (($('subjectSearch')?.value) || '').trim().toLowerCase(); const arr = subjectsCache.filter(s => !q || `${s.code || ''} ${s.name || ''} ${s.description || ''}`.toLowerCase().includes(q)); list.innerHTML = arr.map(card).join(''); $('subjectEmpty')?.classList.toggle('hidden', !!arr.length); list.querySelectorAll('.subjectCard').forEach(x => x.onclick = () => { pickedCode = x.dataset.code; applyPicked(); }); applyPicked(); }
   let lastRefreshTime = 0;
-  async function refreshSubjects(force = false) {
+  async function refreshSubjects() {
     const now = Date.now();
-    if (!force && (now - lastRefreshTime < 5000)) {
+    if (now - lastRefreshTime < 5000) {
       console.warn('[refreshSubjects] Bị chặn do gọi quá nhanh (throttle 5s)');
       return;
     }
@@ -1142,61 +985,40 @@ async function getSubjects() {
   }
   async function loadBySubject(code) {
     if (!logged() || !code) return false;
-    if (window.APP_CONFIG?.USE_TURSO_API) {
-      try {
-        const res = await fetch(`/api/questions?subject_code=${code}`);
-        const r = await res.json();
-        if (r.error) throw new Error(r.error);
-        const data = r.data || [];
-        if (!data.length) {
-          RAW = []; pool = []; ci = 0;
-          if ($('idx')) $('idx').textContent = '0';
-          if ($('total')) $('total').textContent = '0';
-          try { renderStudy() } catch (e) { }
-          try { renderQuiz() } catch (e) { }
-          notifyUX(`Môn ${code} chưa có dữ liệu.`);
-          return false;
-        }
-        RAW = data.map(r => ({
-          id: r.id,
-          subject_code: r.subject_code || code,
-          num: r.num,
-          question: r.question,
-          options: r.options || {},
-          answer: r.answer,
-          answer_text: r.answer_text,
-          images: r.images || [],
-          has_image: !!(r.has_image || (r.images || []).length),
-          error_risk: r.error_risk || 'low',
-          error_risk_reason: r.error_risk_reason || ''
-        }));
-        pool = [...RAW];
-        var _saved = +localStorage.getItem('learninghub_progress_' + code) || 0;
-        ci = Math.max(0, Math.min(_saved, pool.length - 1));
-        flipped = false;
-        if ($('idx')) $('idx').textContent = String(ci + 1);
-        if ($('total')) $('total').textContent = String(pool.length);
-        updateBrand(code);
-        syncSubjectTexts();
-        try { renderCard() } catch (e) { }
-        try { renderQuiz() } catch (e) { }
-        try { renderStudy() } catch (e) { }
-        notifyUX(`Đã tải ${label(code)}`);
-        return true;
-      } catch (e) {
-        console.error('[loadBySubject API Error]', e);
-        notifyUX('Không tải được dữ liệu môn học.');
-        return false;
-      }
+    const p = window.HODSupabase?.getProfile?.() || null;
+    if (p && (p.approved === false || p.approved === 0 || p.approved === '0')) return false;
+    try {
+      const res = await fetch('/api/questions?subject_code=' + encodeURIComponent(code) + '&ts=' + Date.now(), { cache: 'no-store' });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json.error) throw new Error(json.error || 'Không tải được questions từ Turso');
+      const data = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
+      RAW = data.map(r => ({ id: r.id, subject_code: r.subject_code || code, num: r.num, question: r.question, options: r.options || {}, answer: r.answer, answer_text: r.answer_text, images: (typeof cleanImages === 'function' ? cleanImages(r.images || []) : r.images || []), has_image: !!(r.has_image || (r.images || []).length), error_risk: r.error_risk || 'low', error_risk_reason: r.error_risk_reason || '' }));
+      pool = [...RAW];
+      var _saved = +localStorage.getItem('learninghub_progress_' + code) || 0;
+      ci = Math.max(0, Math.min(_saved, Math.max(0, pool.length - 1)));
+      flipped = false;
+      if ($('idx')) $('idx').textContent = pool.length ? String(ci + 1) : '0';
+      if ($('total')) $('total').textContent = String(pool.length);
+      updateBrand(code); syncSubjectTexts();
+      try { renderCard(); } catch (e) {}
+      try { renderQuiz(); } catch (e) {}
+      try { renderStudy(); } catch (e) {}
+      notifyUX('Đã tải ' + label(code));
+      return true;
+    } catch (e) {
+      console.warn('[Turso loadBySubject]', e);
+      notifyUX('Không tải được dữ liệu môn học từ Turso.');
+      return false;
     }
-    const supa = c(); if (!supa || !logged() || !code) return false; const { data, error } = await supa.from('questions').select('id,subject_code,num,question,options,answer,answer_text,is_active,updated_at,has_image,error_risk,error_risk_reason').eq('is_active', true).eq('subject_code', code).order('num', { ascending: true }); if (error) { console.warn(error); notifyUX('Không tải được dữ liệu môn học.'); return false; } if (!data || !data.length) { RAW = []; pool = []; ci = 0; if ($('idx')) $('idx').textContent = '0'; if ($('total')) $('total').textContent = '0'; try { renderStudy() } catch (e) { } try { renderQuiz() } catch (e) { } notifyUX(`Môn ${code} chưa có dữ liệu.`); return false; } RAW = data.map(r => ({ id: r.id, subject_code: r.subject_code || code, num: r.num, question: r.question, options: r.options || {}, answer: r.answer, answer_text: r.answer_text, images: (typeof cleanImages === 'function' ? cleanImages(r.images || []) : r.images || []), has_image: !!(r.has_image || (r.images || []).length), error_risk: r.error_risk || 'low', error_risk_reason: r.error_risk_reason || '' })); pool = [...RAW]; var _saved = +localStorage.getItem('learninghub_progress_' + code) || 0; ci = Math.max(0, Math.min(_saved, pool.length - 1)); flipped = false; if ($('idx')) $('idx').textContent = String(ci + 1); if ($('total')) $('total').textContent = String(pool.length); updateBrand(code); syncSubjectTexts(); try { renderCard() } catch (e) { } try { renderQuiz() } catch (e) { } try { renderStudy() } catch (e) { } notifyUX(`Đã tải ${label(code)}`); return true; }
+  }
+
   async function enterSubject() { if (!pickedCode) return; setSubject(pickedCode); closeGate(); if (typeof window.loadCurrentSubjectOnly === 'function') await window.loadCurrentSubjectOnly(false); else await loadBySubject(pickedCode); }
   async function logoutGate() { closeGate(); setSubject(''); await window.HODSupabase?.signOut?.(); }
   function patchSubmit() { if (window.__hubPatchSubmitMerged || !window.HODSupabase?.submitEditRequest) return; window.__hubPatchSubmitMerged = true; const old = window.HODSupabase.submitEditRequest.bind(window.HODSupabase); window.HODSupabase.submitEditRequest = async function (newDraft, oldQ) { if (oldQ?.id) return old(newDraft, oldQ); const supa = c(); const code = oldQ?.subject_code || subjectCode(); const num = oldQ?.num; if (supa && code && num) { const { data, error } = await supa.from('questions').select('id,subject_code').eq('subject_code', code).eq('num', num).maybeSingle(); if (!error && data) oldQ = { ...oldQ, id: data.id, subject_code: data.subject_code || code }; } return old(newDraft, oldQ); }; }
   function patchSave() { if (window.__hubPatchSaveMerged || typeof saveEditor !== 'function') return; window.__hubPatchSaveMerged = true; const old = saveEditor; saveEditor = async function () { let oldQ = clone(RAW.find(c => c.num === editDraft.num) || pool[ci] || editDraft); editDraft.question = $('editQuestion').value.trim(); editDraft.answer = $('editAnswer').value.trim().toUpperCase(); let ops = {}; document.querySelectorAll('[data-opt]').forEach(t => { if (t.value.trim()) ops[t.dataset.opt] = t.value.trim(); }); editDraft.options = ops; editDraft.answer_text = answerText(editDraft); editDraft.subject_code = subjectCode(); if (window.HODSupabase && window.HODSupabase.isReady()) { await window.HODSupabase.submitEditRequest(editDraft, oldQ); return; } return old(); }; }
   function patchSignOut() { if (window.__hubPatchSignoutMerged || !window.HODSupabase?.signOut) return; window.__hubPatchSignoutMerged = true; const old = window.HODSupabase.signOut.bind(window.HODSupabase); window.HODSupabase.signOut = async function () { setSubject(''); return old(); }; }
   function ensureChangeBtn() { if (!$('hodChangeSubjectBtn')) return; $('hodChangeSubjectBtn').onclick = e => { e?.preventDefault?.(); openGate(); }; }
-  function isApproved() { const p = window.HODSupabase?.getProfile?.() || null; return !p || !(p.approved === false || p.approved === 0 || p.approved === '0'); }
+  function isApproved() { const p = window.HODSupabase?.getProfile?.() || null; return !p || p.approved !== false; }
   function bind() {
     ensureChip();
     ensureChangeBtn();
@@ -1204,7 +1026,7 @@ async function getSubjects() {
     patchSave();
     patchSignOut();
     syncSubjectTexts();
-    $('subjectRefresh')?.addEventListener('click', () => refreshSubjects(true));
+    $('subjectRefresh')?.addEventListener('click', refreshSubjects);
     $('subjectSearch')?.addEventListener('input', renderSubjects);
     $('subjectEnter')?.addEventListener('click', enterSubject);
     $('subjectLogout')?.addEventListener('click', logoutGate);
@@ -1222,25 +1044,11 @@ async function getSubjects() {
     };
 
     runSubjectCheckOnce();
-    const checkInterval = setInterval(() => {
-      if (logged() && isApproved()) {
-        runSubjectCheckOnce();
-        clearInterval(checkInterval);
-      }
-    }, 200);
-    setTimeout(() => clearInterval(checkInterval), 15000);
+    setTimeout(runSubjectCheckOnce, 800);
   }
-  window.refreshSubjectCountsOnce = async function(){
-    try{
-      subjectsCache = await addQuestionCounts(subjectsCache || []);
-      renderSubjects();
-      syncSubjectTexts();
-    }catch(e){ console.warn('refreshSubjectCountsOnce failed:', e); }
-  };
   window.getSubjectsCache = () => subjectsCache;
   window.loadBySubject = loadBySubject;
   window.setSubject = setSubject;
-  window.openGate = openGate;
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind); else bind();
 })();
 // ===== LEARNING HUB MERGED SUBJECT PATCH END =====
@@ -1775,274 +1583,134 @@ Bắt đầu ngay từ câu 1.`;
     if (!name) { alert('Vui lòng nhập tên môn'); $('addSubjectName')?.focus(); return; }
     if (!parsedQuestions.length) { alert('Bạn cần chọn file và bấm Xem trước trước khi lưu môn học.'); return; }
 
-    const isTurso = window.APP_CONFIG?.USE_TURSO_API;
-    let c = null;
-    if (!isTurso) {
-      c = client();
-      if (!c) { alert('Chưa kết nối Supabase'); return; }
-    }
+    const c = client();
+    if (!c) { alert('Chưa kết nối Supabase'); return; }
 
     const btn = $('userImportBtn');
     if (btn) { btn.disabled = true; btn.textContent = 'Đang lưu...'; }
 
-    let uploadProgressTimer = null;
-    const uploadTotal = Math.max(1, parsedQuestions.length || 1);
-    const stopUploadProgress = () => {
-      if (uploadProgressTimer) {
-        clearInterval(uploadProgressTimer);
-        uploadProgressTimer = null;
-      }
-    };
-    const startSmoothUploadProgress = (title, detailPrefix) => {
-      stopUploadProgress();
-      let current = 0;
-      showProgress(title, 0, uploadTotal, `${detailPrefix} 0/${uploadTotal} câu...`);
-      uploadProgressTimer = setInterval(() => {
-        const step = Math.max(1, Math.ceil(uploadTotal / 80));
-        current = Math.min(uploadTotal - 1, current + step);
-        showProgress(title, current, uploadTotal, `${detailPrefix} ${current}/${uploadTotal} câu...`);
-        if (current >= uploadTotal - 1) stopUploadProgress();
-      }, 120);
-    };
-
-    showProgress('Bắt đầu khởi tạo môn học...', 0, uploadTotal, 'Đang chuẩn bị dữ liệu...');
+    // Hiển thị thanh tiến trình ngay từ khi bắt đầu
+    showProgress('Bắt đầu khởi tạo môn học...', 0, 100, 'Đang chuẩn bị dữ liệu...');
     await new Promise(resolve => setTimeout(resolve, 100));
 
     try {
+      // Cho phép trùng mã môn + tên môn (nhiều bộ câu hỏi cùng mã)
+
       let successMsg = '';
-      if (isTurso) {
-        const u = window.HODSupabase?.getUser?.();
-        const p = window.HODSupabase?.getProfile?.() || null;
-        
-        let apiAction = '';
-        let apiPayload = {};
-        
-        if (isAdminOrEditor()) {
-          apiAction = 'add_subject';
-          apiPayload = {
-            code,
-            name,
-            description: desc,
-            questions: parsedQuestions
-          };
-        } else {
-          apiAction = 'add_subject_request';
-          apiPayload = {
-            code,
-            name,
-            description: desc,
-            questions_data: parsedQuestions
-          };
+      if (isAdminOrEditor()) {
+        // Cho phép thêm nhiều môn cùng mã gốc: HOD102, HOD102_2, HOD102_3...
+        // Như vậy không bị lỗi trùng câu số 1,2,3... trong database.
+        let finalCode = code;
+        const { data: existedList } = await c.from('subjects').select('code').or('code.eq.' + code + ',code.like.' + code + '_%');
+        const usedCodes = new Set((existedList || []).map(x => String(x.code || '').toUpperCase()));
+        if (usedCodes.has(finalCode)) {
+          let n = 2;
+          while (usedCodes.has(code + '_' + n)) n++;
+          finalCode = code + '_' + n;
         }
 
-        startSmoothUploadProgress('Đang lưu câu hỏi lên máy chủ...', 'Đang ghi dữ liệu');
+        const maxOrder = await c.from('subjects').select('sort_order').order('sort_order', { ascending: false }).limit(1);
+        const nextOrder = ((maxOrder.data?.[0]?.sort_order) || 0) + 1;
+        const { error } = await c.from('subjects').insert({
+          code: finalCode, name: name || code, description: desc || null,
+          is_active: true, sort_order: nextOrder
+        });
+        if (error) { alert('Lỗi tạo môn: ' + error.message); return; }
 
-        // Fix lỗi đứng ở 100%: máy chủ đã lưu xong nhưng request trả lời quá lâu.
-        // Sau thời gian chờ sẽ tự kiểm tra lại dữ liệu thay vì treo màn hình chờ.
-        let r = null;
-        const controller = new AbortController();
-        const timeoutMs = 70000;
-        const timeoutId = setTimeout(() => {
-          try { controller.abort(); } catch(e) {}
-        }, timeoutMs);
+        let success = 0, errors = 0, firstErr = '';
+        const total = parsedQuestions.length;
+        for (let i = 0; i < total; i++) {
+          const q = parsedQuestions[i];
+          // Nhường luồng cho trình duyệt vẽ lại giao diện tiến trình
+          showProgress('Đang lưu câu hỏi...', i + 1, total, `Đang xử lý câu ${q.num || i + 1}: ${q.question ? q.question.substring(0, 50) + '...' : ''}`);
+          await new Promise(r => setTimeout(r, 10));
 
-        async function verifySavedQuestions() {
-          if (apiAction !== 'add_subject') return true;
-          const need = parsedQuestions.length || 0;
-          for (let attempt = 0; attempt < 14; attempt++) {
-            try {
-              showProgress('Đang kiểm tra dữ liệu...', Math.max(need - 1, 0), Math.max(need, 1), 'Máy chủ phản hồi chậm, đang kiểm tra lại...');
-              const vr = await fetch('/api/questions?subject_code=' + encodeURIComponent(code) + '&_verify=' + Date.now(), { cache: 'no-store' });
-              const vj = await vr.json().catch(() => ({}));
-              const count = Array.isArray(vj.data)
-                ? vj.data.filter(q => !(q?.is_active === false || q?.is_active === 0 || q?.is_active === '0')).length
-                : 0;
-              if (count >= Math.max(1, need - 1)) return true;
-            } catch(e) {}
-            await new Promise(resolve => setTimeout(resolve, 1800));
-          }
-          return false;
-        }
-
-        try {
-          const res = await fetch('/api/admin-action', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            signal: controller.signal,
-            body: JSON.stringify({
-              user_id: u?.id || '',
-              action: apiAction,
-              payload: apiPayload
-            })
+          const list = q.images || [];
+          const localHasImg = !!(list.length || q.has_image);
+          const text = (q.question || '') + ' ' + Object.values(q.options || {}).join(' ');
+          const needsImg = /(hình vẽ|hình bên|đồ thị|bảng biến thiên|sơ đồ)/gi.test(text);
+          const hasPlaceholder = list.some(im => {
+            const src = typeof im === 'string' ? im : (im.src || im.url || im.secure_url || '');
+            return !src || src.includes('URL_') || src.includes('MÔ_TẢ') || src.includes('PLACEHOLDER');
           });
-          clearTimeout(timeoutId);
-          r = await res.json().catch(() => ({}));
-          if (!res.ok && !r.error) r.error = 'Máy chủ phản hồi lỗi ' + res.status;
-        } catch(fetchErr) {
-          clearTimeout(timeoutId);
-          const verified = await verifySavedQuestions();
-          if (!verified && apiAction === 'add_subject') {
-            r = { ok: true, slow: true };
-          } else {
-            r = { ok: true, verified: true };
+
+          let risk = q.error_risk || '';
+          let reason = q.error_risk_reason || '';
+          if (!risk) {
+            if ((localHasImg && hasPlaceholder) || (needsImg && list.length === 0)) {
+              risk = 'high';
+              reason = 'Cần hình vẽ/ảnh minh họa nhưng chưa có ảnh thực tế';
+            } else if ((q.answer || '').length > 1) {
+              risk = 'medium';
+              reason = 'Câu chọn nhiều đáp án đúng, cần rà soát kỹ';
+            } else {
+              risk = 'low';
+            }
           }
+
+          const payload = {
+            subject_code: finalCode,
+            num: q.num || (i + 1),
+            question: q.question || '',
+            options: q.options || {},
+            answer: (q.answer || '').toUpperCase(),
+            answer_text: q.answer_text || '',
+            images: q.images || [],
+            is_active: true,
+            updated_at: new Date().toISOString(),
+            has_image: localHasImg || needsImg,
+            error_risk: risk,
+            error_risk_reason: reason || null
+          };
+          const r = await c.from('questions').insert(payload);
+          if (r.error) { errors++; if (!firstErr) firstErr = r.error.message; }
+          else success++;
         }
-
-        stopUploadProgress();
-        if (r && r.error) {
-          alert('Lỗi lưu môn: ' + r.error);
-          return;
-        }
-
-        showProgress('Đang hoàn thành...', uploadTotal, uploadTotal, 'Lưu thành công!');
-        await new Promise(resolve => setTimeout(resolve, 300));
-        
-        successMsg = isAdminOrEditor()
-          ? `Đã thêm môn ${code} với ${parsedQuestions.length} câu hỏi thành công!`
-          : `Gửi yêu cầu thêm môn học ${code} thành công, đang chờ phê duyệt.`;
-
+        successMsg = 'Đã thêm môn ' + finalCode + ' với ' + success + ' câu hỏi' + (errors ? ' (' + errors + ' lỗi: ' + firstErr + ')' : '');
         try {
           const key = 'learninghub_subject_counts_cache_v3';
+          const store = JSON.parse(localStorage.getItem(key) || '{}') || {};
+          store.counts = store.counts || {};
+          store.confirmed = store.confirmed || {};
+          store.counts[finalCode] = success;
+          store.confirmed[finalCode] = true;
+          store.updated_at = new Date().toISOString();
+          localStorage.setItem(key, JSON.stringify(store));
+          localStorage.setItem('learninghub_subjects_dirty_v3', String(Date.now()));
           localStorage.removeItem('learninghub_subjects_cache_v1');
-          localStorage.removeItem(key);
           sessionStorage.removeItem('learninghub_subject_counts_cache_v1');
           window.clearLearningHubSupabaseCache?.('subjects');
           window.clearLearningHubSupabaseCache?.('questions');
-        } catch (e) {}
-
+        } catch(e) {}
         alert(successMsg);
         notify(successMsg);
         window.__switchSubjectGateTab('list');
-
-        // Sau khi thêm môn xong, tự chọn môn vừa thêm và tải câu hỏi ngay.
-        // Không cần F5 trang mới thấy dữ liệu.
-        try {
-          if (isAdminOrEditor()) {
-            if (typeof window.setSubject === 'function') window.setSubject(code);
-            else localStorage.setItem('learninghub_subject_code_merged_v1', code);
-            if (typeof window.loadBySubject === 'function') await window.loadBySubject(code);
-            else if (typeof window.loadCurrentSubjectOnly === 'function') await window.loadCurrentSubjectOnly(false);
-          }
-        } catch(e) { console.warn('Auto load new subject failed:', e); }
-        
         try {
           $('subjectRefresh')?.click();
-          setTimeout(() => $('subjectRefresh')?.click(), 1000);
+          setTimeout(() => $('subjectRefresh')?.click(), 5600);
+          setTimeout(() => window.refreshSubjectCountsOnce?.(), 6500);
         } catch(e) {}
       } else {
-        if (isAdminOrEditor()) {
-          let finalCode = code;
-          const { data: existedList } = await c.from('subjects').select('code').or('code.eq.' + code + ',code.like.' + code + '_%');
-          const usedCodes = new Set((existedList || []).map(x => String(x.code || '').toUpperCase()));
-          if (usedCodes.has(finalCode)) {
-            let n = 2;
-            while (usedCodes.has(code + '_' + n)) n++;
-            finalCode = code + '_' + n;
-          }
+        // Học viên/User gửi request: Hiển thị thanh tiến trình khi upload tệp tin lớn
+        showProgress('Đang gửi yêu cầu tạo môn học...', 50, 100, 'Đang tải dữ liệu câu hỏi lên máy chủ...');
+        await new Promise(resolve => setTimeout(resolve, 100));
 
-          const maxOrder = await c.from('subjects').select('sort_order').order('sort_order', { ascending: false }).limit(1);
-          const nextOrder = ((maxOrder.data?.[0]?.sort_order) || 0) + 1;
-          const { error } = await c.from('subjects').insert({
-            code: finalCode, name: name || code, description: desc || null,
-            is_active: true, sort_order: nextOrder
-          });
-          if (error) { alert('Lỗi tạo môn: ' + error.message); return; }
-
-          let success = 0, errors = 0, firstErr = '';
-          const total = parsedQuestions.length;
-          for (let i = 0; i < total; i++) {
-            const q = parsedQuestions[i];
-            showProgress('Đang lưu câu hỏi...', i + 1, total, `Đang xử lý câu ${q.num || i + 1}: ${q.question ? q.question.substring(0, 50) + '...' : ''}`);
-            await new Promise(r => setTimeout(r, 10));
-
-            const list = q.images || [];
-            const localHasImg = !!(list.length || q.has_image);
-            const text = (q.question || '') + ' ' + Object.values(q.options || {}).join(' ');
-            const needsImg = /(hình vẽ|hình bên|đồ thị|bảng biến thiên|sơ đồ)/gi.test(text);
-            const hasPlaceholder = list.some(im => {
-              const src = typeof im === 'string' ? im : (im.src || im.url || im.secure_url || '');
-              return !src || src.includes('URL_') || src.includes('MÔ_TẢ') || src.includes('PLACEHOLDER');
-            });
-
-            let risk = q.error_risk || '';
-            let reason = q.error_risk_reason || '';
-            if (!risk) {
-              if ((localHasImg && hasPlaceholder) || (needsImg && list.length === 0)) {
-                risk = 'high';
-                reason = 'Cần hình vẽ/ảnh minh họa nhưng chưa có ảnh thực tế';
-              } else if ((q.answer || '').length > 1) {
-                risk = 'medium';
-                reason = 'Câu chọn nhiều đáp án đúng, cần rà soát kỹ';
-              } else {
-                risk = 'low';
-              }
-            }
-
-            const payload = {
-              subject_code: finalCode,
-              num: i + 1,
-              question: q.question || '',
-              options: q.options || {},
-              answer: (q.answer || '').toUpperCase(),
-              answer_text: q.answer_text || '',
-              images: q.images || [],
-              is_active: true,
-              updated_at: new Date().toISOString(),
-              has_image: localHasImg || needsImg,
-              error_risk: risk,
-              error_risk_reason: reason || null
-            };
-            const r = await c.from('questions').insert(payload);
-            if (r.error) { errors++; if (!firstErr) firstErr = r.error.message; }
-            else success++;
-          }
-          successMsg = 'Đã thêm môn ' + finalCode + ' với ' + success + ' câu hỏi' + (errors ? ' (' + errors + ' lỗi: ' + firstErr + ')' : '');
-          try {
-            const key = 'learninghub_subject_counts_cache_v3';
-            const store = JSON.parse(localStorage.getItem(key) || '{}') || {};
-            store.counts = store.counts || {};
-            store.confirmed = store.confirmed || {};
-            store.counts[finalCode] = success;
-            store.confirmed[finalCode] = true;
-            store.updated_at = new Date().toISOString();
-            localStorage.setItem(key, JSON.stringify(store));
-            localStorage.setItem('learninghub_subjects_dirty_v3', String(Date.now()));
-            localStorage.removeItem('learninghub_subjects_cache_v1');
-            sessionStorage.removeItem('learninghub_subject_counts_cache_v1');
-            window.clearLearningHubSupabaseCache?.('subjects');
-            window.clearLearningHubSupabaseCache?.('questions');
-          } catch(e) {}
-          alert(successMsg);
-          notify(successMsg);
-          window.__switchSubjectGateTab('list');
-          try {
-            $('subjectRefresh')?.click();
-            setTimeout(() => $('subjectRefresh')?.click(), 5600);
-            setTimeout(() => window.refreshSubjectCountsOnce?.(), 6500);
-          } catch(e) {}
-        } else {
-          startSmoothUploadProgress('Đang gửi yêu cầu tạo môn học...', 'Đang tải dữ liệu');
-          await new Promise(resolve => setTimeout(resolve, 100));
-
-          const u = window.HODSupabase?.getUser?.();
-          const p = window.HODSupabase?.getProfile?.() || null;
-          const { error } = await c.from('subject_requests').insert({
-            code: code,
-            name: name,
-            description: desc || null,
-            questions_data: parsedQuestions || [],
-            user_id: u?.id,
-            user_email: u?.email || p?.email || '',
-            status: 'pending'
-          });
-          stopUploadProgress();
-          if (error) { alert('Lỗi gửi yêu cầu: ' + error.message); return; }
-          showProgress('Đang hoàn thành...', uploadTotal, uploadTotal, 'Gửi thành công!');
-          successMsg = 'Đã gửi yêu cầu thêm môn ' + code + '. Vui lòng chờ admin duyệt.';
-          alert(successMsg);
-          notify(successMsg);
-          window.__switchSubjectGateTab('list');
-        }
+        const u = window.HODSupabase?.getUser?.();
+        const p = window.HODSupabase?.getProfile?.() || null;
+        const { error } = await c.from('subject_requests').insert({
+          code: code,
+          name: name,
+          description: desc || null,
+          questions_data: parsedQuestions || [],
+          user_id: u?.id,
+          user_email: u?.email || p?.email || '',
+          status: 'pending'
+        });
+        if (error) { alert('Lỗi gửi yêu cầu: ' + error.message); return; }
+        successMsg = 'Đã gửi yêu cầu thêm môn ' + code + '. Vui lòng chờ admin duyệt.';
+        alert(successMsg);
+        notify(successMsg);
+        window.__switchSubjectGateTab('list');
       }
 
       parsedQuestions = [];
@@ -2053,7 +1721,6 @@ Bắt đầu ngay từ câu 1.`;
       alert('Lỗi khi lưu môn học: ' + (e?.message || e));
       notify('Lỗi khi lưu môn học');
     } finally {
-      stopUploadProgress();
       if (btn) { btn.disabled = false; btn.textContent = 'Lưu Môn Học'; }
       hideProgress();
     }
@@ -2086,17 +1753,26 @@ Bắt đầu ngay từ câu 1.`;
     try { if ($('idx')) $('idx').textContent = '0'; if ($('total')) $('total').textContent = '0'; if ($('bar')) $('bar').style.width = '0%'; if ($('question')) $('question').textContent = msg || 'Chưa tải dữ liệu từ Supabase'; if ($('options')) $('options').innerHTML = ''; if ($('images')) $('images').innerHTML = ''; renderQuiz?.(); renderStudy?.(); } catch (e) { }
   }
   async function loadSubjectOnly() {
-    const c = supa(), subject = code();
-    if (!c || !logged()) { empty('Đăng nhập để tải dữ liệu từ Supabase'); return false; }
-    if (!subject) { empty('Chọn môn để tải dữ liệu từ Supabase'); return false; }
-    const { data, error } = await c.from('questions').select('id,subject_code,num,question,options,answer,answer_text,is_active,updated_at,has_image,error_risk,error_risk_reason').eq('is_active', true).eq('subject_code', subject).order('num', { ascending: true });
-    if (error) { console.warn('[NO LOCAL] Supabase load error', error); empty('Không tải được dữ liệu Supabase'); return false; }
-    RAW = (data || []).map(r => ({ id: r.id, subject_code: r.subject_code || subject, num: r.num, question: r.question, options: r.options || {}, answer: r.answer, answer_text: r.answer_text, images: (typeof cleanImages === 'function' ? cleanImages(r.images || []) : r.images || []), has_image: !!(r.has_image || (r.images || []).length), error_risk: r.error_risk || 'low', error_risk_reason: r.error_risk_reason || '' }));
-    var _saved2 = +localStorage.getItem('learninghub_progress_' + subject) || 0; pool = [...RAW]; ci = Math.max(0, Math.min(_saved2, pool.length - 1)); flipped = false; randomActive = false; localStorage.setItem('hod102_random_active', '0');
-    try { if ($('idx')) $('idx').textContent = RAW.length ? String(ci + 1) : '0'; if ($('total')) $('total').textContent = String(RAW.length); renderCard(); renderQuiz(); renderStudy(); syncSubjectTexts?.(); updateCardTools?.(); } catch (e) { console.warn('[NO LOCAL] render error', e) }
+  const subject = code();
+  if (!logged()) { empty('Đăng nhập để tải dữ liệu từ Turso'); return false; }
+  if (!subject) { empty('Chọn môn để tải dữ liệu từ Turso'); return false; }
+  const p = window.HODSupabase?.getProfile?.() || null;
+  if (p && (p.approved === false || p.approved === 0 || p.approved === '0')) { empty('Tài khoản đang chờ duyệt'); return false; }
+  try {
+    const res = await fetch('/api/questions?subject_code=' + encodeURIComponent(subject) + '&ts=' + Date.now(), { cache: 'no-store' });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || json.error) throw new Error(json.error || 'Không tải được questions từ Turso');
+    const data = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
+    RAW = data.map(r => ({ id: r.id, subject_code: r.subject_code || subject, num: r.num, question: r.question, options: r.options || {}, answer: r.answer, answer_text: r.answer_text, images: (typeof cleanImages === 'function' ? cleanImages(r.images || []) : r.images || []), has_image: !!(r.has_image || (r.images || []).length), error_risk: r.error_risk || 'low', error_risk_reason: r.error_risk_reason || '' }));
+    pool = [...RAW];
+    var _saved2 = +localStorage.getItem('learninghub_progress_' + subject) || 0;
+    ci = Math.max(0, Math.min(_saved2, Math.max(0, pool.length - 1)));
+    flipped = false; randomActive = false; localStorage.setItem('hod102_random_active', '0');
+    try { if ($('total')) $('total').textContent = String(RAW.length); renderCard(); renderQuiz(); renderStudy(); syncSubjectTexts?.(); updateCardTools?.(); } catch (e) { console.warn('[Turso render]', e); }
     return true;
-  }
-  window.loadCurrentSubjectOnly = loadSubjectOnly;
+  } catch (e) { console.warn('[Turso current subject]', e); empty('Không tải được dữ liệu Turso'); return false; }
+}
+window.loadCurrentSubjectOnly = loadSubjectOnly;
   function patchLoaders() {
     try { window.rebuild = function () { RAW = []; pool = []; return RAW } } catch (e) { }
     if (window.HODSupabase) {
@@ -4927,7 +4603,7 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
   function redrawImg() { const h = $('editPreviewImageHost'); if (h && window.editDraft) h.innerHTML = editImgs(window.editDraft) }
   function redrawOpt() { const h = $('editPreviewOptions'); if (h && window.editDraft) h.innerHTML = optRows(window.editDraft.options || {}) }
   function openEditPreview() { const c = ((typeof pool !== 'undefined' && pool[ci]) || (typeof RAW !== 'undefined' && RAW[0])); if (!c) return; window.editDraft = clone(c); if (typeof editDraft !== 'undefined') editDraft = window.editDraft; const role = String(window.HODSupabase?.getProfile?.()?.role || '').trim().toLowerCase(); const canDirect = ['admin', 'editor'].includes(role); const reporting = !!(window.HODSupabase?.getUser?.()) && !canDirect; const modal = $('editModal'), box = modal?.querySelector('.box'); if (!modal || !box) return; box.classList.add('editPreviewBox', 'quizEditLayoutV2'); box.innerHTML = `<button class="modalX" type="button" data-edit-preview-close>×</button><div class="v7Head editPreviewHead"><div><span class="v7Label">SỬA CÂU HỎI</span><h2>${esc((reporting ? 'Báo cáo / đề xuất sửa câu ' : 'Sửa câu ') + (c.num || ''))}</h2><p class="v7Hint">Sửa nhanh nội dung quiz, đáp án và ảnh.</p></div><div class="v7TopActions"><button class="btn ${reporting ? 'hidden' : ''}" type="button" data-edit-preview-restore>Khôi phục</button><button class="primary v7SaveTop" type="button" data-edit-preview-save>${canDirect ? 'Lưu trực tiếp' : reporting ? 'Gửi báo cáo' : 'Lưu sửa'}</button></div></div><article class="v7Card editPreviewCard"><div class="editPreviewTwoColumns"><div class="editPreviewLeftCol"><div class="v7Field"><label>Câu hỏi</label><textarea data-edit-question>${esc(c.question || '')}</textarea></div><div class="v7Field"><label>Đáp án đúng</label><input data-edit-answer value="${esc(ans(c))}" placeholder="VD: A hoặc AC"></div><div id="editPreviewImageHost">${editImgs(c)}</div></div><div class="editPreviewRightCol"><div class="v7Field"><label>Các đáp án</label><div id="editPreviewOptions" class="v7Options">${optRows(c.options || {})}</div></div><div class="v7Bottom"><button class="btn" type="button" data-edit-add-opt>+ Thêm đáp án</button></div></div></div></article>`; modal.classList.remove('hidden') }
-  async function saveEditPreview() { if (!window.editDraft) return; const oldQ = clone((typeof RAW !== 'undefined' && (RAW.find(c => c.num === window.editDraft.num))) || window.editDraft); const modal = $('editModal'); const q = (modal?.querySelector('[data-edit-question]')?.value || '').trim(); const a = (modal?.querySelector('[data-edit-answer]')?.value || '').trim().toUpperCase().replace(/[^A-Z]/g, ''); if (!q) return alert('Câu hỏi không được để trống.'); if (!a) return alert('Đáp án đúng không được để trống.'); const opts = {}; modal?.querySelectorAll('[data-edit-opt]').forEach(inp => { const k = String(inp.dataset.editOpt || '').toUpperCase(), v = (inp.value || '').trim(); if (k && v) opts[k] = v }); if (!Object.keys(opts).length) return alert('Cần ít nhất 1 đáp án.'); for (const k of a.split('')) if (!opts[k]) return alert('Đáp án đúng ' + k + ' chưa có nội dung.'); Object.assign(window.editDraft, { question: q, answer: a, options: opts, answer_text: a.split('').map(k => k + '. ' + (opts[k] || '')).join('; '), subject_code: localStorage.getItem('learninghub_subject_code_merged_v1') || window.editDraft.subject_code || '' }); if (window.HODSupabase && window.HODSupabase.isReady()) { const role = String(window.HODSupabase?.getProfile?.()?.role || '').trim().toLowerCase(); const canDirect = ['admin', 'editor'].includes(role); if (canDirect) { const id = oldQ?.id || window.editDraft?.id; if (!id) { alert('Không tìm thấy ID câu hỏi. Hãy tải lại trang rồi thử lại.'); return } const list = window.editDraft.images || []; const localHasImg = oldQ?.__imagesLoaded ? (list.length > 0) : !!(list.length || oldQ?.has_image); const text = window.editDraft.question + ' ' + Object.values(window.editDraft.options || {}).join(' '); const needsImg = /(hình vẽ|hình bên|đồ thị|bảng biến thiên|sơ đồ)/gi.test(text); const hasPlaceholder = list.some(im => { const src = typeof im === 'string' ? im : (im.src || im.url || im.secure_url || ''); return !src || src.includes('URL_') || src.includes('MÔ_TẢ') || src.includes('PLACEHOLDER') }); let risk = ''; let reason = ''; if ((localHasImg && hasPlaceholder) || (needsImg && list.length === 0)) { risk = 'high'; reason = 'Cần hình vẽ/ảnh minh họa nhưng chưa có ảnh thực tế' } else if (window.editDraft.answer.length > 1) { risk = 'medium'; reason = 'Câu chọn nhiều đáp án đúng, cần rà soát kỹ' } else { risk = 'low' } const payload = { question: window.editDraft.question, options: window.editDraft.options || {}, answer: window.editDraft.answer, answer_text: window.editDraft.answer_text, images: window.editDraft.images || [], updated_at: new Date().toISOString(), has_image: localHasImg || needsImg, error_risk: risk, error_risk_reason: reason || null }; if (window.APP_CONFIG?.USE_TURSO_API) { try { const res = await fetch('/api/admin-action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: window.HODSupabase.getUser()?.id, action: 'save_question_direct', payload: { question_id: id, new_data: payload, old_data: { question: oldQ.question, options: oldQ.options || {}, answer: oldQ.answer, answer_text: oldQ.answer_text, images: oldQ.images || [] } } }) }); const r = await res.json(); if (r.error) throw new Error(r.error); if (typeof window.clearLearningHubQuestionCache === 'function') { window.clearLearningHubQuestionCache(); } $('editModal')?.classList.add('hidden'); notify('Đã sửa trực tiếp'); if (typeof window.loadCurrentSubjectOnly === 'function') await window.loadCurrentSubjectOnly(true); else if (window.HODSupabase?.loadQuestionsFromSupabase) await window.HODSupabase.loadQuestionsFromSupabase(true); return } catch (err) { alert('Sửa trực tiếp thất bại: ' + err.message); return } } const c = window.HODSupabase?.__client; const r = await c.from('questions').update(payload).eq('id', id); if (r.error) { alert('Sửa trực tiếp thất bại: ' + r.error.message); return } if (typeof window.clearLearningHubQuestionCache === 'function') { window.clearLearningHubQuestionCache(); } try { const u = window.HODSupabase?.getUser?.(); await c.from('question_history').insert({ question_id: id, request_id: null, previous_data: { question: oldQ.question, options: oldQ.options || {}, answer: oldQ.answer, answer_text: oldQ.answer_text, images: oldQ.images || [] }, new_data: payload, changed_by: u?.id || null, approved_by: u?.id || null }) } catch (e) { } $('editModal')?.classList.add('hidden'); notify('Đã sửa trực tiếp'); if (typeof window.loadCurrentSubjectOnly === 'function') await window.loadCurrentSubjectOnly(true); else if (window.HODSupabase?.loadQuestionsFromSupabase) await window.HODSupabase.loadQuestionsFromSupabase(true); return } await window.HODSupabase.submitEditRequest(window.editDraft, oldQ); return } if (window.HODSupabase?.getUser?.()) { alert('Chưa kết nối được dữ liệu duyệt. Hãy tải lại trang rồi gửi lại báo cáo.'); return } edits[window.editDraft.num] = { question: window.editDraft.question, options: window.editDraft.options, answer: window.editDraft.answer, answer_text: window.editDraft.answer_text, images: window.editDraft.images || [] }; localStorage.setItem('hod102_user_edits_v1', JSON.stringify(edits)); rebuild(); ci = pool.findIndex(c => c.num === window.editDraft.num); if (ci < 0) ci = 0; flipped = false; renderCard(); renderQuiz(); renderStudy(); $('editModal')?.classList.add('hidden'); notify('Đã lưu sửa local') }
+  async function saveEditPreview() { if (!window.editDraft) return; const oldQ = clone((typeof RAW !== 'undefined' && (RAW.find(c => c.num === window.editDraft.num))) || window.editDraft); const modal = $('editModal'); const q = (modal?.querySelector('[data-edit-question]')?.value || '').trim(); const a = (modal?.querySelector('[data-edit-answer]')?.value || '').trim().toUpperCase().replace(/[^A-Z]/g, ''); if (!q) return alert('Câu hỏi không được để trống.'); if (!a) return alert('Đáp án đúng không được để trống.'); const opts = {}; modal?.querySelectorAll('[data-edit-opt]').forEach(inp => { const k = String(inp.dataset.editOpt || '').toUpperCase(), v = (inp.value || '').trim(); if (k && v) opts[k] = v }); if (!Object.keys(opts).length) return alert('Cần ít nhất 1 đáp án.'); for (const k of a.split('')) if (!opts[k]) return alert('Đáp án đúng ' + k + ' chưa có nội dung.'); Object.assign(window.editDraft, { question: q, answer: a, options: opts, answer_text: a.split('').map(k => k + '. ' + (opts[k] || '')).join('; '), subject_code: localStorage.getItem('learninghub_subject_code_merged_v1') || window.editDraft.subject_code || '' }); if (window.HODSupabase && window.HODSupabase.isReady()) { const role = String(window.HODSupabase?.getProfile?.()?.role || '').trim().toLowerCase(); const canDirect = ['admin', 'editor'].includes(role); if (canDirect) { const c = window.HODSupabase?.__client; const id = oldQ?.id || window.editDraft?.id; if (!c || !id) { alert('Không tìm thấy ID câu hỏi trên Supabase. Hãy tải lại trang rồi thử lại.'); return } const list = window.editDraft.images || []; const localHasImg = oldQ?.__imagesLoaded ? (list.length > 0) : !!(list.length || oldQ?.has_image); const text = window.editDraft.question + ' ' + Object.values(window.editDraft.options || {}).join(' '); const needsImg = /(hình vẽ|hình bên|đồ thị|bảng biến thiên|sơ đồ)/gi.test(text); const hasPlaceholder = list.some(im => { const src = typeof im === 'string' ? im : (im.src || im.url || im.secure_url || ''); return !src || src.includes('URL_') || src.includes('MÔ_TẢ') || src.includes('PLACEHOLDER') }); let risk = ''; let reason = ''; if ((localHasImg && hasPlaceholder) || (needsImg && list.length === 0)) { risk = 'high'; reason = 'Cần hình vẽ/ảnh minh họa nhưng chưa có ảnh thực tế' } else if (window.editDraft.answer.length > 1) { risk = 'medium'; reason = 'Câu chọn nhiều đáp án đúng, cần rà soát kỹ' } else { risk = 'low' } const payload = { question: window.editDraft.question, options: window.editDraft.options || {}, answer: window.editDraft.answer, answer_text: window.editDraft.answer_text, images: window.editDraft.images || [], updated_at: new Date().toISOString(), has_image: localHasImg || needsImg, error_risk: risk, error_risk_reason: reason || null }; const r = await c.from('questions').update(payload).eq('id', id); if (r.error) { alert('Sửa trực tiếp thất bại: ' + r.error.message); return } if (typeof window.clearLearningHubQuestionCache === 'function') { window.clearLearningHubQuestionCache(); } try { const u = window.HODSupabase?.getUser?.(); await c.from('question_history').insert({ question_id: id, request_id: null, previous_data: { question: oldQ.question, options: oldQ.options || {}, answer: oldQ.answer, answer_text: oldQ.answer_text, images: oldQ.images || [] }, new_data: payload, changed_by: u?.id || null, approved_by: u?.id || null }) } catch (e) { } $('editModal')?.classList.add('hidden'); notify('Đã sửa trực tiếp'); if (typeof window.loadCurrentSubjectOnly === 'function') await window.loadCurrentSubjectOnly(true); else if (window.HODSupabase?.loadQuestionsFromSupabase) await window.HODSupabase.loadQuestionsFromSupabase(true); return } await window.HODSupabase.submitEditRequest(window.editDraft, oldQ); return } if (window.HODSupabase?.getUser?.()) { alert('Chưa kết nối được dữ liệu duyệt. Hãy tải lại trang rồi gửi lại báo cáo.'); return } edits[window.editDraft.num] = { question: window.editDraft.question, options: window.editDraft.options, answer: window.editDraft.answer, answer_text: window.editDraft.answer_text, images: window.editDraft.images || [] }; localStorage.setItem('hod102_user_edits_v1', JSON.stringify(edits)); rebuild(); ci = pool.findIndex(c => c.num === window.editDraft.num); if (ci < 0) ci = 0; flipped = false; renderCard(); renderQuiz(); renderStudy(); $('editModal')?.classList.add('hidden'); notify('Đã lưu sửa local') }
   function apply() { try { openEditor = openEditPreview; saveEditor = saveEditPreview } catch (e) { } window.openEditor = openEditPreview; window.saveEditor = saveEditPreview }
   apply(); if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(apply, 0)); else setTimeout(apply, 0); setTimeout(apply, 900);
   document.addEventListener('click', e => { if (e.target.closest('[data-edit-preview-close]')) return $('editModal')?.classList.add('hidden'); if (e.target.closest('[data-edit-preview-save]')) return saveEditPreview(); if (e.target.closest('[data-edit-preview-restore]')) return typeof restoreEditor === 'function' && restoreEditor(); if (e.target.closest('[data-edit-pick-img]')) return $('editPreviewImgInput')?.click(); const rm = e.target.closest('[data-edit-rm-img]'); if (rm && window.editDraft) { window.editDraft.images = window.editDraft.images || []; window.editDraft.images.splice(+rm.dataset.editRmImg, 1); redrawImg(); return } if (e.target.closest('[data-edit-add-opt]') && window.editDraft) { window.editDraft.options = window.editDraft.options || {}; const k = nextKey(window.editDraft.options); if (!k) return alert('Đã đủ số đáp án.'); window.editDraft.options[k] = ''; redrawOpt(); setTimeout(() => document.querySelector(`[data-edit-opt="${k}"]`)?.focus(), 0); return } const del = e.target.closest('[data-edit-del-opt]'); if (del && window.editDraft) { delete window.editDraft.options[String(del.dataset.editDelOpt || '').toUpperCase()]; redrawOpt() } });
@@ -4994,7 +4670,7 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
     if (!src) return '';
     if (src.includes('res.cloudinary.com/') && src.includes('/image/upload/')) {
       if (!src.includes('q_auto') && !src.includes('f_auto')) {
-        return src.replace('/image/upload/', '/image/upload/c_limit,w_1200,q_auto:best,f_auto/');
+        return src.replace('/image/upload/', '/image/upload/c_limit,w_600,q_auto,f_auto/');
       }
     }
     return src;
@@ -5112,9 +4788,7 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
       document.body.appendChild(overlay);
     }
     overlay.classList.remove('hidden');
-    const originalSrc = src.replace('/image/upload/c_limit,w_600,q_auto,f_auto/', '/image/upload/')
-                           .replace('/image/upload/c_limit,w_1200,q_auto:best,f_auto/', '/image/upload/');
-    overlay.querySelector('img').src = originalSrc;
+    overlay.querySelector('img').src = src;
     setTimeout(() => {
       overlay.style.opacity = '1';
       overlay.querySelector('img').style.transform = 'scale(1)';
@@ -5222,6 +4896,23 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
     if (!res.ok) throw new Error(data.error?.message || 'Upload Cloudinary thất bại');
     return { id: data.public_id, public_id: data.public_id, src: data.secure_url, url: data.secure_url, width: data.width, height: data.height, source: 'cloudinary' };
   }
+  async function loadSubjectLight(force = false) {
+    const c = supa(), code = subject();
+    if (!c || !user()) return false;
+    if (!code) return false;
+    const { data, error } = await c.from('questions').select(QUESTION_LIGHT_COLUMNS).eq('is_active', true).eq('subject_code', code).order('num', { ascending: true });
+    if (error) { console.warn('[light load]', error); return false; }
+    RAW = (data || []).map(r => ({ id: r.id, subject_code: r.subject_code || code, num: r.num, question: r.question, options: r.options || {}, answer: r.answer || '', answer_text: r.answer_text || '', images: (typeof cleanImages === 'function' ? cleanImages(r.images || []) : (r.images || [])), has_image: r.has_image, error_risk: r.error_risk, error_risk_reason: r.error_risk_reason, __imagesChecked: true, __imagesLoaded: true }));
+    pool = [...RAW];
+    const saved = +localStorage.getItem('learninghub_progress_' + code) || 0;
+    ci = Math.max(0, Math.min(saved, Math.max(0, pool.length - 1)));
+    flipped = false;
+    try { renderCard(); renderQuiz(); renderStudy(); } catch (e) { }
+    return true;
+  }
+  window.loadCurrentSubjectOnly = loadSubjectLight;
+  function patchApi() { if (window.HODSupabase) window.HODSupabase.loadQuestionsFromSupabase = loadSubjectLight; }
+  patchApi(); setTimeout(patchApi, 500); setTimeout(patchApi, 1500);
 
   async function fetchImagesForCurrent() {
     const c = supa(); const q = (pool && pool[ci]) || null;
@@ -5266,7 +4957,7 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
     };
     openEditor.__cloudinaryPatch = true; window.openEditor = openEditor;
   }
-  document.addEventListener('DOMContentLoaded', () => { setTimeout(bindEditorUpload, 300); });
+  document.addEventListener('DOMContentLoaded', () => { patchApi(); setTimeout(bindEditorUpload, 300); });
 })();
 
 // ===== FINAL_URL_ONLY_IMAGES_AND_CURRENT_RELOAD_20260628 =====
@@ -5357,7 +5048,7 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
     if (!src) return '';
     if (src.includes('res.cloudinary.com/') && src.includes('/image/upload/')) {
       if (!src.includes('q_auto') && !src.includes('f_auto')) {
-        return src.replace('/image/upload/', '/image/upload/c_limit,w_1200,q_auto:best,f_auto/');
+        return src.replace('/image/upload/', '/image/upload/c_limit,w_600,q_auto,f_auto/');
       }
     }
     return src;
@@ -5465,42 +5156,13 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
 
   let activeLoadPromises = {};
   async function loadSubjectLight(force = false) {
-    const code = subject();
-    if (!user()) return false;
-    if (!code) {
-      if (typeof window.openGate === 'function') window.openGate();
-      return false;
-    }
+    const c = supa(), code = subject();
+    if (!c || !user() || !code) return false;
     if (!force) {
       const cached = readQuestionCache(code);
       if (cached && cached.length) { applyQuestionRows(cached, code); return true; }
     }
     
-    if (window.APP_CONFIG?.USE_TURSO_API) {
-      if (activeLoadPromises[code]) {
-        console.warn('[loadSubjectLight] Trả về promise tải đang chạy cho môn:', code);
-        return activeLoadPromises[code];
-      }
-      activeLoadPromises[code] = (async () => {
-        try {
-          const res = await fetch(`/api/questions?subject_code=${code}`);
-          const r = await res.json();
-          if (r.error) throw new Error(r.error);
-          const data = r.data || [];
-          writeQuestionCache(code, data);
-          applyQuestionRows(data, code);
-          return true;
-        } catch (e) {
-          console.error('[loadSubjectLight API Error]', e);
-          return false;
-        } finally {
-          delete activeLoadPromises[code];
-        }
-      })();
-      return activeLoadPromises[code];
-    }
-
-    const c = supa(); if (!c) return false;
     // Nếu môn học này đang được tải từ Supabase, trả về Promise đang chạy đó
     if (activeLoadPromises[code]) {
       console.warn('[loadSubjectLight] Trả về promise tải đang chạy cho môn:', code);
@@ -6409,7 +6071,7 @@ window.clearLearningHubQuestionCache = function () {
 
     if (url.pathname.includes('/rest/v1/profiles')) return 10 * 60 * 1000;
     if (url.pathname.includes('/rest/v1/subjects')) return 2 * 60 * 1000;
-    if (url.pathname.includes('/rest/v1/site_settings')) return 0;
+    if (url.pathname.includes('/rest/v1/site_settings')) return 60 * 1000;
 
     if (url.pathname.includes('/rest/v1/questions')) {
       const select = url.searchParams.get('select') || '';
@@ -6728,508 +6390,831 @@ window.clearLearningHubQuestionCache = function () {
 
 
 
-
-
-
-// ===== COPILOT_APP_CLEANUP_NO_OVERLAP_20260630 =====
-// Dọn phần chồng lấn cũ: không dùng cache số câu localStorage nữa, luôn ưu tiên số từ API /api/subjects.
+// ===== SUBJECT_COUNTS_ONCE_CACHE_20260629 =====
+// Hiện số câu từng môn theo kiểu tiết kiệm:
+// - Lần đầu trong trình duyệt mới đếm các môn chưa có cache.
+// - F5/load lại dùng localStorage, không query lại.
+// - Khi realtime báo questions/subjects đổi thì đánh dấu dirty, lần sau mới cập nhật lại.
 (function(){
-  if(window.__COPILOT_APP_CLEANUP_NO_OVERLAP_20260630) return;
-  window.__COPILOT_APP_CLEANUP_NO_OVERLAP_20260630 = true;
-  try{
-    localStorage.removeItem('learninghub_subject_counts_cache_v3');
-    localStorage.removeItem('learninghub_subject_counts_dirty_v3');
-  }catch(e){}
-})();
-// ===== END_COPILOT_APP_CLEANUP_NO_OVERLAP_20260630 =====
+  if(window.__SUBJECT_COUNTS_ONCE_CACHE_20260629) return;
+  window.__SUBJECT_COUNTS_ONCE_CACHE_20260629 = true;
 
+  const STORE = 'learninghub_subject_counts_cache_v3';
+  const DIRTY = 'learninghub_subject_counts_dirty_v3';
+  const pending = new Set();
 
-// ===== COPILOT_AUTO_ENTER_AFTER_APPROVAL_20260630 =====
-// Khi admin duyệt tài khoản, người dùng đang ở màn chờ sẽ tự vào web, không cần F5.
-(function(){
-  if(window.__COPILOT_AUTO_ENTER_AFTER_APPROVAL_20260630) return;
-  window.__COPILOT_AUTO_ENTER_AFTER_APPROVAL_20260630 = true;
-
-  const CHECK_MS = 2500;
-  let checking = false;
-
-  function isPendingVisible(){
-    const el = document.getElementById('hodPendingApproval');
-    return !!el && !el.classList.contains('hidden') && getComputedStyle(el).display !== 'none';
+  function client(){ return window.HODSupabase?.__client || null; }
+  function user(){ return window.HODSupabase?.getUser?.() || null; }
+  function activeSubject(){ return localStorage.getItem('learninghub_subject_code_merged_v1') || ''; }
+  function cssEscape(s){ try { return CSS.escape(String(s)); } catch(e) { return String(s).replace(/"/g,'\\"'); } }
+  function read(){
+    try { return JSON.parse(localStorage.getItem(STORE) || '{}') || {}; } catch(e) { return {}; }
   }
-
-  function approvedValue(v){
-    return v === true || v === 1 || v === '1';
+  function write(data){
+    try { localStorage.setItem(STORE, JSON.stringify(data || {})); } catch(e) {}
   }
-
-  function blockedValue(v){
-    return v === true || v === 1 || v === '1';
+  function dirty(){ return localStorage.getItem(DIRTY) === '1'; }
+  function setDirty(on=true){ try { on ? localStorage.setItem(DIRTY,'1') : localStorage.removeItem(DIRTY); } catch(e) {} }
+  function ensureStore(){
+    const x = read();
+    x.counts = x.counts || {};
+    x.confirmed = x.confirmed || {};
+    x.updated_at = x.updated_at || '';
+    return x;
   }
-
-  function unlockWeb(){
-    document.getElementById('hodPendingApproval')?.classList.add('hidden');
-    document.getElementById('hodLoginGate')?.classList.add('hidden');
-    document.body?.classList.remove('hod-locked');
+  function localCount(code){
     try{
-      if(typeof window.openGate === 'function') setTimeout(window.openGate, 120);
-      if(typeof window.loadCurrentSubjectOnly === 'function') setTimeout(() => window.loadCurrentSubjectOnly(false), 350);
-      else if(window.HODSupabase?.loadQuestionsFromSupabase) setTimeout(() => window.HODSupabase.loadQuestionsFromSupabase(), 350);
-    }catch(e){}
-    if(typeof notify === 'function') notify('Tài khoản đã được duyệt. Bạn có thể vào học ngay.');
-  }
-
-  async function fetchProfileFresh(){
-    const api = window.HODSupabase;
-    const u = api?.getUser?.();
-    if(!u) return null;
-
-    // Nếu đang dùng Turso API thì hỏi lại /api/profile.
-    if(window.APP_CONFIG?.USE_TURSO_API){
-      const res = await fetch('/api/profile?t=' + Date.now(), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: u.id,
-          email: u.email,
-          full_name: u.user_metadata?.full_name || '',
-          avatar_url: u.user_metadata?.avatar_url || u.user_metadata?.picture || ''
-        }),
-        cache: 'no-store'
-      });
-      const data = await res.json().catch(() => ({}));
-      return data.data || null;
-    }
-
-    const c = api?.__client || null;
-    if(!c) return null;
-    try{ window.clearLearningHubSupabaseCache?.('profiles'); }catch(e){}
-    const r = await c.from('profiles').select('*').eq('id', u.id).maybeSingle();
-    if(r.error) return null;
-    return r.data || null;
-  }
-
-  async function checkApprovalNow(){
-    if(checking || !isPendingVisible()) return;
-    checking = true;
-    try{
-      const p = await fetchProfileFresh();
-      if(!p) return;
-      if(blockedValue(p.blocked) || blockedValue(p.is_blocked) || p.status === 'blocked') return;
-      if(approvedValue(p.approved)){
-        // Bấm nút kiểm tra lại để code gốc cập nhật currentProfile trong HODSupabase.
-        const btn = document.getElementById('hodPendingRefresh');
-        if(btn && !btn.disabled) btn.click();
-        unlockWeb();
+      const active = activeSubject();
+      if(active === code && Array.isArray(RAW) && RAW.length) return RAW.length;
+      if(Array.isArray(RAW)){
+        const n = RAW.filter(q => (q.subject_code || active) === code).length;
+        return n > 0 ? n : null;
       }
-    }catch(e){
-      console.warn('[auto approval check]', e);
-    }finally{
-      checking = false;
-    }
-  }
-
-  setInterval(checkApprovalNow, CHECK_MS);
-  document.addEventListener('visibilitychange', () => { if(!document.hidden) setTimeout(checkApprovalNow, 150); });
-  window.addEventListener('focus', () => setTimeout(checkApprovalNow, 150));
-  document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(checkApprovalNow, 800);
-    setTimeout(checkApprovalNow, 2200);
-  });
-})();
-// ===== END_COPILOT_AUTO_ENTER_AFTER_APPROVAL_20260630 =====
-
-
-// ===== COPILOT_APPROVAL_GATE_FINAL_20260630 =====
-// Bảo đảm user chưa duyệt luôn thấy trang chờ duyệt; admin duyệt xong thì tự vào web.
-(function(){
-  if(window.__COPILOT_APPROVAL_GATE_FINAL_20260630) return;
-  window.__COPILOT_APPROVAL_GATE_FINAL_20260630 = true;
-
-  function api(){ return window.HODSupabase || null; }
-  function user(){ return api()?.getUser?.() || null; }
-  function profile(){ return api()?.getProfile?.() || null; }
-  function isPending(p){ return !!p && (p.approved === false || p.approved === 0 || p.approved === '0'); }
-  function isApproved(p){ return !!p && (p.approved === true || p.approved === 1 || p.approved === '1'); }
-  function isBlocked(p){ return !!p && (p.blocked === true || p.blocked === 1 || p.blocked === '1' || p.is_blocked === true || p.is_blocked === 1 || p.is_blocked === '1' || p.status === 'blocked'); }
-
-  function showPending(){
-    const u = user(), p = profile();
-    if(!u || !isPending(p)) return false;
-    const emailEl = document.getElementById('hodPendingEmail');
-    if(emailEl) emailEl.textContent = p.email || u.email || '';
-    document.getElementById('hodLoginGate')?.classList.add('hidden');
-    document.getElementById('subjectGate')?.classList.add('hidden');
-    document.getElementById('hodPendingApproval')?.classList.remove('hidden');
-    document.body?.classList.add('hod-locked');
-    try{ RAW = []; pool = []; ci = 0; }catch(e){}
-    return true;
-  }
-
-  function unlock(){
-    document.getElementById('hodPendingApproval')?.classList.add('hidden');
-    document.getElementById('hodLoginGate')?.classList.add('hidden');
-    document.body?.classList.remove('hod-locked');
-    try{
-      if(typeof window.openGate === 'function') setTimeout(window.openGate, 120);
-      if(typeof window.loadCurrentSubjectOnly === 'function') setTimeout(() => window.loadCurrentSubjectOnly(false), 350);
-      else if(api()?.loadQuestionsFromSupabase) setTimeout(() => api().loadQuestionsFromSupabase(), 350);
     }catch(e){}
-    if(typeof notify === 'function') notify('Tài khoản đã được duyệt. Bạn có thể vào học ngay.');
+    return null;
   }
-
-  async function readFreshProfile(){
-    const u = user();
-    if(!u) return null;
-    if(window.APP_CONFIG?.USE_TURSO_API){
-      const res = await fetch('/api/profile?t=' + Date.now(), {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({
-          id: u.id,
-          email: u.email,
-          full_name: u.user_metadata?.full_name || '',
-          avatar_url: u.user_metadata?.avatar_url || u.user_metadata?.picture || ''
-        }),
-        cache:'no-store'
-      });
-      const data = await res.json().catch(() => ({}));
-      return data.data || null;
-    }
-    const c = api()?.__client || null;
-    if(!c) return null;
-    try{ window.clearLearningHubSupabaseCache?.('profiles'); }catch(e){}
-    const r = await c.from('profiles').select('*').eq('id', u.id).maybeSingle();
-    return r && !r.error ? (r.data || null) : null;
+  function setCardCount(code, n){
+    const count = Number(n || 0);
+    document.querySelectorAll('.subjectCard[data-code="'+cssEscape(code)+'"]').forEach(card => {
+      const meta = card.querySelector('.subjectMeta span:first-child');
+      if(meta) meta.textContent = count + ' câu';
+      card.title = (card.title || code).replace(/(?:\d+|—) câu/g, count + ' câu');
+    });
   }
-
-  let checking = false;
-  async function checkNow(){
-    const p = profile();
+  function paint(){
+    const store = ensureStore();
+    document.querySelectorAll('.subjectCard[data-code]').forEach(card => {
+      const code = card.dataset.code;
+      const n = localCount(code);
+      if(Number.isFinite(Number(n)) && Number(n) > 0) {
+        setCardCount(code, Number(n));
+        return;
+      }
+      if(store.confirmed[code]) setCardCount(code, Number(store.counts[code] || 0));
+    });
+  }
+  async function countOne(code){
+    const c = client();
+    if(!c || !code) return null;
+    const { count, error } = await c.from('questions')
+      .select('id', { count:'exact', head:true })
+      .eq('subject_code', code)
+      .eq('is_active', true);
+    if(error) { console.warn('[subject count]', code, error); return null; }
+    return Number(count || 0);
+  }
+  async function refresh(force=false){
     if(!user()) return;
-    if(showPending()){
-      if(checking) return;
-      checking = true;
-      try{
-        const fresh = await readFreshProfile();
-        if(fresh && !isBlocked(fresh) && isApproved(fresh)){
-          const btn = document.getElementById('hodPendingRefresh');
-          if(btn && !btn.disabled) btn.click();
-          unlock();
-        }
-      }catch(e){ console.warn('[approval gate]', e); }
-      finally{ checking = false; }
-      return;
+    const cards = [...document.querySelectorAll('.subjectCard[data-code]')];
+    if(!cards.length) return;
+    const store = ensureStore();
+    const must = force || dirty();
+
+    paint();
+
+    const codes = cards.map(card => card.dataset.code).filter(Boolean);
+    const need = codes.filter(code => {
+      const n = localCount(code);
+      if(Number.isFinite(Number(n)) && Number(n) > 0) return false;
+      return must || !store.confirmed[code];
+    });
+    if(!need.length) return;
+
+    for(const code of need){
+      if(pending.has(code)) continue;
+      pending.add(code);
+      const n = await countOne(code);
+      if(n !== null){
+        store.counts[code] = n;
+        store.confirmed[code] = true;
+        store.updated_at = new Date().toISOString();
+        write(store);
+        setCardCount(code, n);
+      }
+      pending.delete(code);
     }
-    if(p && isBlocked(p)) return;
+    setDirty(false);
   }
 
-  // Chặn các luồng mở môn/tải câu hỏi nếu còn pending.
-  function installGuards(){
-    if(api()?.loadQuestionsFromSupabase && !api().loadQuestionsFromSupabase.__approvalFinalGuard){
-      const old = api().loadQuestionsFromSupabase;
-      const guarded = async function(){ if(showPending()) return false; return old.apply(this, arguments); };
-      guarded.__approvalFinalGuard = true;
-      api().loadQuestionsFromSupabase = guarded;
-    }
-    if(window.openGate && !window.openGate.__approvalFinalGuard){
-      const old = window.openGate;
-      window.openGate = function(){ if(showPending()) return false; return old.apply(this, arguments); };
-      window.openGate.__approvalFinalGuard = true;
-    }
-    if(window.loadCurrentSubjectOnly && !window.loadCurrentSubjectOnly.__approvalFinalGuard){
-      const old = window.loadCurrentSubjectOnly;
-      window.loadCurrentSubjectOnly = async function(){ if(showPending()) return false; return old.apply(this, arguments); };
-      window.loadCurrentSubjectOnly.__approvalFinalGuard = true;
-    }
-  }
+  const oldClear = window.clearLearningHubSupabaseCache;
+  window.clearLearningHubSupabaseCache = function(kind){
+    if(!kind || kind === 'all' || kind === 'questions' || kind === 'subjects') setDirty(true);
+    return typeof oldClear === 'function' ? oldClear.apply(this, arguments) : undefined;
+  };
 
-  setInterval(function(){ installGuards(); checkNow(); }, 700);
-  document.addEventListener('DOMContentLoaded', function(){
-    setTimeout(function(){ installGuards(); checkNow(); }, 400);
-    setTimeout(function(){ installGuards(); checkNow(); }, 1400);
-    setTimeout(function(){ installGuards(); checkNow(); }, 3000);
+  window.refreshSubjectCountsOnce = function(){ return refresh(true); };
+
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(paint, 300);
+    setTimeout(() => refresh(false), 1200);
+    setTimeout(() => refresh(false), 2600);
   });
-  window.addEventListener('focus', () => setTimeout(checkNow, 150));
-  document.addEventListener('visibilitychange', () => { if(!document.hidden) setTimeout(checkNow, 150); });
+  document.addEventListener('click', e => {
+    if(e.target.closest('#subjectRefresh')) setTimeout(() => refresh(true), 600);
+    if(e.target.closest('#hodChangeSubjectBtn,#subjectTopChip')){
+      setTimeout(paint, 300);
+      setTimeout(() => refresh(false), 1200);
+      setTimeout(() => refresh(false), 2600);
+    }
+  }, true);
 })();
-// ===== END_COPILOT_APPROVAL_GATE_FINAL_20260630 =====
+// ===== END SUBJECT_COUNTS_ONCE_CACHE_20260629 =====
 
 
-// ===== COPILOT_APP_RESUME_PROGRESS_FIX_20260630 =====
-// Fix: F5 giữ tab đang học và vị trí câu của môn hiện tại.
+// ===== ACTIVE_SUBJECT_COUNT_SYNC_20260629 =====
+// Nếu môn đang chọn đã load câu hỏi, số câu trên thẻ môn phải lấy từ RAW/pool ngay, không để cache 0 đè lên.
 (function(){
-  if(window.__COPILOT_APP_RESUME_PROGRESS_FIX_20260630) return;
-  window.__COPILOT_APP_RESUME_PROGRESS_FIX_20260630 = true;
+  if(window.__ACTIVE_SUBJECT_COUNT_SYNC_20260629) return;
+  window.__ACTIVE_SUBJECT_COUNT_SYNC_20260629 = true;
 
-  const SUBJECT_KEY = 'learninghub_subject_code_merged_v1';
-  const TAB_KEY = 'learninghub_last_tab_v1';
+  const STORE = 'learninghub_subject_counts_cache_v3';
+  const SUBJECT_STORE = 'learninghub_subject_code_merged_v1';
 
-  function subjectCode(){ return localStorage.getItem(SUBJECT_KEY) || ''; }
-  function savedIndex(){
-    const code = subjectCode();
-    const v = code ? localStorage.getItem('learninghub_progress_' + code) : localStorage.getItem('hod102_ci');
-    const n = Number(v || 0);
-    return Number.isFinite(n) && n >= 0 ? n : 0;
-  }
-  function applyIndex(){
+  function code(){ return localStorage.getItem(SUBJECT_STORE) || ''; }
+  function read(){ try{return JSON.parse(localStorage.getItem(STORE) || '{}') || {};}catch(e){return {};} }
+  function write(x){ try{localStorage.setItem(STORE, JSON.stringify(x || {}));}catch(e){} }
+  function cssEscape(s){ try{return CSS.escape(String(s));}catch(e){return String(s).replace(/"/g,'\\"');} }
+  function loadedCount(){
     try{
-      if(!Array.isArray(pool) || !pool.length) return;
-      ci = Math.max(0, Math.min(savedIndex(), pool.length - 1));
-      flipped = false;
-      flipDir = 'horizontal';
-      if(typeof renderCard === 'function') renderCard();
-      if(typeof renderStudy === 'function') renderStudy();
-      if(typeof renderQuiz === 'function') renderQuiz();
-    }catch(e){ console.warn('[resume progress]', e); }
-  }
-  function restoreTab(){
-    try{
-      const tab = localStorage.getItem(TAB_KEY) || 'fc';
-      const btn = document.querySelector('.tab[data-tab="'+tab+'"]');
-      if(btn && !btn.classList.contains('active')) btn.click();
+      if(Array.isArray(RAW) && RAW.length) return RAW.length;
+      if(Array.isArray(pool) && pool.length) return pool.length;
     }catch(e){}
+    return 0;
   }
-  function restoreAll(){
-    applyIndex();
-    restoreTab();
+  function setCardCount(subject, n){
+    if(!subject || !Number.isFinite(Number(n)) || Number(n) <= 0) return;
+    const count = Number(n);
+    document.querySelectorAll('.subjectCard[data-code="'+cssEscape(subject)+'"]').forEach(card => {
+      const meta = card.querySelector('.subjectMeta span:first-child');
+      if(meta) meta.textContent = count + ' câu';
+      card.title = (card.title || subject).replace(/(?:\d+|—|0) câu/g, count + ' câu');
+    });
+    const store = read();
+    store.counts = store.counts || {};
+    store.confirmed = store.confirmed || {};
+    store.counts[subject] = count;
+    store.confirmed[subject] = true;
+    store.updated_at = new Date().toISOString();
+    write(store);
+  }
+  function syncActiveSubjectCount(){
+    const subject = code();
+    const n = loadedCount();
+    if(subject && n > 0) setCardCount(subject, n);
   }
 
-  const oldSwitchTab = typeof switchTab === 'function' ? switchTab : null;
-  if(oldSwitchTab && !oldSwitchTab.__copilotResumeFix){
-    const fixedSwitchTab = function(n, b){
-      try{ if(n) localStorage.setItem(TAB_KEY, n); }catch(e){}
-      return oldSwitchTab.apply(this, arguments);
-    };
-    fixedSwitchTab.__copilotResumeFix = true;
-    window.switchTab = switchTab = fixedSwitchTab;
-  }
+  window.syncActiveSubjectCount = syncActiveSubjectCount;
 
   const oldLoadCurrent = window.loadCurrentSubjectOnly;
-  if(typeof oldLoadCurrent === 'function' && !oldLoadCurrent.__copilotResumeFix){
+  if(typeof oldLoadCurrent === 'function' && !oldLoadCurrent.__activeCountPatched){
     window.loadCurrentSubjectOnly = async function(){
       const out = await oldLoadCurrent.apply(this, arguments);
-      setTimeout(restoreAll, 80);
+      setTimeout(syncActiveSubjectCount, 50);
+      setTimeout(syncActiveSubjectCount, 300);
       return out;
     };
-    window.loadCurrentSubjectOnly.__copilotResumeFix = true;
+    window.loadCurrentSubjectOnly.__activeCountPatched = true;
   }
 
   const oldLoadBySubject = window.loadBySubject;
-  if(typeof oldLoadBySubject === 'function' && !oldLoadBySubject.__copilotResumeFix){
+  if(typeof oldLoadBySubject === 'function' && !oldLoadBySubject.__activeCountPatched){
     window.loadBySubject = async function(){
       const out = await oldLoadBySubject.apply(this, arguments);
-      setTimeout(restoreAll, 80);
+      setTimeout(syncActiveSubjectCount, 50);
+      setTimeout(syncActiveSubjectCount, 300);
       return out;
     };
-    window.loadBySubject.__copilotResumeFix = true;
+    window.loadBySubject.__activeCountPatched = true;
   }
 
-  document.addEventListener('DOMContentLoaded', function(){
-    setTimeout(restoreAll, 500);
-    setTimeout(restoreAll, 1300);
-    setTimeout(restoreAll, 2500);
+  const oldRenderCard = typeof renderCard === 'function' ? renderCard : null;
+  if(oldRenderCard && !window.__renderCardActiveCountPatched){
+    window.__renderCardActiveCountPatched = true;
+    renderCard = function(){
+      const out = oldRenderCard.apply(this, arguments);
+      setTimeout(syncActiveSubjectCount, 0);
+      return out;
+    };
+    window.renderCard = renderCard;
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(syncActiveSubjectCount, 500);
+    setTimeout(syncActiveSubjectCount, 1500);
   });
-  window.addEventListener('load', function(){ setTimeout(restoreAll, 300); });
+  setInterval(() => {
+    const gate = document.getElementById('subjectGate');
+    if(gate && !gate.classList.contains('hidden')) syncActiveSubjectCount();
+  }, 800);
 })();
-// ===== END COPILOT_APP_RESUME_PROGRESS_FIX_20260630 =====
+// ===== END ACTIVE_SUBJECT_COUNT_SYNC_20260629 =====
 
 
-// ===== COPILOT_STRICT_PENDING_APPROVAL_GATE_20260630 =====
-// Chặn tài khoản đang chờ duyệt vào web; sau khi admin duyệt thì tự mở web ngay.
+// ===== SUBJECTS_CACHE_BUST_AFTER_ADD_20260629 =====
+// Sau khi thêm môn, ép request subjects đi network 1 lần để danh sách cập nhật ngay, không bị cache cũ giữ lại.
 (function(){
-  if(window.__COPILOT_STRICT_PENDING_APPROVAL_GATE_20260630) return;
-  window.__COPILOT_STRICT_PENDING_APPROVAL_GATE_20260630 = true;
-
-  const CHECK_MS = 2000;
-  let checking = false;
-  let lastFreshProfile = null;
-  let lastFreshAt = 0;
-
-  function api(){ return window.HODSupabase || null; }
-  function user(){ return api()?.getUser?.() || null; }
-  function yes(v){ return v === true || v === 1 || v === '1'; }
-  function no(v){ return v === false || v === 0 || v === '0'; }
-  function blocked(p){ return !!(p && (yes(p.blocked) || yes(p.is_blocked) || p.status === 'blocked')); }
-  function approved(p){
-    if(!p) return false;
-    const role = String(p.role || '').toLowerCase();
-    if(role === 'admin' || role === 'editor') return true;
-    return yes(p.approved);
+  if(window.__SUBJECTS_CACHE_BUST_AFTER_ADD_20260629) return;
+  window.__SUBJECTS_CACHE_BUST_AFTER_ADD_20260629 = true;
+  const nativeFetch = window.fetch ? window.fetch.bind(window) : null;
+  if(!nativeFetch) return;
+  function methodOf(init){ return String(init && init.method ? init.method : 'GET').toUpperCase(); }
+  function urlOf(input){ try { return new URL(typeof input === 'string' ? input : input.url, location.href); } catch(e){ return null; } }
+  function isDirty(){
+    const n = Number(localStorage.getItem('learninghub_subjects_dirty_v3') || 0);
+    return n && Date.now() - n < 2 * 60 * 1000;
   }
-  function pending(p){
-    if(!p) return false;
-    const role = String(p.role || '').toLowerCase();
-    if(role === 'admin' || role === 'editor') return false;
-    return no(p.approved) || !yes(p.approved);
-  }
-  function profile(){
-    const p = api()?.getProfile?.() || null;
-    try{
-      if(lastFreshProfile && p && pending(p) && approved(lastFreshProfile)) return lastFreshProfile;
-      if(lastFreshProfile && !p) return lastFreshProfile;
-    }catch(e){}
-    return p || lastFreshProfile || null;
-  }
-
-  function lockWeb(){
-    if(!user()) return;
-    const p = profile();
-    document.body.classList.add('hod-locked','lh-pending-approval-lock');
-    document.getElementById('hodLoginGate')?.classList.add('hidden');
-    document.getElementById('hodPendingApproval')?.classList.remove('hidden');
-    document.getElementById('subjectGate')?.classList.add('hidden');
-    document.getElementById('addQuestionModal')?.classList.add('hidden');
-    document.querySelectorAll('#addQuestionFab,.prettyAddFab').forEach(el => el.classList.add('hidden'));
-    const mail = document.getElementById('hodPendingEmail');
-    if(mail) mail.textContent = p?.email || user()?.email || '';
-    try{ RAW = []; pool = []; ci = 0; }catch(e){}
-  }
-
-  function unlockWeb(){
-    document.body.classList.remove('hod-locked','lh-pending-approval-lock');
-    document.getElementById('hodPendingApproval')?.classList.add('hidden');
-    document.getElementById('hodLoginGate')?.classList.add('hidden');
-    try{
-      const btn = document.getElementById('hodPendingRefresh');
-      if(btn && !btn.disabled) btn.click();
-      setTimeout(() => api()?.init?.(), 300);
-    }catch(e){}
-    if(typeof notify === 'function') notify('Tài khoản đã được duyệt. Đang vào web...');
-    setTimeout(function(){
-      try{
-        const code = localStorage.getItem('learninghub_subject_code_merged_v1') || '';
-        if(code && typeof window.loadCurrentSubjectOnly === 'function') window.loadCurrentSubjectOnly(false);
-        else if(typeof window.openGate === 'function') window.openGate();
-      }catch(e){}
-    }, 550);
-  }
-
-  async function fetchFreshProfile(force){
-    const u = user();
-    if(!u) return null;
-    if(!force && lastFreshProfile && Date.now() - lastFreshAt < 1200) return lastFreshProfile;
-
-    if(window.APP_CONFIG?.USE_TURSO_API){
-      const res = await fetch('/api/profile?approval_check=' + Date.now(), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: u.id,
-          email: u.email,
-          full_name: u.user_metadata?.full_name || '',
-          avatar_url: u.user_metadata?.avatar_url || u.user_metadata?.picture || ''
-        }),
-        cache: 'no-store'
+  window.fetch = function(input, init){
+    let url = urlOf(input);
+    if(url && methodOf(init) === 'GET' && /\/rest\/v1\/subjects\b/.test(url.pathname) && isDirty()){
+      // offset=0 là tham số hợp lệ của PostgREST, dùng để đổi cache key nhưng không đổi dữ liệu.
+      if(!url.searchParams.has('offset')) url.searchParams.set('offset','0');
+      if(!url.searchParams.has('limit')) url.searchParams.set('limit','1000');
+      const next = typeof input === 'string' ? url.toString() : new Request(url.toString(), input);
+      return nativeFetch(next, init).then(res => {
+        try { localStorage.removeItem('learninghub_subjects_dirty_v3'); } catch(e) {}
+        return res;
       });
-      const data = await res.json().catch(() => ({}));
-      lastFreshProfile = data.data || null;
-      lastFreshAt = Date.now();
-      return lastFreshProfile;
     }
+    return nativeFetch(input, init);
+  };
+})();
+// ===== END SUBJECTS_CACHE_BUST_AFTER_ADD_20260629 =====
 
-    const c = api()?.__client || null;
-    if(!c) return null;
-    try{ window.clearLearningHubSupabaseCache?.('profiles'); }catch(e){}
-    const r = await c.from('profiles').select('*').eq('id', u.id).maybeSingle();
-    if(r.error) return null;
-    lastFreshProfile = r.data || null;
-    lastFreshAt = Date.now();
-    return lastFreshProfile;
+
+
+
+
+
+// ===== REMOVE_EYE_HIDE_OPTIONS_20260629 =====
+// Xóa nút con mắt và tắt hẳn chức năng ẩn/hiện lựa chọn.
+(function(){
+  function apply(){
+    try { localStorage.removeItem('hod102_hide_options'); } catch(e) {}
+    var opt = document.getElementById('options');
+    if (opt) opt.classList.remove('hide');
+    var eye = document.getElementById('toggleOpts');
+    if (eye) eye.remove();
+    var st = document.getElementById('stToggleOpts');
+    if (st) st.style.display = 'none';
+    var stText = document.getElementById('stOptState');
+    if (stText) stText.textContent = 'Đang hiện lựa chọn';
   }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply); else apply();
+  setTimeout(apply, 300);
+})();
+// ===== END REMOVE_EYE_HIDE_OPTIONS_20260629 =====
 
-  async function checkGate(force){
-    if(checking || !user()) return;
-    checking = true;
-    try{
-      let p = profile();
-      if(force || !p || pending(p)) p = await fetchFreshProfile(true) || p;
-      if(blocked(p)){
-        alert('Tài khoản của bạn đã bị khóa.');
-        await api()?.signOut?.();
-        location.reload();
-        return;
+
+// ===== FIX_EXAM_BOTTOM_BLANK_20260629 =====
+// Sửa giao diện Kiểm tra bị trống khoảng phía dưới: cho khung kiểm tra tự giãn gần hết màn hình.
+(function(){
+  function injectExamBlankFix(){
+    if (document.getElementById('fixExamBottomBlankStyle')) return;
+    var style = document.createElement('style');
+    style.id = 'fixExamBottomBlankStyle';
+    style.textContent = `
+      #quiz.pane.active,
+      #quiz.active {
+        padding-bottom: 0 !important;
+        margin-bottom: 0 !important;
       }
-      if(pending(p)) return lockWeb();
-      if(approved(p)) return unlockWeb();
-    }catch(e){
-      console.warn('[strict pending gate]', e);
-    }finally{
-      checking = false;
-    }
+
+      #quizBody {
+        padding-bottom: 0 !important;
+        margin-bottom: 0 !important;
+      }
+
+      .examOnlyGridContainer {
+        min-height: calc(100dvh - var(--headH,112px) - 8px) !important;
+        height: calc(100dvh - var(--headH,112px) - 8px) !important;
+        align-items: stretch !important;
+        margin-bottom: 0 !important;
+        width: min(1728px, calc(100vw - 96px)) !important;
+        max-width: none !important;
+      }
+
+      .examOnlyCard,
+      .examOnlySidebar {
+        height: 100% !important;
+        min-height: 0 !important;
+        box-sizing: border-box !important;
+      }
+
+      .examOnlyCard {
+        display: flex !important;
+        flex-direction: column !important;
+      }
+
+      .examOnlyContentBody {
+        flex: 1 1 auto !important;
+        min-height: 0 !important;
+      }
+
+      .examOnlyFooter {
+        flex: 0 0 auto !important;
+        margin-top: 20px !important;
+      }
+
+      .examSidebarGrid,
+      .examOnlyQuestionZone,
+      .examOnlyRightZone {
+        min-height: 0 !important;
+      }
+
+      @media (max-width: 900px) {
+        .examOnlyGridContainer {
+          height: auto !important;
+          min-height: 0 !important;
+        }
+        .examOnlyCard,
+        .examOnlySidebar {
+          height: auto !important;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', injectExamBlankFix); else injectExamBlankFix();
+})();
+// ===== END FIX_EXAM_BOTTOM_BLANK_20260629 =====
+
+
+// ===== SOFTEN_EXAM_TEXT_RUNTIME_20260629 =====
+(function(){
+  function injectSoftExamText(){
+    if (document.getElementById('softExamTextStyle')) return;
+    var style = document.createElement('style');
+    style.id = 'softExamTextStyle';
+    style.textContent = `
+      #quiz .examOnlyCard .qq,
+      #quiz .examOnlyQuestionZone .qq,
+      #quiz .qq{
+        color:rgba(245,240,232,.72)!important;
+        font-weight:560!important;
+        text-shadow:none!important;
+        -webkit-text-fill-color:rgba(245,240,232,.72)!important;
+      }
+      #quiz .examOnlyOption .qtxt,
+      #quiz .examOnlyCard .qtxt{
+        color:rgba(245,240,232,.60)!important;
+        font-weight:480!important;
+        text-shadow:none!important;
+      }
+      #quiz .examOnlyOption.sel{
+        background:linear-gradient(135deg,rgba(200,169,110,.105),rgba(232,212,168,.045))!important;
+        border-color:rgba(232,212,168,.48)!important;
+        box-shadow:0 0 14px rgba(232,212,168,.055), inset 0 1px 1px rgba(255,255,255,.06)!important;
+      }
+      #quiz .examOnlyOption.sel .qtxt{
+        color:rgba(245,240,232,.78)!important;
+        font-weight:540!important;
+      }
+      #quiz .examOnlyOption.sel .qkey{
+        color:#14100b!important;
+        background:linear-gradient(135deg,rgba(232,212,168,.86),rgba(200,169,110,.82))!important;
+        box-shadow:0 2px 8px rgba(232,212,168,.18)!important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', injectSoftExamText); else injectSoftExamText();
+})();
+// ===== END SOFTEN_EXAM_TEXT_RUNTIME_20260629 =====
+
+
+// ===== FIX_EXAM_UX_BALANCE_RUNTIME_20260629 =====
+(function(){
+  function injectExamUxBalance(){
+    if (document.getElementById('examUxBalanceStyle')) return;
+    var style = document.createElement('style');
+    style.id = 'examUxBalanceStyle';
+    style.textContent = `
+      @media (min-width:901px){
+        #quiz .examOnlyContentBody{
+          grid-template-columns:minmax(0,.98fr) minmax(430px,1.02fr)!important;
+          gap:18px!important;
+          align-items:start!important;
+        }
+        #quiz .examOnlyQuestionZone{padding-right:8px!important;}
+        #quiz .examOnlyRightZone{padding-left:0!important;}
+        #quiz .examOnlyOptions{padding:8px 10px 18px 8px!important;gap:11px!important;}
+      }
+      #quiz .examOnlyCard .qq,
+      #quiz .examOnlyQuestionZone .qq,
+      #quiz .qq{
+        color:rgba(245,240,232,.78)!important;
+        -webkit-text-fill-color:rgba(245,240,232,.78)!important;
+        font-size:clamp(1.14rem,1.24vw,1.42rem)!important;
+        font-weight:620!important;
+        line-height:1.46!important;
+      }
+      #quiz .examOnlyOption.sel{
+        background:linear-gradient(135deg,rgba(200,169,110,.075),rgba(232,212,168,.032))!important;
+        border-color:rgba(232,212,168,.42)!important;
+        box-shadow:inset 0 1px 0 rgba(255,255,255,.045)!important;
+      }
+      #quiz .examOnlyOption.sel .qtxt{
+        color:rgba(245,240,232,.76)!important;
+        font-weight:520!important;
+      }
+      #quiz .examOnlyOption.sel .qkey{
+        background:linear-gradient(135deg,rgba(232,212,168,.80),rgba(200,169,110,.76))!important;
+        box-shadow:0 1px 6px rgba(232,212,168,.12)!important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', injectExamUxBalance); else injectExamUxBalance();
+})();
+// ===== END FIX_EXAM_UX_BALANCE_RUNTIME_20260629 =====
+
+
+// ===== FIX_EXAM_CENTER_LAYOUT_RUNTIME_20260629 =====
+(function(){
+  function injectExamCenterLayout(){
+    if (document.getElementById('examCenterLayoutStyle')) return;
+    var style = document.createElement('style');
+    style.id = 'examCenterLayoutStyle';
+    style.textContent = `
+      @media (min-width:901px){
+        #quiz.pane.scroll.active,
+        #quiz.pane.active,
+        #quiz.scroll{
+          padding-left:0!important;
+          padding-right:0!important;
+          align-items:center!important;
+        }
+        #quizBody{
+          width:min(1660px,calc(100vw - 160px))!important;
+          max-width:1660px!important;
+          margin-left:auto!important;
+          margin-right:auto!important;
+          transform:none!important;
+        }
+        #quiz .examOnlyGridContainer{
+          width:100%!important;
+          max-width:1660px!important;
+          margin-left:auto!important;
+          margin-right:auto!important;
+          grid-template-columns:minmax(0,1fr) 370px!important;
+          gap:28px!important;
+        }
+        #quiz .examOnlyCard{max-width:none!important;}
+      }
+    `;
+    document.head.appendChild(style);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', injectExamCenterLayout); else injectExamCenterLayout();
+})();
+// ===== END FIX_EXAM_CENTER_LAYOUT_RUNTIME_20260629 =====
+
+
+// ===== FIX_EXAM_SHIFT_RIGHT_SMALLER_Q_RUNTIME_20260629 =====
+(function(){
+  function injectExamShiftRightSmallerQ(){
+    if (document.getElementById('examShiftRightSmallerQStyle')) return;
+    var style = document.createElement('style');
+    style.id = 'examShiftRightSmallerQStyle';
+    style.textContent = `
+      @media (min-width:901px){
+        #quizBody{
+          width:min(1580px,calc(100vw - 220px))!important;
+          max-width:1580px!important;
+          margin-left:auto!important;
+          margin-right:auto!important;
+          transform:translateX(34px)!important;
+        }
+        #quiz .examOnlyGridContainer{
+          width:100%!important;
+          max-width:1580px!important;
+          grid-template-columns:minmax(0,1fr) 360px!important;
+          gap:26px!important;
+          margin-left:auto!important;
+          margin-right:auto!important;
+        }
+      }
+      #quiz .examOnlyCard .qq,
+      #quiz .examOnlyQuestionZone .qq,
+      #quiz .qq{
+        font-size:clamp(1.00rem,1.04vw,1.18rem)!important;
+        line-height:1.42!important;
+        font-weight:580!important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', injectExamShiftRightSmallerQ); else injectExamShiftRightSmallerQ();
+})();
+// ===== END FIX_EXAM_SHIFT_RIGHT_SMALLER_Q_RUNTIME_20260629 =====
+
+
+// ===== CLEAR_ADD_SUBJECT_DRAFT_NEW_SESSION_20260629 =====
+// Phiên đăng nhập mới: xóa toàn bộ dữ liệu nháp ở phần Thêm môn để người dùng điền lại từ đầu.
+(function(){
+  const KEYS = [
+    'learninghub_add_subject_code_v1',
+    'learninghub_add_subject_name_v1',
+    'learninghub_add_subject_desc_v1',
+    'learninghub_add_subject_step_v1',
+    'learninghub_add_subject_file_name_v1',
+    'learninghub_add_subject_file_size_v1',
+    'learninghub_add_subject_file_data_v1',
+    'learninghub_add_subject_file_previewed_v1'
+  ];
+  const SESSION_KEY = 'learninghub_add_subject_draft_cleared_for_user_v1';
+
+  function clearAddSubjectDraft(){
+    try { KEYS.forEach(k => localStorage.removeItem(k)); } catch(e) {}
+    try { localStorage.setItem('learninghub_subject_gate_tab_v1', 'list'); } catch(e) {}
+
+    const ids = [
+      'addSubjectCode','addSubjectName','addSubjectDesc','userImportData','userImportFile'
+    ];
+    ids.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+
+    const card = document.getElementById('userImportFileCard');
+    const dz = document.getElementById('importDropZone');
+    const pv = document.getElementById('previewImportBtn');
+    const preview = document.getElementById('userImportPreview');
+    if (card) card.classList.add('hidden');
+    if (dz) dz.classList.remove('hidden');
+    if (pv) { pv.classList.add('hidden'); pv.disabled = true; }
+    if (preview) preview.innerHTML = '';
   }
 
-  function canUseWebNow(){
-    if(!user()) return false;
-    const p = profile();
-    if(blocked(p)) return false;
-    if(pending(p)){
-      lockWeb();
-      checkGate(true);
-      return false;
+  function currentUserId(){
+    try { return window.HODSupabase?.getUser?.()?.id || ''; } catch(e) { return ''; }
+  }
+
+  function clearOnceForCurrentLogin(){
+    const uid = currentUserId();
+    if (!uid) return;
+    let cleared = '';
+    try { cleared = sessionStorage.getItem(SESSION_KEY) || ''; } catch(e) {}
+    if (cleared === uid) return;
+    clearAddSubjectDraft();
+    try { sessionStorage.setItem(SESSION_KEY, uid); } catch(e) {}
+  }
+
+  function patchAuthMethods(){
+    const api = window.HODSupabase;
+    if (!api || api.__clearAddSubjectDraftPatched) return;
+
+    if (typeof api.signInGoogle === 'function') {
+      const oldGoogle = api.signInGoogle.bind(api);
+      api.signInGoogle = async function(){
+        clearAddSubjectDraft();
+        try { sessionStorage.removeItem(SESSION_KEY); } catch(e) {}
+        return oldGoogle.apply(this, arguments);
+      };
+    }
+
+    if (typeof api.signOut === 'function') {
+      const oldSignOut = api.signOut.bind(api);
+      api.signOut = async function(){
+        clearAddSubjectDraft();
+        try { sessionStorage.removeItem(SESSION_KEY); } catch(e) {}
+        return oldSignOut.apply(this, arguments);
+      };
+    }
+
+    api.__clearAddSubjectDraftPatched = true;
+  }
+
+  function tick(){
+    patchAuthMethods();
+    clearOnceForCurrentLogin();
+  }
+
+  window.__clearAddSubjectDraft = clearAddSubjectDraft;
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', tick); else tick();
+  setTimeout(tick, 500);
+  setTimeout(tick, 1600);
+  setInterval(tick, 2500);
+})();
+// ===== END CLEAR_ADD_SUBJECT_DRAFT_NEW_SESSION_20260629 =====
+
+
+// ===== COPILOT_KEEP_IMPORT_QUESTION_ATTRIBUTES_20260629 =====
+// Giữ thuộc tính câu hỏi sau khi import môn rồi mở Thư viện/Kiểm tra câu hỏi.
+(function () {
+  if (window.__COPILOT_KEEP_IMPORT_QUESTION_ATTRIBUTES_20260629) return;
+  window.__COPILOT_KEEP_IMPORT_QUESTION_ATTRIBUTES_20260629 = true;
+  function normalizeQuestionAttrs(q) {
+    if (!q || typeof q !== 'object') return q;
+    const imgs = Array.isArray(q.images) ? q.images : [];
+    q.has_image = !!(q.has_image || imgs.length);
+    q.error_risk = q.error_risk || 'low';
+    q.error_risk_reason = q.error_risk_reason || '';
+    return q;
+  }
+  window.__LHNormalizeQuestionAttrs = normalizeQuestionAttrs;
+  function normalizeAll() {
+    try { if (Array.isArray(RAW)) RAW.forEach(normalizeQuestionAttrs); } catch (e) { }
+    try { if (Array.isArray(pool)) pool.forEach(normalizeQuestionAttrs); } catch (e) { }
+    try { if (Array.isArray(qSet)) qSet.forEach(normalizeQuestionAttrs); } catch (e) { }
+  }
+  const oldRenderStudy = typeof renderStudy === 'function' ? renderStudy : null;
+  if (oldRenderStudy && !oldRenderStudy.__keepAttrs) {
+    renderStudy = function () { normalizeAll(); return oldRenderStudy.apply(this, arguments); };
+    renderStudy.__keepAttrs = true;
+  }
+  const oldRenderCard = typeof renderCard === 'function' ? renderCard : null;
+  if (oldRenderCard && !oldRenderCard.__keepAttrs) {
+    renderCard = function () { normalizeAll(); return oldRenderCard.apply(this, arguments); };
+    renderCard.__keepAttrs = true;
+  }
+  normalizeAll();
+})();
+// ===== END COPILOT_KEEP_IMPORT_QUESTION_ATTRIBUTES_20260629 =====
+
+
+
+
+// ===== EDIT_RENDER_NULL_GUARD_20260629 =====
+(function () {
+  function $(id) { return document.getElementById(id); }
+  function safeSrc(im) { return im && typeof im === 'object' ? (im.src || im.url || im.secure_url || im.publicUrl || im.public_url || '') : (im || ''); }
+  function safeEsc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+  function ensureEditImgsBox() {
+    let box = $('editImgs');
+    if (box) return box;
+    const input = $('imgUpload');
+    if (!input) return null;
+    box = document.createElement('div');
+    box.id = 'editImgs';
+    box.className = 'editImgs';
+    input.insertAdjacentElement('afterend', box);
+    return box;
+  }
+  window.renderEditImages = renderEditImages = function () {
+    const box = ensureEditImgsBox();
+    if (!box) return;
+    const imgs = (typeof editDraft !== 'undefined' && editDraft && Array.isArray(editDraft.images)) ? editDraft.images : [];
+    box.innerHTML = imgs.length ? imgs.map((im, i) => {
+      const src = safeSrc(im);
+      return `<div class="editImg"><button class="rm" data-rm="${i}">×</button><img src="${safeEsc(src)}"><input class="imgUrlBox" value="${safeEsc(src)}" readonly onclick="this.select()" title="Bấm để chọn URL ảnh" style="margin-top:6px;width:100%;max-width:260px;border:1px solid rgba(200,169,110,.24);border-radius:10px;background:rgba(0,0,0,.22);color:var(--gold2);padding:7px;font-size:.72rem;"></div>`;
+    }).join('') : '<p style="color:var(--mist)">Chưa có hình.</p>';
+  };
+})();
+// ===== END EDIT_RENDER_NULL_GUARD_20260629 =====
+
+
+// ===== EDIT_PREVIEW_CTRL_V_IMAGE_UPLOAD_20260629 =====
+// Đúng UI trong form "Sửa câu hỏi": vùng "Ảnh của câu hỏi" / nút "+ Thêm ảnh" dùng input #editPreviewImgInput.
+// Ctrl+V hoặc kéo thả ảnh sẽ đưa file vào input này, để handler upload Cloudinary có sẵn xử lý và redraw đúng khung ảnh.
+(function () {
+  function $(id) { return document.getElementById(id); }
+  function msg(t) { if (typeof notify === 'function') notify(t); else console.log(t); }
+  function imageFilesFromClipboard(e) {
+    return [...(e.clipboardData?.items || [])]
+      .filter(item => item.kind === 'file' && String(item.type || '').startsWith('image/'))
+      .map(item => item.getAsFile())
+      .filter(Boolean);
+  }
+  function imageFilesFromDrop(e) {
+    return [...(e.dataTransfer?.files || [])].filter(file => String(file.type || '').startsWith('image/'));
+  }
+  function setInputFilesAndUpload(files, source) {
+    files = [...(files || [])].filter(file => file && String(file.type || '').startsWith('image/'));
+    if (!files.length) return false;
+    const input = $('editPreviewImgInput') || $('imgUpload');
+    if (!input) {
+      alert('Chưa thấy ô thêm ảnh. Đóng/mở lại form sửa rồi thử lại.');
+      return true;
+    }
+    try {
+      const dt = new DataTransfer();
+      files.forEach(file => dt.items.add(file));
+      input.files = dt.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      msg(source === 'paste' ? 'Đang upload ảnh vừa dán...' : 'Đang upload ảnh...');
+    } catch (err) {
+      alert('Trình duyệt không hỗ trợ dán ảnh kiểu này. Hãy bấm + Thêm ảnh để chọn file.');
     }
     return true;
   }
-
-  function wrapAsync(name){
-    const old = window[name];
-    if(typeof old !== 'function' || old.__strictPendingGate) return;
-    const fn = async function(){
-      if(!canUseWebNow()) return false;
-      return old.apply(this, arguments);
-    };
-    fn.__strictPendingGate = true;
-    window[name] = fn;
+  function ensureEditPasteHint() {
+    const modal = $('editModal');
+    if (!modal || modal.classList.contains('hidden')) return;
+    const imagesBox = modal.querySelector('.v7Images');
+    if (!imagesBox || imagesBox.querySelector('.editPasteImageHint')) return;
+    const head = imagesBox.querySelector('.v7ImagesHead') || imagesBox.firstElementChild;
+    const hint = document.createElement('div');
+    hint.className = 'pasteImageHint editPasteImageHint';
+    hint.textContent = 'Có thể chụp/copy ảnh rồi bấm Ctrl + V tại khung này để tự upload URL.';
+    if (head) head.insertAdjacentElement('afterend', hint);
+    else imagesBox.prepend(hint);
   }
-
-  function installGuards(){
-    wrapAsync('openGate');
-    wrapAsync('loadBySubject');
-    wrapAsync('loadCurrentSubjectOnly');
-    wrapAsync('openPrettyAddModal');
-    wrapAsync('openAddQuestionModal');
+  function bindEditPreviewPasteUpload() {
+    const modal = $('editModal');
+    if (!modal) return;
+    ensureEditPasteHint();
+    if (modal.__editPreviewPasteUploadBound) return;
+    modal.__editPreviewPasteUploadBound = true;
+    modal.addEventListener('paste', e => {
+      const files = imageFilesFromClipboard(e);
+      if (!files.length) return;
+      e.preventDefault();
+      setInputFilesAndUpload(files, 'paste');
+    }, true);
+    modal.addEventListener('dragover', e => {
+      const hasFile = [...(e.dataTransfer?.items || [])].some(item => item.kind === 'file');
+      if (!hasFile) return;
+      e.preventDefault();
+      modal.classList.add('dragImageOver');
+      ensureEditPasteHint();
+    }, true);
+    modal.addEventListener('dragleave', () => modal.classList.remove('dragImageOver'), true);
+    modal.addEventListener('drop', e => {
+      const files = imageFilesFromDrop(e);
+      if (!files.length) return;
+      e.preventDefault();
+      modal.classList.remove('dragImageOver');
+      setInputFilesAndUpload(files, 'drop');
+    }, true);
   }
-
-  document.addEventListener('click', function(e){
-    if(!user() || !pending(profile())) return;
-    const target = e.target.closest?.('#hodGuestEnter,#subjectTopChip,#hodChangeSubjectBtn,#subjectEnter,.subjectCard,.tab,#addQuestionFab,.prettyAddFab');
-    if(!target) return;
-    e.preventDefault();
-    e.stopPropagation();
-    e.stopImmediatePropagation?.();
-    lockWeb();
-    checkGate(true);
-    return false;
-  }, true);
-
-  const oldFetch = window.fetch ? window.fetch.bind(window) : null;
-  if(oldFetch && !window.__COPILOT_STRICT_PENDING_FETCH_GUARD_20260630){
-    window.__COPILOT_STRICT_PENDING_FETCH_GUARD_20260630 = true;
-    window.fetch = function(input, init){
-      try{
-        const u = user();
-        const p = profile();
-        const url = new URL(typeof input === 'string' ? input : input.url, location.href);
-        if(u && pending(p)){
-          const method = String(init?.method || 'GET').toUpperCase();
-          const path = url.pathname;
-          const allowed = path.includes('/profiles') || path.includes('/site_settings') || path.includes('/auth/') || path.includes('/api/profile') || path.includes('/functions/v1/login-notify') || method !== 'GET';
-          if(!allowed && (path.includes('/questions') || path.includes('/subjects') || path.includes('/subject_requests') || path.includes('/edit_requests'))){
-            lockWeb();
-            return Promise.resolve(new Response(JSON.stringify({error:'pending approval'}), {status:403, headers:{'content-type':'application/json'}}));
-          }
-        }
-      }catch(e){}
-      return oldFetch(input, init);
-    };
-  }
-
-  setInterval(function(){ installGuards(); checkGate(false); }, CHECK_MS);
-  document.addEventListener('DOMContentLoaded', function(){
-    installGuards();
-    setTimeout(() => checkGate(true), 400);
-    setTimeout(() => checkGate(true), 1400);
-  });
-  window.addEventListener('focus', function(){ setTimeout(() => checkGate(true), 120); });
-  document.addEventListener('visibilitychange', function(){ if(!document.hidden) setTimeout(() => checkGate(true), 120); });
+  function boot() { bindEditPreviewPasteUpload(); ensureEditPasteHint(); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+  setTimeout(boot, 300);
+  setInterval(boot, 700);
 })();
-// ===== END COPILOT_STRICT_PENDING_APPROVAL_GATE_20260630 =====
+// ===== END EDIT_PREVIEW_CTRL_V_IMAGE_UPLOAD_20260629 =====
+
+
+// ===== IMPORT_PREVIEW_CTRL_V_IMAGE_UPLOAD_20260629 =====
+// Cho khung "Kiểm tra câu hỏi" Ctrl+V/kéo thả ảnh giống form sửa/thêm câu.
+(function () {
+  function msg(t) { if (typeof notify === 'function') notify(t); else console.log(t); }
+  function modal() { return document.getElementById('importPreviewModal'); }
+  function isOpen() { const m = modal(); return !!m && !m.classList.contains('hidden') && getComputedStyle(m).display !== 'none'; }
+  function filesFromPaste(e) {
+    return [...(e.clipboardData?.items || [])]
+      .filter(item => item.kind === 'file' && String(item.type || '').startsWith('image/'))
+      .map(item => item.getAsFile())
+      .filter(Boolean);
+  }
+  function filesFromDrop(e) { return [...(e.dataTransfer?.files || [])].filter(file => String(file.type || '').startsWith('image/')); }
+  function activeCard() {
+    const m = modal(); if (!m) return null;
+    return document.activeElement?.closest?.('[data-v7-card],[data-imgui-card]') ||
+      m.querySelector('[data-v7-card]:has([data-v7-input]),[data-imgui-card]:has([data-imgui-input])');
+  }
+  function activeInput() {
+    const c = activeCard();
+    const inp = c?.querySelector?.('[data-v7-input],[data-imgui-input]');
+    if (inp) return inp;
+    return modal()?.querySelector?.('[data-v7-input],[data-imgui-input]') || null;
+  }
+  function ensureHints() {
+    const m = modal(); if (!m || !isOpen()) return;
+    m.querySelectorAll('.v7Images,.simpleEditImages').forEach(box => {
+      if (box.querySelector('.importPasteImageHint')) return;
+      const head = box.querySelector('.v7ImagesHead,.simpleEditImagesHead') || box.firstElementChild;
+      const hint = document.createElement('div');
+      hint.className = 'pasteImageHint importPasteImageHint';
+      hint.textContent = 'Có thể chụp/copy ảnh rồi bấm Ctrl + V tại khung này để tự upload URL.';
+      if (head) head.insertAdjacentElement('afterend', hint); else box.prepend(hint);
+    });
+  }
+  function uploadByInput(files, source) {
+    files = [...(files || [])].filter(file => file && String(file.type || '').startsWith('image/'));
+    if (!files.length || !isOpen()) return false;
+    const input = activeInput();
+    if (!input) { alert('Bấm Sửa ở câu cần thêm ảnh trước, rồi dán ảnh lại nha.'); return true; }
+    try {
+      const dt = new DataTransfer();
+      files.forEach(file => dt.items.add(file));
+      input.files = dt.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      msg(source === 'paste' ? 'Đang upload ảnh vừa dán...' : 'Đang upload ảnh...');
+    } catch (err) {
+      alert('Trình duyệt không hỗ trợ dán ảnh kiểu này. Hãy bấm + Thêm ảnh để chọn file.');
+    }
+    return true;
+  }
+  function bind() {
+    const m = modal(); if (!m) return;
+    ensureHints();
+    if (m.__importPreviewPasteBound) return;
+    m.__importPreviewPasteBound = true;
+    m.addEventListener('paste', e => { const files = filesFromPaste(e); if (!files.length) return; e.preventDefault(); uploadByInput(files, 'paste'); }, true);
+    m.addEventListener('dragover', e => { const has = [...(e.dataTransfer?.items || [])].some(item => item.kind === 'file'); if (!has) return; e.preventDefault(); m.classList.add('dragImageOver'); ensureHints(); }, true);
+    m.addEventListener('dragleave', () => m.classList.remove('dragImageOver'), true);
+    m.addEventListener('drop', e => { const files = filesFromDrop(e); if (!files.length) return; e.preventDefault(); m.classList.remove('dragImageOver'); uploadByInput(files, 'drop'); }, true);
+  }
+  function boot() { bind(); ensureHints(); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+  document.addEventListener('click', () => setTimeout(boot, 0), true);
+  setInterval(boot, 700);
+})();
+// ===== END IMPORT_PREVIEW_CTRL_V_IMAGE_UPLOAD_20260629 =====
+
+// ===== TURSO_ONLY_DATA_SOURCE_20260630 =====
+window.APP_CONFIG = window.APP_CONFIG || {};
+window.APP_CONFIG.USE_TURSO_API = true;
+// Supabase chỉ dùng Auth; dữ liệu/profile/subjects/questions tải qua /api Turso.
+// ===== END TURSO_ONLY_DATA_SOURCE_20260630 =====

@@ -81,17 +81,30 @@ export default async function handler(req) {
       if (req.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
       
       const r = await db.execute({
-        sql: `select id, code, name, description, cover, sort_order, is_active, created_at
-              from subjects
-              where coalesce(is_active, 1) = 1
-              order by sort_order asc, code asc`
+        sql: `select s.id, s.code, s.name, s.description, s.cover, s.sort_order, s.is_active, s.created_at,
+                     coalesce(q.question_count, 0) as question_count
+              from subjects s
+              left join (
+                select subject_code, count(*) as question_count
+                from questions
+                where coalesce(is_active, 1) = 1
+                group by subject_code
+              ) q on q.subject_code = s.code
+              where coalesce(s.is_active, 1) = 1
+              order by s.sort_order asc, s.code asc`
       });
       return json({
-        data: (r.rows || []).map(row => ({
-          ...row,
-          sort_order: Number(row.sort_order || 0),
-          is_active: row.is_active === 1 || row.is_active === true || row.is_active === '1'
-        }))
+        data: (r.rows || []).map(row => {
+          const n = Number(row.question_count || 0);
+          return {
+            ...row,
+            sort_order: Number(row.sort_order || 0),
+            is_active: row.is_active === 1 || row.is_active === true || row.is_active === '1',
+            question_count: n,
+            questions_count: n,
+            count: n
+          };
+        })
       });
     }
 

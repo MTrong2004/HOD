@@ -4891,7 +4891,7 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
     if (!src) return '';
     if (src.includes('res.cloudinary.com/') && src.includes('/image/upload/')) {
       if (!src.includes('q_auto') && !src.includes('f_auto')) {
-        return src.replace('/image/upload/', '/image/upload/c_limit,w_600,q_auto,f_auto/');
+        return src.replace('/image/upload/', '/image/upload/c_limit,w_1200,q_auto:best,f_auto/');
       }
     }
     return src;
@@ -5009,7 +5009,9 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
       document.body.appendChild(overlay);
     }
     overlay.classList.remove('hidden');
-    overlay.querySelector('img').src = src;
+    const originalSrc = src.replace('/image/upload/c_limit,w_600,q_auto,f_auto/', '/image/upload/')
+                           .replace('/image/upload/c_limit,w_1200,q_auto:best,f_auto/', '/image/upload/');
+    overlay.querySelector('img').src = originalSrc;
     setTimeout(() => {
       overlay.style.opacity = '1';
       overlay.querySelector('img').style.transform = 'scale(1)';
@@ -5252,7 +5254,7 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
     if (!src) return '';
     if (src.includes('res.cloudinary.com/') && src.includes('/image/upload/')) {
       if (!src.includes('q_auto') && !src.includes('f_auto')) {
-        return src.replace('/image/upload/', '/image/upload/c_limit,w_600,q_auto,f_auto/');
+        return src.replace('/image/upload/', '/image/upload/c_limit,w_1200,q_auto:best,f_auto/');
       }
     }
     return src;

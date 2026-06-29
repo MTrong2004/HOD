@@ -1891,7 +1891,7 @@ Bắt đầu ngay từ câu 1.`;
 
             const payload = {
               subject_code: finalCode,
-              num: q.num || (i + 1),
+              num: i + 1,
               question: q.question || '',
               options: q.options || {},
               answer: (q.answer || '').toUpperCase(),

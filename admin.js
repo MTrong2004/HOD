@@ -178,7 +178,7 @@ function createTursoClientMock(supaClient) {
     if (cachePromise) return cachePromise;
     cachePromise = (async () => {
       try {
-        const res = await fetch('/api/admin-dashboard');
+        const res = await fetch('/api/admin-dashboard?t=' + Date.now(), { cache: 'no-store' });
         const data = await res.json();
         if (data.error) throw new Error(data.error);
         normalizeDashboardData(data);
@@ -507,7 +507,7 @@ function createTursoClientMock(supaClient) {
   return {
     from: builder,
     auth: supaClient.auth,
-    clearCache: () => { localCache = null; }
+    clearCache: () => { localCache = null; cachePromise = null; }
   };
 }
 
@@ -951,7 +951,9 @@ async function toggleBlock(id, b) {
   const r = await client.from('profiles').update({ blocked: b }).eq('id', id);
   if (r.error) return alert(r.error.message);
   await logAction(b ? 'block_user' : 'unblock_user', 'profiles', id, {});
-  loadAll();
+  cache.profiles = (cache.profiles || []).map(p => String(p.id) === String(id) ? { ...p, blocked: b } : p);
+  render();
+  await loadAll();
 }
 
 async function setRole(id, role) {
@@ -961,7 +963,9 @@ async function setRole(id, role) {
   const r = await client.from('profiles').update({ role }).eq('id', id);
   if (r.error) return alert(r.error.message);
   await logAction('change_role', 'profiles', id, { role });
-  loadAll();
+  cache.profiles = (cache.profiles || []).map(p => String(p.id) === String(id) ? { ...p, role } : p);
+  render();
+  await loadAll();
 }
 
 async function toggleQuestion(id, a) {
@@ -969,7 +973,9 @@ async function toggleQuestion(id, a) {
   const r = await client.from('questions').update({ is_active: a }).eq('id', id);
   if (r.error) return alert(r.error.message);
   await logAction(a ? 'show_question' : 'hide_question', 'questions', id, {});
-  loadAll();
+  cache.questions = (cache.questions || []).map(q => String(q.id) === String(id) ? { ...q, is_active: a } : q);
+  render();
+  await loadAll();
 }
 
 function exportAll() {
@@ -5818,3 +5824,259 @@ ${E(val)}</pre>`;
   };
 })();
 // ===== END_COPILOT_ADMIN_SUBJECT_NEW_BADGE_TOGGLE_20260630 =====
+
+
+// ===== COPILOT_SUBJECT_NEW_BADGE_ON_CARD_20260630 =====
+// Đưa nút NEW ra ngoài thẻ môn, không để trong popup sửa môn.
+(function(){
+  if(window.__COPILOT_SUBJECT_NEW_BADGE_ON_CARD_20260630) return;
+  window.__COPILOT_SUBJECT_NEW_BADGE_ON_CARD_20260630 = true;
+
+  let cardSubjectCache = [];
+  const oldRenderSubjectAdminList = window.renderSubjectAdminList;
+  const oldOpenEditSubjectAdmin = window.openEditSubjectAdmin;
+
+  function parseCoverMeta(cover){
+    if(!cover) return {};
+    if(typeof cover === 'object') return {...cover};
+    try { return JSON.parse(String(cover)) || {}; }
+    catch(e){ return { url:String(cover) }; }
+  }
+  function hasNewBadge(subject){
+    const m = parseCoverMeta(subject?.cover || '');
+    return m.new_badge === true || m.is_new === true || m.new === true;
+  }
+  function makeCover(cover, enabled){
+    const meta = parseCoverMeta(cover);
+    meta.new_badge = !!enabled;
+    return JSON.stringify(meta);
+  }
+  function escAttr(s){
+    return String(s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+  function escJs(s){
+    return String(s || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  }
+
+  async function fetchSubjectsForCards(){
+    try{
+      const res = await client.from('subjects').select('*').order('sort_order',{ascending:true}).order('code',{ascending:true});
+      if(!res.error) cardSubjectCache = res.data || [];
+    }catch(e){ console.warn('Không tải được trạng thái NEW:', e); }
+  }
+
+  function codeFromCard(card){
+    const codeText = card.querySelector('.subjectAdminCode')?.textContent?.trim();
+    if(codeText) return codeText;
+    const editBtn = card.querySelector('[onclick*="openEditSubjectAdmin"]');
+    const m = (editBtn?.getAttribute('onclick') || '').match(/openEditSubjectAdmin\('([^']+)'\)/);
+    return m ? m[1] : '';
+  }
+
+  function enhanceSubjectCards(){
+    const list = document.getElementById('subjectAdminList');
+    if(!list) return;
+    list.querySelectorAll('.subjectAdminItem').forEach(card => {
+      const code = codeFromCard(card);
+      if(!code || card.querySelector('.subjectNewToggle')) return;
+      const subject = cardSubjectCache.find(s => String(s.code) === String(code)) || {};
+      const on = hasNewBadge(subject);
+      const actions = card.querySelector('.subjectAdminActions');
+      if(!actions) return;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'act subjectNewToggle' + (on ? ' isOn' : '');
+      btn.textContent = 'NEW';
+      btn.title = on ? 'Đang bật NEW - bấm để tắt' : 'Đang tắt NEW - bấm để bật';
+      btn.setAttribute('onclick', "toggleSubjectNewBadgeFromCard('" + escJs(code) + "')");
+      actions.insertBefore(btn, actions.firstChild);
+    });
+  }
+
+  let lastCardSubjectFetchAt = 0;
+  let cardSubjectFetchPromise = null;
+
+  async function refreshCardNewButtons(force){
+    const now = Date.now();
+    if(force || !cardSubjectCache.length || now - lastCardSubjectFetchAt > 60000){
+      if(!cardSubjectFetchPromise){
+        cardSubjectFetchPromise = fetchSubjectsForCards().finally(() => { cardSubjectFetchPromise = null; });
+      }
+      await cardSubjectFetchPromise;
+      lastCardSubjectFetchAt = Date.now();
+    }
+    enhanceSubjectCards();
+  }
+
+  if(typeof oldRenderSubjectAdminList === 'function'){
+    window.renderSubjectAdminList = function(){
+      const r = oldRenderSubjectAdminList.apply(this, arguments);
+      setTimeout(refreshCardNewButtons, 0);
+      return r;
+    };
+  }
+
+  window.openEditSubjectAdmin = async function(){
+    const r = oldOpenEditSubjectAdmin.apply(this, arguments);
+    setTimeout(() => {
+      const box = document.querySelector('.newBadgeToggleBox');
+      if(box) box.remove();
+    }, 30);
+    return r;
+  };
+
+  window.toggleSubjectNewBadgeFromCard = async function(code){
+    if(!isEditor()) return alert('Admin hoặc Editor mới được sửa môn học.');
+    const btn = Array.from(document.querySelectorAll('.subjectNewToggle')).find(b => (b.getAttribute('onclick') || '').includes("'" + code + "'"));
+    if(btn) btn.classList.add('isBusy');
+    try{
+      let subject = cardSubjectCache.find(s => String(s.code) === String(code));
+      if(!subject){
+        const res = await client.from('subjects').select('*').eq('code', code).maybeSingle();
+        if(res.error || !res.data) return alert('Không tìm thấy môn học.');
+        subject = res.data;
+      }
+      const next = !hasNewBadge(subject);
+      const r = await client.from('subjects').update({
+        name: subject.name || subject.code || '',
+        description: subject.description || '',
+        cover: makeCover(subject.cover || '', next),
+        sort_order: subject.sort_order || 0
+      }).eq('id', subject.id);
+      if(r.error) return alert('Không lưu được NEW: ' + r.error.message);
+      if(client.clearCache) client.clearCache();
+      subject.cover = makeCover(subject.cover || '', next);
+      cardSubjectCache = cardSubjectCache.map(s => String(s.code) === String(code) ? {...s, cover: subject.cover} : s);
+      toast(next ? 'Đã bật NEW' : 'Đã tắt NEW');
+      await window.loadSubjectsAdmin?.();
+    }finally{
+      if(btn) btn.classList.remove('isBusy');
+    }
+  };
+
+  // Không cho nút Lưu trong popup sửa môn tự tắt NEW khi checkbox đã bị bỏ khỏi popup.
+  const previousSaveSubjectAdmin = window.saveSubjectAdmin;
+  window.saveSubjectAdmin = async function(){
+    const oldCode = (document.getElementById('editSubjectOldCode')?.value || '').trim().toUpperCase();
+    const newCode = (document.getElementById('editSubjectCode')?.value || '').trim().toUpperCase();
+    if(newCode && oldCode && newCode !== oldCode && typeof previousSaveSubjectAdmin === 'function'){
+      return previousSaveSubjectAdmin.apply(this, arguments);
+    }
+    if(!isEditor()) return alert('Admin hoặc Editor mới được sửa môn học.');
+    const code = oldCode || newCode;
+    const name = (document.getElementById('editSubjectName')?.value || '').trim();
+    const description = (document.getElementById('editSubjectDesc')?.value || '').trim();
+    if(!code) return alert('Thiếu mã môn.');
+    if(!name) return alert('Tên môn học không được để trống.');
+    setBusy(true, 'Đang lưu môn...');
+    try{
+      let subject = cardSubjectCache.find(s => String(s.code) === String(code));
+      if(!subject){
+        const res = await client.from('subjects').select('*').eq('code', code).maybeSingle();
+        if(res.error || !res.data) return alert('Không tìm thấy môn học.');
+        subject = res.data;
+      }
+      const r = await client.from('subjects').update({
+        name,
+        description: description || '',
+        cover: subject.cover || '',
+        sort_order: subject.sort_order || 0
+      }).eq('id', subject.id);
+      if(r.error) return alert('Không lưu được môn: ' + r.error.message);
+      if(client.clearCache) client.clearCache();
+      closeModal();
+      await window.loadSubjectsAdmin?.();
+      toast('Đã lưu môn học');
+    }finally{
+      setBusy(false);
+    }
+  };
+
+  document.addEventListener('DOMContentLoaded', () => setTimeout(() => { if(document.getElementById('subjectsAdmin')?.classList.contains('active')) refreshCardNewButtons(); }, 900));
+})();
+// ===== END_COPILOT_SUBJECT_NEW_BADGE_ON_CARD_20260630 =====
+
+
+// ===== COPILOT_SUBJECT_NEW_BADGE_FAST_LOAD_20260630 =====
+// Tối ưu: không tải lại bảng subjects liên tục chỉ để hiện nút NEW trong thẻ môn.
+// ===== END_COPILOT_SUBJECT_NEW_BADGE_FAST_LOAD_20260630 =====
+
+
+// ===== COPILOT_ADMIN_RELOAD_FIX_20260630 =====
+// Sửa nút Tải lại, tránh dữ liệu admin bị đứng cache và cập nhật role/block ngay.
+(function(){
+  if(window.__COPILOT_ADMIN_RELOAD_FIX_20260630) return;
+  window.__COPILOT_ADMIN_RELOAD_FIX_20260630 = true;
+
+  function clearAdminClientCache(){
+    try{ if(client && typeof client.clearCache === 'function') client.clearCache(); }catch(e){}
+    try{
+      Object.keys(sessionStorage).forEach(k => {
+        if(k.startsWith('admin_f5_micro_cache:') || k.startsWith('lh_f5_cache:')) sessionStorage.removeItem(k);
+      });
+    }catch(e){}
+  }
+
+  function showLoadingNumbers(){
+    ['statUsers','statEditors','statPending','statPendingApproval','statBlocked'].forEach(id => {
+      const el = document.getElementById(id);
+      if(el) el.textContent = '...';
+    });
+    const rr = document.getElementById('recentRequests');
+    if(rr) rr.innerHTML = '<p class="muted">Đang tải dữ liệu...</p>';
+    const rl = document.getElementById('recentLogs');
+    if(rl) rl.innerHTML = '<p class="muted">Đang tải dữ liệu...</p>';
+  }
+
+  const oldLoadAll = window.loadAll || loadAll;
+  window.loadAll = loadAll = async function(force){
+    clearErr();
+    clearAdminClientCache();
+    showLoadingNumbers();
+    setBusy(true, 'Đang tải...');
+    try{
+      cache.profiles = await safeLoad('profiles', client.from('profiles').select('*').order('created_at', { ascending: false }));
+      cache.questions = await safeLoad('questions', client.from('questions').select('id,num,subject_code,question,options,answer,is_active,updated_at,created_at,has_image,error_risk,error_risk_reason').order('num', { ascending: true }));
+      cache.requests = await safeLoad('edit_requests', client.from('edit_requests').select('*').order('created_at', { ascending: false }));
+      cache.history = await safeLoad('question_history', client.from('question_history').select('*').order('created_at', { ascending: false }).limit(500));
+      cache.logs = isAdmin()
+        ? await safeLoad('admin_logs', client.from('admin_logs').select('*').order('created_at', { ascending: false }).limit(500))
+        : [];
+      render();
+      if(typeof loadSubjectRequests === 'function') await loadSubjectRequests();
+      if(typeof loadRegistrationMode === 'function') await loadRegistrationMode();
+      toast('Đã tải mới');
+    }catch(e){
+      console.error('[loadAll fixed]', e);
+      err('Không tải được dữ liệu: ' + (e.message || e));
+    }finally{
+      setBusy(false);
+    }
+  };
+
+  function bindReloadButton(){
+    const btn = document.getElementById('refreshBtn');
+    if(!btn || btn.__reloadFixBound) return;
+    btn.__reloadFixBound = true;
+    btn.onclick = async function(){
+      clearAdminClientCache();
+      await window.loadAll(true);
+      const page = sessionStorage.getItem('admin_current_page') || 'overview';
+      if(page === 'subjectsAdmin' && typeof window.loadSubjectsAdmin === 'function') await window.loadSubjectsAdmin();
+      if(page === 'trash' && typeof window.loadTrash === 'function') await window.loadTrash();
+      if(page === 'subjectRequests' && typeof window.loadSubjectRequests === 'function') await window.loadSubjectRequests();
+      if(page === 'approvals' && typeof window.renderApprovals === 'function') window.renderApprovals();
+    };
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    bindReloadButton();
+    setTimeout(() => {
+      bindReloadButton();
+      const isApp = !document.getElementById('appBox') || !document.getElementById('appBox').classList.contains('hidden');
+      const looksEmpty = Number(document.getElementById('statUsers')?.textContent || 0) === 0 && (!cache.profiles || !cache.profiles.length);
+      if(isApp && looksEmpty) window.loadAll(true);
+    }, 900);
+  });
+})();
+// ===== END_COPILOT_ADMIN_RELOAD_FIX_20260630 =====

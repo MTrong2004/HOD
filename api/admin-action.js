@@ -186,12 +186,27 @@ export default async function handler(req) {
 
       case 'add_question': {
         const { question_data } = payload;
+        const subjectCode = question_data.subject_code || 'HOD102';
+        
+        let finalNum = Number(question_data.num);
+        const existRes = await db.execute({
+          sql: 'select num from questions where subject_code = ?',
+          args: [subjectCode]
+        });
+        const existSet = new Set((existRes.rows || []).map(x => Number(x.num)));
+        
+        if (!finalNum || existSet.has(finalNum)) {
+          let n = 1;
+          while (existSet.has(n)) n++;
+          finalNum = n;
+        }
+
         const res = await db.execute({
           sql: `insert into questions (subject_code, num, question, options, answer, answer_text, images, is_active, has_image, error_risk, error_risk_reason, created_at, updated_at)
                 values (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
           args: [
-            question_data.subject_code || 'HOD102',
-            question_data.num,
+            subjectCode,
+            finalNum,
             question_data.question,
             JSON.stringify(question_data.options || {}),
             question_data.answer,
@@ -311,15 +326,17 @@ export default async function handler(req) {
         const newId = Number(res.lastInsertRowid);
 
         if (questions && questions.length > 0) {
+          let currentNum = 1;
           for (const q of questions) {
             const list = q.images || [];
             const localHasImg = !!(list.length || q.has_image);
+            const finalNum = currentNum++;
             await db.execute({
               sql: `insert into questions (subject_code, num, question, options, answer, answer_text, images, is_active, has_image, error_risk, error_risk_reason, created_at, updated_at)
                     values (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
               args: [
                 finalCode,
-                q.num,
+                finalNum,
                 q.question || '',
                 JSON.stringify(q.options || {}),
                 (q.answer || '').toUpperCase(),
@@ -476,13 +493,15 @@ export default async function handler(req) {
         // 2. Thêm các câu hỏi đính kèm (nếu có)
         const qList = safeParse(request.questions_data, []);
         if (qList && qList.length > 0) {
+          let currentNum = 1;
           for (const q of qList) {
+            const finalNum = currentNum++;
             await db.execute({
               sql: `insert into questions (subject_code, num, question, options, answer, answer_text, images, is_active, has_image, created_at, updated_at)
                     values (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
               args: [
                 request.code.toUpperCase().trim(),
-                q.num,
+                finalNum,
                 q.question,
                 JSON.stringify(q.options || {}),
                 q.answer,

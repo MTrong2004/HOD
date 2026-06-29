@@ -915,3 +915,42 @@ body:not(.role-admin) .adminOnly,body:not(.role-admin) [data-admin-only="true"]{
 }
 /* ===== MOBILE_APPROVAL_LITE_ADMIN_20260629_END ===== */
 
+
+
+/* ===== COPILOT_SUBJECT_NEW_BADGE_ON_CARD_20260630 ===== */
+#subjectsAdmin .subjectNewToggle{
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:6px!important;
+  min-height:34px!important;
+  padding:7px 12px!important;
+  border-radius:999px!important;
+  border:1px solid rgba(232,212,168,.24)!important;
+  background:rgba(255,255,255,.035)!important;
+  color:rgba(245,240,232,.68)!important;
+  font-weight:950!important;
+  letter-spacing:.04em!important;
+}
+#subjectsAdmin .subjectNewToggle::before{
+  content:""!important;
+  width:8px!important;
+  height:8px!important;
+  border-radius:50%!important;
+  background:rgba(245,240,232,.30)!important;
+}
+#subjectsAdmin .subjectNewToggle.isOn{
+  color:#15100b!important;
+  border-color:transparent!important;
+  background:linear-gradient(135deg,#ffe8a8,#e8c46e)!important;
+  box-shadow:0 0 22px rgba(232,212,168,.18)!important;
+}
+#subjectsAdmin .subjectNewToggle.isOn::before{
+  background:#72c58c!important;
+  box-shadow:0 0 14px rgba(114,197,140,.65)!important;
+}
+#subjectsAdmin .subjectNewToggle.isBusy{opacity:.65!important;pointer-events:none!important;}
+@media (max-width:760px){
+  #subjectsAdmin .subjectNewToggle{flex:1 1 auto!important;}
+}
+/* ===== END_COPILOT_SUBJECT_NEW_BADGE_ON_CARD_20260630 ===== */

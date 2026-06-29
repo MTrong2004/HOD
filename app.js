@@ -292,7 +292,7 @@ let RAW = [], pool = [], ci = Math.max(0, Math.min(+localStorage.getItem('hod102
   setv('--frontpad', '14px 18px'); setv('--optgap', '6px'); setv('--optpad', '7px 10px'); setv('--qmb', '8px'); setv('--imgmb', '7px'); setv('--tagmb', '6px'); setv('--letter', '25px'); setv('--letterfs', '.76rem'); setv('--tagfs', '.62rem'); setv('--tagpad', '3px 10px'); setv('--ogap', '8px');
 }
 function fitVisible() { return; }
-function renderCard() { let c = pool[ci] || RAW[0]; if (!c) return; fit(c); applyCardFontSize(); $('idx').textContent = ci + 1; $('total').textContent = pool.length; $('bar').style.width = ((ci + 1) / pool.length * 100) + '%'; $('tag').textContent = 'CÂU ' + c.num; $('question').textContent = c.question; const __imgEl = $('images'); const __imgKey = JSON.stringify((c.images || []).map(im => String((im && typeof im === 'object' ? (im.src || im.url || im.secure_url || im.publicUrl || im.public_url) : im) || ''))); if (__imgEl.dataset.imgKey !== __imgKey) { __imgEl.innerHTML = imgsHTML(c); __imgEl.dataset.imgKey = __imgKey; } __imgEl.style.display = (c.images && c.images.length) ? 'flex' : 'none'; document.querySelector('#fc .front')?.classList.toggle('hasImg', !!(c.images && c.images.length)); $('options').innerHTML = optionsHTML(c); $('options').classList.remove('hide'); hideOptions = false; applyCardFontSize(); updateCardTools(); $('ansLetter').textContent = (c.answer || '').split('').join(', '); $('ansText').innerHTML = esc(finalAnswerText(c)).replace(/; /g, '<br>'); $('card').classList.remove('dir-horizontal', 'dir-up', 'dir-down'); $('card').classList.add('dir-' + flipDir); $('card').classList.toggle('flip', flipped); $('mode').textContent = flipMode === 'single' ? '1x' : '2x'; var _sc = localStorage.getItem('learninghub_subject_code_merged_v1') || ''; localStorage.setItem('hod102_ci', ci); if (_sc) localStorage.setItem('learninghub_progress_' + _sc, ci); localStorage.setItem('hod102_flip_mode', flipMode) } function flip(dir = 'horizontal') { flipDir = dir; flipped = !flipped; renderCard() } function next() { ci = (ci + 1) % pool.length; flipped = false; flipDir = 'horizontal'; renderCard() } function prev() { ci = (ci - 1 + pool.length) % pool.length; flipped = false; flipDir = 'horizontal'; renderCard() } function shuffle() { for (let i = pool.length - 1; i > 0; i--) { let j = Math.floor(Math.random() * (i + 1));[pool[i], pool[j]] = [pool[j], pool[i]] } ci = 0; flipped = false; flipDir = 'horizontal'; randomActive = false; localStorage.setItem('hod102_random_active', '0'); renderCard(); let sh = $('shuffle'); if (sh) { sh.classList.add('flash'); setTimeout(() => sh.classList.remove('flash'), 650) } } let __allowUserReset = false; function reset(force) { if (force !== true && __allowUserReset !== true) { try { renderCard() } catch (e) { } return } __allowUserReset = false; pool = [...RAW]; ci = 0; flipped = false; flipDir = 'horizontal'; randomActive = false; localStorage.setItem('hod102_random_active', '0'); renderCard() } function triggerReset() { __allowUserReset = true; reset(true) } function switchTab(n, b) { try { localStorage.setItem('learninghub_last_tab_v1', n) } catch (e) { } document.querySelectorAll('.tab').forEach(x => x.classList.remove('active')); b.classList.add('active'); document.querySelectorAll('.pane').forEach(x => x.classList.remove('active')); $(n).classList.add('active'); if (n === 'study') renderStudy(); if (n === 'quiz') try { renderQuiz() } catch (e) { } } function sample(a, n) { a = [...a]; for (let i = a.length - 1; i > 0; i--) { let j = Math.floor(Math.random() * (i + 1));[a[i], a[j]] = [a[j], a[i]] } return n ? a.slice(0, n) : a } function fmt(ms) { let s = Math.floor(ms / 1000), m = Math.floor(s / 60); s %= 60; return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0') } function startTimer() { clearInterval(timerInt); examStart = Date.now(); timerInt = setInterval(() => $('timer').textContent = fmt(Date.now() - examStart), 1000) } function stopTimer() { clearInterval(timerInt) } function syncQuizSet() { if (qSet && qSet.length) { qSet = qSet.map(c => RAW.find(x => x.num === c.num) || c) } } function renderQuiz() { if (typeof window.__examOnlyRender === 'function') return window.__examOnlyRender(); const body = $('quizBody'); if (body) body.innerHTML = ''; } function pickAns(i, k) { if ((quizMode === 'practice' && qDone[i]) || examSubmitted) return; let c = qSet[i]; if (c.answer.length > 1) { let set = new Set((qSel[i] || '').split('').filter(Boolean)); set.has(k) ? set.delete(k) : set.add(k); qSel[i] = [...set].sort().join('') } else qSel[i] = k; renderQuiz() } function checkAns(i) { if (!qSel[i]) { alert('Bạn chọn đáp án trước nha.'); return } qDone[i] = true; renderQuiz() } function score() {/* old practice score overlay removed */ } function smart(q) { q = q.trim().toLowerCase(); if (!q) return RAW; let m = q.match(/^#(\d+)$/); if (m) return RAW.filter(c => c.num === +m[1]); m = q.match(/^answer\s*:\s*([a-e]+)$/i); if (m) return RAW.filter(c => sortAns(c.answer) === sortAns(m[1].toUpperCase())); if (['multi', 'multiple', 'chọn nhiều'].includes(q)) return RAW.filter(c => c.answer.length > 1); return RAW.filter(c => (String(c.num) + ' ' + c.question + ' ' + c.answer + ' ' + (c.answer_text || '') + ' ' + Object.values(c.options).join(' ')).toLowerCase().includes(q)) } function renderStudy() { let arr = smart($('search').value || ''), max = arr.length; $('studyList').innerHTML = arr.slice(0, max).map(c => `<div class="sitem"><div class="snum">CÂU ${c.num}</div><div class="sq">${esc(c.question)}</div><div class="qimgs">${imgsHTML(c)}</div><div class="sopts">${Object.entries(c.options).map(([k, v]) => `<div class="sopt ${c.answer.includes(k) ? 'ans' : ''}"><div class="skey">${c.answer.includes(k) ? '✓' : k}</div><div>${esc(k + '. ' + v)}</div></div>`).join('')}</div></div>`).join('') + (arr.length > max ? `<div class="more">Đang hiển thị ${max} / ${arr.length} kết quả.</div>` : arr.length ? '' : '<div class="more">Không tìm thấy kết quả.</div>') } function openEditor() { let c = pool[ci]; editDraft = clone(c); let reporting = !!(window.HODSupabase?.getUser?.()) && !window.HODSupabase?.isAdmin?.(); $('editTitle').textContent = (reporting ? 'Báo cáo / đề xuất sửa câu ' : 'Sửa câu ') + c.num; if ($('saveEdit')) $('saveEdit').textContent = reporting ? 'Gửi báo cáo cho admin' : 'Lưu sửa'; if ($('restoreEdit')) $('restoreEdit').classList.toggle('hidden', reporting); $('editQuestion').value = c.question; $('editAnswer').value = c.answer; renderEditOptions(); renderEditImages(); $('editModal').classList.remove('hidden') } function renderEditOptions() { let ops = editDraft.options || {}; $('editOptions').innerHTML = ['A', 'B', 'C', 'D', 'E'].map(k => `<div class="field"><label>Đáp án ${k}</label><textarea data-opt="${k}">${esc(ops[k] || '')}</textarea></div>`).join('') } function renderEditImages() { $('editImgs').innerHTML = (editDraft.images || []).map((im, i) => `<div class="editImg"><button class="rm" data-rm="${i}">×</button><img src="${im.src}"></div>`).join('') || '<p style="color:var(--mist)">Chưa có hình.</p>' } function saveEditor() { let oldQ = clone(RAW.find(c => c.num === editDraft.num) || pool[ci] || editDraft); editDraft.question = $('editQuestion').value.trim(); editDraft.answer = $('editAnswer').value.trim().toUpperCase(); let ops = {}; document.querySelectorAll('[data-opt]').forEach(t => { if (t.value.trim()) ops[t.dataset.opt] = t.value.trim() }); editDraft.options = ops; editDraft.answer_text = answerText(editDraft); if (window.HODSupabase && window.HODSupabase.isReady()) { window.HODSupabase.submitEditRequest(editDraft, oldQ); return } if (window.HODSupabase?.getUser?.()) { alert('Chưa kết nối được dữ liệu duyệt. Hãy tải lại trang rồi gửi lại báo cáo.'); return } edits[editDraft.num] = { question: editDraft.question, options: editDraft.options, answer: editDraft.answer, answer_text: editDraft.answer_text, images: editDraft.images || [] }; localStorage.setItem(STORE, JSON.stringify(edits)); rebuild(); ci = pool.findIndex(c => c.num === editDraft.num); if (ci < 0) ci = 0; flipped = false; renderCard(); renderQuiz(); renderStudy(); $('editModal').classList.add('hidden'); notify('Đã lưu sửa local') } function restoreEditor() { delete edits[editDraft.num]; localStorage.setItem(STORE, JSON.stringify(edits)); rebuild(); syncQuizSet(); renderCard(); renderQuiz(); renderStudy(); $('editModal').classList.add('hidden'); notify('Đã khôi phục') } function exportEdits() { let blob = new Blob([JSON.stringify(edits, null, 2)], { type: 'application/json' }), a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'hod102_user_edits.json'; a.click(); URL.revokeObjectURL(a.href) } function importEditsFile(f) { let fr = new FileReader(); fr.onload = () => { try { edits = JSON.parse(fr.result) || {}; localStorage.setItem(STORE, JSON.stringify(edits)); rebuild(); renderCard(); renderQuiz(); renderStudy(); notify('Đã nhập file sửa') } catch (e) { alert('File JSON không hợp lệ') } }; fr.readAsText(f) } function applyCardFontSize() { let n = parseFloat(cardFontSize || '1'); if (!isFinite(n)) n = 1; n = Math.max(.8, Math.min(1.3, n)); cardFontSize = String(n); let root = document.documentElement, fc = $('fc'); let set = (k, v) => { root.style.setProperty(k, v); if (fc) fc.style.setProperty(k, v) }; let base = 1.35 * n; set('--card-qfs', (1.08 * base).toFixed(3) + 'rem'); set('--card-ofs', (.92 * base).toFixed(3) + 'rem'); set('--card-afs', (1.0 * base).toFixed(3) + 'rem'); set('--card-letter', (25 * Math.min(1.35, base)).toFixed(0) + 'px'); set('--card-letterfs', (.76 * base).toFixed(3) + 'rem'); localStorage.setItem('hod102_card_font_size_v3', String(n)); if ($('stCardFont')) $('stCardFont').value = Math.round(n * 100); if ($('stCardFontState')) $('stCardFontState').textContent = Math.round(n * 100) + '%' } function updateCardTools() { hideOptions = false; try { localStorage.removeItem('hod102_hide_options'); } catch(e) {} let sh = $('shuffle'), eye = $('toggleOpts'); if (sh) { sh.classList.remove('active'); sh.title = 'Xáo ngẫu nhiên' } if (eye) eye.remove(); } function setupGlobalHeader() { let top = document.querySelector('#fc .top'); let tabs = document.querySelector('.tabs'); if (top && !top.classList.contains('globalTop')) { top.classList.add('globalTop'); document.body.insertBefore(top, tabs || document.body.firstChild) } } function setupCardTools() { let card = $('card'); if (!card || $('cardTools')) return; let tools = document.createElement('div'); tools.id = 'cardTools'; tools.className = 'cardTools'; let sh = $('shuffle'), eye = $('toggleOpts'), ed = $('editCard'); if (eye) eye.remove(); if (sh) { sh.textContent = '⚂'; sh.classList.add('cardToolBtn', 'diceBtn'); tools.appendChild(sh) } tools.addEventListener('click', e => e.stopPropagation()); tools.addEventListener('mousedown', e => e.stopPropagation()); card.insertBefore(tools, ed); updateCardTools() } function updateSettingsUI() { if (!$('stFlipState')) return; $('stFlipState').textContent = 'Đang dùng: ' + (flipMode === 'single' ? '1x - bấm 1 lần để lật' : '2x - hạn chế lật nhầm'); if ($('stOptState')) $('stOptState').textContent = 'Đang hiện lựa chọn'; if ($('stToggleOpts')) $('stToggleOpts').style.display = 'none'; if ($('stGoInput')) $('stGoInput').value = (pool[ci]?.num) || ''; applyCardFontSize(); updateCardTools() } function toggleFlipMode() { flipMode = flipMode === 'single' ? 'double' : 'single'; flipped = false; renderCard(); updateSettingsUI() } function goToQuestionNum() { let n = +$('stGoInput').value; if (!n) { alert('Nhập số câu trước nha.'); return } let i = pool.findIndex(c => c.num === n); if (i < 0) i = RAW.findIndex(c => c.num === n); if (i < 0) { alert('Không tìm thấy câu ' + n); return } if (!pool.find(c => c.num === n)) pool = [...RAW]; ci = i; flipped = false; renderCard(); updateSettingsUI(); $('settingsModal').classList.add('hidden') } function init() { setupGlobalHeader(); document.querySelectorAll('.tab').forEach(btn => btn.onclick = () => switchTab(btn.dataset.tab, btn)); $('shuffle').onclick = shuffle; $('reset').onclick = () => triggerReset(); if ($('toggleOpts')) $('toggleOpts').remove(); try { localStorage.removeItem('hod102_hide_options'); } catch(e) {} $('openSettings').onclick = () => { $('settingsModal').classList.remove('hidden'); updateSettingsUI() }; $('closeSettings').onclick = () => $('settingsModal').classList.add('hidden'); document.querySelectorAll('.modal,.overlay').forEach(m => { m.addEventListener('mousedown', e => { if (e.target === m) m.classList.add('hidden') }) }); document.querySelectorAll('.modal .box,.overlay .box').forEach(box => { if (!box.querySelector('.modalX')) { let x = document.createElement('button'); x.className = 'modalX'; x.type = 'button'; x.textContent = '×'; x.title = 'Đóng'; x.onclick = e => { e.stopPropagation(); box.closest('.modal,.overlay')?.classList.add('hidden') }; box.prepend(x) } }); setupCardTools(); if ($('toggleGuide')) $('toggleGuide').onclick = () => { let g = $('guidePanel'), open = g.classList.toggle('hidden') === false; $('toggleGuide').textContent = open ? 'Ẩn hướng dẫn' : 'Mở hướng dẫn' }; if ($('stCardFont')) $('stCardFont').oninput = e => { cardFontSize = (+e.target.value / 100).toFixed(2); applyCardFontSize(); renderCard() }; if ($('stCardFontReset')) $('stCardFontReset').onclick = () => { cardFontSize = '1'; applyCardFontSize(); renderCard(); updateSettingsUI() }; if ($('stToggleFlipMode')) $('stToggleFlipMode').onclick = toggleFlipMode; if ($('stToggleOpts')) $('stToggleOpts').style.display = 'none'; if ($('stShuffle')) $('stShuffle').onclick = () => { shuffle(); updateSettingsUI() }; if ($('stReset')) $('stReset').onclick = () => { triggerReset(); updateSettingsUI() }; if ($('stGo')) $('stGo').onclick = goToQuestionNum; if ($('stGoInput')) $('stGoInput').onkeydown = e => { if (e.key === 'Enter') goToQuestionNum() }; if ($('stEdit')) $('stEdit').onclick = () => { openEditor(); $('settingsModal').classList.add('hidden') }; $('editCard').title = 'Báo cáo / đề xuất sửa câu'; $('editCard').textContent = '!'; $('editCard').onclick = e => { e.stopPropagation(); openEditor() }; $('prev').onclick = prev; $('next').onclick = next; $('mode').onclick = toggleFlipMode; $('zone').onclick = e => { let r = $('card').getBoundingClientRect(); if (!$('card').contains(e.target)) { e.clientX < r.left ? prev() : next(); return } if (e.target.closest('#editCard') || e.target.closest('#cardTools')) return; if (flipMode === 'single') flip('horizontal') };/* old Practice/Exam quiz UI bindings removed */$('search').oninput = renderStudy; $('studyList').onclick = e => { let it = e.target.closest('.sitem'); if (it) it.classList.toggle('open') }; $('closeEdit').onclick = () => $('editModal').classList.add('hidden'); $('saveEdit').onclick = saveEditor; $('restoreEdit').onclick = restoreEditor; $('editImgs').onclick = e => { let b = e.target.closest('[data-rm]'); if (b) { editDraft.images.splice(+b.dataset.rm, 1); renderEditImages() } }; $('imgUpload').onchange = e => { [...e.target.files].forEach(file => { let fr = new FileReader(); fr.onload = () => { editDraft.images = editDraft.images || []; editDraft.images.push({ id: 'user_' + Date.now(), src: fr.result, source: 'user-upload', name: file.name }); renderEditImages() }; fr.readAsDataURL(file) }); e.target.value = '' }; $('exportEdits').onclick = exportEdits; $('importEdits').onclick = () => $('importFile').click(); $('importFile').onchange = e => { if (e.target.files[0]) importEditsFile(e.target.files[0]) }; $('clearEdits').onclick = () => { if (confirm('Xóa tất cả chỉnh sửa đã lưu?')) { edits = {}; localStorage.removeItem(STORE); rebuild(); renderCard(); notify('Đã xóa tất cả sửa') } };  window.onkeydown = e => {
+function renderCard() { let c = pool[ci] || RAW[0]; if (!c) return; fit(c); applyCardFontSize(); $('idx').textContent = ci + 1; $('total').textContent = pool.length; $('bar').style.width = ((ci + 1) / pool.length * 100) + '%'; $('tag').textContent = 'CÂU ' + c.num; $('question').textContent = c.question; const __imgEl = $('images'); const __imgKey = JSON.stringify((c.images || []).map(im => String((im && typeof im === 'object' ? (im.src || im.url || im.secure_url || im.publicUrl || im.public_url) : im) || ''))); if (__imgEl.dataset.imgKey !== __imgKey) { __imgEl.innerHTML = imgsHTML(c); __imgEl.dataset.imgKey = __imgKey; } __imgEl.style.display = (c.images && c.images.length) ? 'flex' : 'none'; document.querySelector('#fc .front')?.classList.toggle('hasImg', !!(c.images && c.images.length)); $('options').innerHTML = optionsHTML(c); $('options').classList.remove('hide'); hideOptions = false; applyCardFontSize(); updateCardTools(); $('ansLetter').textContent = (c.answer || '').split('').join(', '); $('ansText').innerHTML = esc(finalAnswerText(c)).replace(/; /g, '<br>'); $('card').classList.remove('dir-horizontal', 'dir-up', 'dir-down'); $('card').classList.add('dir-' + flipDir); $('card').classList.toggle('flip', flipped); $('mode').textContent = flipMode === 'single' ? '1x' : '2x'; var _sc = localStorage.getItem('learninghub_subject_code_merged_v1') || ''; localStorage.setItem('hod102_ci', ci); if (_sc) localStorage.setItem('learninghub_progress_' + _sc, ci); localStorage.setItem('hod102_flip_mode', flipMode) } function flip(dir = 'horizontal') { flipDir = dir; flipped = !flipped; renderCard() } function next() { ci = (ci + 1) % pool.length; flipped = false; flipDir = 'horizontal'; renderCard() } function prev() { ci = (ci - 1 + pool.length) % pool.length; flipped = false; flipDir = 'horizontal'; renderCard() } function shuffle() { for (let i = pool.length - 1; i > 0; i--) { let j = Math.floor(Math.random() * (i + 1));[pool[i], pool[j]] = [pool[j], pool[i]] } ci = 0; flipped = false; flipDir = 'horizontal'; randomActive = false; localStorage.setItem('hod102_random_active', '0'); renderCard(); let sh = $('shuffle'); if (sh) { sh.classList.add('flash'); setTimeout(() => sh.classList.remove('flash'), 650) } } let __allowUserReset = false; function reset(force) { if (force !== true && __allowUserReset !== true) { try { renderCard() } catch (e) { } return } __allowUserReset = false; pool = [...RAW]; ci = 0; flipped = false; flipDir = 'horizontal'; randomActive = false; localStorage.setItem('hod102_random_active', '0'); renderCard() } function triggerReset() { __allowUserReset = true; reset(true) } function switchTab(n, b) { try { localStorage.setItem('learninghub_last_tab_v1', n) } catch (e) { } document.querySelectorAll('.tab').forEach(x => x.classList.remove('active')); b.classList.add('active'); document.querySelectorAll('.pane').forEach(x => x.classList.remove('active')); $(n).classList.add('active'); if (n === 'study') renderStudy(); if (n === 'quiz') try { renderQuiz() } catch (e) { } } function sample(a, n) { a = [...a]; for (let i = a.length - 1; i > 0; i--) { let j = Math.floor(Math.random() * (i + 1));[a[i], a[j]] = [a[j], a[i]] } return n ? a.slice(0, n) : a } function fmt(ms) { let s = Math.floor(ms / 1000), m = Math.floor(s / 60); s %= 60; return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0') } function startTimer() { clearInterval(timerInt); examStart = Date.now(); timerInt = setInterval(() => $('timer').textContent = fmt(Date.now() - examStart), 1000) } function stopTimer() { clearInterval(timerInt) } function syncQuizSet() { if (qSet && qSet.length) { qSet = qSet.map(c => RAW.find(x => x.num === c.num) || c) } } function renderQuiz() { if (typeof window.__examOnlyRender === 'function') return window.__examOnlyRender(); const body = $('quizBody'); if (body) body.innerHTML = ''; } function pickAns(i, k) { if ((quizMode === 'practice' && qDone[i]) || examSubmitted) return; let c = qSet[i]; if (c.answer.length > 1) { let set = new Set((qSel[i] || '').split('').filter(Boolean)); set.has(k) ? set.delete(k) : set.add(k); qSel[i] = [...set].sort().join('') } else qSel[i] = k; renderQuiz() } function checkAns(i) { if (!qSel[i]) { alert('Bạn chọn đáp án trước nha.'); return } qDone[i] = true; renderQuiz() } function score() {/* old practice score overlay removed */ } function smart(q) { q = q.trim().toLowerCase(); if (!q) return RAW; let m = q.match(/^#(\d+)$/); if (m) return RAW.filter(c => c.num === +m[1]); m = q.match(/^answer\s*:\s*([a-e]+)$/i); if (m) return RAW.filter(c => sortAns(c.answer) === sortAns(m[1].toUpperCase())); if (['multi', 'multiple', 'chọn nhiều'].includes(q)) return RAW.filter(c => c.answer.length > 1); return RAW.filter(c => (String(c.num) + ' ' + c.question + ' ' + c.answer + ' ' + (c.answer_text || '') + ' ' + Object.values(c.options).join(' ')).toLowerCase().includes(q)) } function renderStudy() { let arr = smart($('search').value || ''), max = arr.length; $('studyList').innerHTML = arr.slice(0, max).map(c => `<div class="sitem"><div class="snum">CÂU ${c.num}</div><div class="sq">${esc(c.question)}</div><div class="qimgs">${imgsHTML(c)}</div><div class="sopts">${Object.entries(c.options).map(([k, v]) => `<div class="sopt ${c.answer.includes(k) ? 'ans' : ''}"><div class="skey">${c.answer.includes(k) ? '✓' : k}</div><div>${esc(k + '. ' + v)}</div></div>`).join('')}</div></div>`).join('') + (arr.length > max ? `<div class="more">Đang hiển thị ${max} / ${arr.length} kết quả.</div>` : arr.length ? '' : '<div class="more">Không tìm thấy kết quả.</div>') } function openEditor() { let c = pool[ci]; editDraft = clone(c); let reporting = !!(window.HODSupabase?.getUser?.()) && !window.HODSupabase?.isAdmin?.(); $('editTitle').textContent = (reporting ? 'Báo cáo / đề xuất sửa câu ' : 'Sửa câu ') + c.num; if ($('saveEdit')) $('saveEdit').textContent = reporting ? 'Gửi báo cáo cho admin' : 'Lưu sửa'; if ($('restoreEdit')) $('restoreEdit').classList.toggle('hidden', reporting); $('editQuestion').value = c.question; $('editAnswer').value = c.answer; renderEditOptions(); renderEditImages(); $('editModal').classList.remove('hidden') } function renderEditOptions() { let ops = editDraft.options || {}; let box = $('editOptions'); if (!box) return; box.innerHTML = ['A', 'B', 'C', 'D', 'E'].map(k => `<div class="field"><label>Đáp án ${k}</label><textarea data-opt="${k}">${esc(ops[k] || '')}</textarea></div>`).join('') } function renderEditImages() { let box = $('editImgs'); if (!box) { const input = $('imgUpload'); if (!input) return; box = document.createElement('div'); box.id = 'editImgs'; box.className = 'editImgs'; input.insertAdjacentElement('afterend', box); } box.innerHTML = (editDraft.images || []).map((im, i) => { const src = im && typeof im === 'object' ? (im.src || im.url || im.secure_url || im.publicUrl || im.public_url || '') : im; return `<div class="editImg"><button class="rm" data-rm="${i}">×</button><img src="${esc(src)}"><input class="imgUrlBox" value="${esc(src)}" readonly onclick="this.select()" title="Bấm để chọn URL ảnh" style="margin-top:6px;width:100%;max-width:260px;border:1px solid rgba(200,169,110,.24);border-radius:10px;background:rgba(0,0,0,.22);color:var(--gold2);padding:7px;font-size:.72rem;"></div>`; }).join('') || '<p style="color:var(--mist)">Chưa có hình.</p>' } function saveEditor() { let oldQ = clone(RAW.find(c => c.num === editDraft.num) || pool[ci] || editDraft); editDraft.question = $('editQuestion').value.trim(); editDraft.answer = $('editAnswer').value.trim().toUpperCase(); let ops = {}; document.querySelectorAll('[data-opt]').forEach(t => { if (t.value.trim()) ops[t.dataset.opt] = t.value.trim() }); editDraft.options = ops; editDraft.answer_text = answerText(editDraft); if (window.HODSupabase && window.HODSupabase.isReady()) { window.HODSupabase.submitEditRequest(editDraft, oldQ); return } if (window.HODSupabase?.getUser?.()) { alert('Chưa kết nối được dữ liệu duyệt. Hãy tải lại trang rồi gửi lại báo cáo.'); return } edits[editDraft.num] = { question: editDraft.question, options: editDraft.options, answer: editDraft.answer, answer_text: editDraft.answer_text, images: editDraft.images || [] }; localStorage.setItem(STORE, JSON.stringify(edits)); rebuild(); ci = pool.findIndex(c => c.num === editDraft.num); if (ci < 0) ci = 0; flipped = false; renderCard(); renderQuiz(); renderStudy(); $('editModal').classList.add('hidden'); notify('Đã lưu sửa local') } function restoreEditor() { delete edits[editDraft.num]; localStorage.setItem(STORE, JSON.stringify(edits)); rebuild(); syncQuizSet(); renderCard(); renderQuiz(); renderStudy(); $('editModal').classList.add('hidden'); notify('Đã khôi phục') } function exportEdits() { let blob = new Blob([JSON.stringify(edits, null, 2)], { type: 'application/json' }), a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'hod102_user_edits.json'; a.click(); URL.revokeObjectURL(a.href) } function importEditsFile(f) { let fr = new FileReader(); fr.onload = () => { try { edits = JSON.parse(fr.result) || {}; localStorage.setItem(STORE, JSON.stringify(edits)); rebuild(); renderCard(); renderQuiz(); renderStudy(); notify('Đã nhập file sửa') } catch (e) { alert('File JSON không hợp lệ') } }; fr.readAsText(f) } function applyCardFontSize() { let n = parseFloat(cardFontSize || '1'); if (!isFinite(n)) n = 1; n = Math.max(.8, Math.min(1.3, n)); cardFontSize = String(n); let root = document.documentElement, fc = $('fc'); let set = (k, v) => { root.style.setProperty(k, v); if (fc) fc.style.setProperty(k, v) }; let base = 1.35 * n; set('--card-qfs', (1.08 * base).toFixed(3) + 'rem'); set('--card-ofs', (.92 * base).toFixed(3) + 'rem'); set('--card-afs', (1.0 * base).toFixed(3) + 'rem'); set('--card-letter', (25 * Math.min(1.35, base)).toFixed(0) + 'px'); set('--card-letterfs', (.76 * base).toFixed(3) + 'rem'); localStorage.setItem('hod102_card_font_size_v3', String(n)); if ($('stCardFont')) $('stCardFont').value = Math.round(n * 100); if ($('stCardFontState')) $('stCardFontState').textContent = Math.round(n * 100) + '%' } function updateCardTools() { hideOptions = false; try { localStorage.removeItem('hod102_hide_options'); } catch(e) {} let sh = $('shuffle'), eye = $('toggleOpts'); if (sh) { sh.classList.remove('active'); sh.title = 'Xáo ngẫu nhiên' } if (eye) eye.remove(); } function setupGlobalHeader() { let top = document.querySelector('#fc .top'); let tabs = document.querySelector('.tabs'); if (top && !top.classList.contains('globalTop')) { top.classList.add('globalTop'); document.body.insertBefore(top, tabs || document.body.firstChild) } } function setupCardTools() { let card = $('card'); if (!card || $('cardTools')) return; let tools = document.createElement('div'); tools.id = 'cardTools'; tools.className = 'cardTools'; let sh = $('shuffle'), eye = $('toggleOpts'), ed = $('editCard'); if (eye) eye.remove(); if (sh) { sh.textContent = '⚂'; sh.classList.add('cardToolBtn', 'diceBtn'); tools.appendChild(sh) } tools.addEventListener('click', e => e.stopPropagation()); tools.addEventListener('mousedown', e => e.stopPropagation()); card.insertBefore(tools, ed); updateCardTools() } function updateSettingsUI() { if (!$('stFlipState')) return; $('stFlipState').textContent = 'Đang dùng: ' + (flipMode === 'single' ? '1x - bấm 1 lần để lật' : '2x - hạn chế lật nhầm'); if ($('stOptState')) $('stOptState').textContent = 'Đang hiện lựa chọn'; if ($('stToggleOpts')) $('stToggleOpts').style.display = 'none'; if ($('stGoInput')) $('stGoInput').value = (pool[ci]?.num) || ''; applyCardFontSize(); updateCardTools() } function toggleFlipMode() { flipMode = flipMode === 'single' ? 'double' : 'single'; flipped = false; renderCard(); updateSettingsUI() } function goToQuestionNum() { let n = +$('stGoInput').value; if (!n) { alert('Nhập số câu trước nha.'); return } let i = pool.findIndex(c => c.num === n); if (i < 0) i = RAW.findIndex(c => c.num === n); if (i < 0) { alert('Không tìm thấy câu ' + n); return } if (!pool.find(c => c.num === n)) pool = [...RAW]; ci = i; flipped = false; renderCard(); updateSettingsUI(); $('settingsModal').classList.add('hidden') } function init() { setupGlobalHeader(); document.querySelectorAll('.tab').forEach(btn => btn.onclick = () => switchTab(btn.dataset.tab, btn)); $('shuffle').onclick = shuffle; $('reset').onclick = () => triggerReset(); if ($('toggleOpts')) $('toggleOpts').remove(); try { localStorage.removeItem('hod102_hide_options'); } catch(e) {} $('openSettings').onclick = () => { $('settingsModal').classList.remove('hidden'); updateSettingsUI() }; $('closeSettings').onclick = () => $('settingsModal').classList.add('hidden'); document.querySelectorAll('.modal,.overlay').forEach(m => { m.addEventListener('mousedown', e => { if (e.target === m) m.classList.add('hidden') }) }); document.querySelectorAll('.modal .box,.overlay .box').forEach(box => { if (!box.querySelector('.modalX')) { let x = document.createElement('button'); x.className = 'modalX'; x.type = 'button'; x.textContent = '×'; x.title = 'Đóng'; x.onclick = e => { e.stopPropagation(); box.closest('.modal,.overlay')?.classList.add('hidden') }; box.prepend(x) } }); setupCardTools(); if ($('toggleGuide')) $('toggleGuide').onclick = () => { let g = $('guidePanel'), open = g.classList.toggle('hidden') === false; $('toggleGuide').textContent = open ? 'Ẩn hướng dẫn' : 'Mở hướng dẫn' }; if ($('stCardFont')) $('stCardFont').oninput = e => { cardFontSize = (+e.target.value / 100).toFixed(2); applyCardFontSize(); renderCard() }; if ($('stCardFontReset')) $('stCardFontReset').onclick = () => { cardFontSize = '1'; applyCardFontSize(); renderCard(); updateSettingsUI() }; if ($('stToggleFlipMode')) $('stToggleFlipMode').onclick = toggleFlipMode; if ($('stToggleOpts')) $('stToggleOpts').style.display = 'none'; if ($('stShuffle')) $('stShuffle').onclick = () => { shuffle(); updateSettingsUI() }; if ($('stReset')) $('stReset').onclick = () => { triggerReset(); updateSettingsUI() }; if ($('stGo')) $('stGo').onclick = goToQuestionNum; if ($('stGoInput')) $('stGoInput').onkeydown = e => { if (e.key === 'Enter') goToQuestionNum() }; if ($('stEdit')) $('stEdit').onclick = () => { openEditor(); $('settingsModal').classList.add('hidden') }; $('editCard').title = 'Báo cáo / đề xuất sửa câu'; $('editCard').textContent = '!'; $('editCard').onclick = e => { e.stopPropagation(); openEditor() }; $('prev').onclick = prev; $('next').onclick = next; $('mode').onclick = toggleFlipMode; $('zone').onclick = e => { let r = $('card').getBoundingClientRect(); if (!$('card').contains(e.target)) { e.clientX < r.left ? prev() : next(); return } if (e.target.closest('#editCard') || e.target.closest('#cardTools')) return; if (flipMode === 'single') flip('horizontal') };/* old Practice/Exam quiz UI bindings removed */$('search').oninput = renderStudy; $('studyList').onclick = e => { let it = e.target.closest('.sitem'); if (it) it.classList.toggle('open') }; $('closeEdit').onclick = () => $('editModal').classList.add('hidden'); $('saveEdit').onclick = saveEditor; $('restoreEdit').onclick = restoreEditor; $('editImgs').onclick = e => { let b = e.target.closest('[data-rm]'); if (b) { editDraft.images.splice(+b.dataset.rm, 1); renderEditImages() } }; $('imgUpload').onchange = e => { [...e.target.files].forEach(file => { let fr = new FileReader(); fr.onload = () => { editDraft.images = editDraft.images || []; editDraft.images.push({ id: 'user_' + Date.now(), src: fr.result, source: 'user-upload', name: file.name }); renderEditImages() }; fr.readAsDataURL(file) }); e.target.value = '' }; $('exportEdits').onclick = exportEdits; $('importEdits').onclick = () => $('importFile').click(); $('importFile').onchange = e => { if (e.target.files[0]) importEditsFile(e.target.files[0]) }; $('clearEdits').onclick = () => { if (confirm('Xóa tất cả chỉnh sửa đã lưu?')) { edits = {}; localStorage.removeItem(STORE); rebuild(); renderCard(); notify('Đã xóa tất cả sửa') } };  window.onkeydown = e => {
     if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
     if ($('quiz') && $('quiz').classList.contains('active')) {
       return;
@@ -2613,6 +2613,7 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
   const profile = () => window.HODSupabase?.getProfile?.() || null;
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   let addImages = [];
+  let addUploading = 0;
 
   function canManage() {
     const p = profile();
@@ -2676,6 +2677,60 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
     });
   }
 
+
+  function getImageFilesFromPaste(e) {
+    const items = [...(e.clipboardData?.items || [])];
+    return items
+      .filter(item => item.kind === 'file' && String(item.type || '').startsWith('image/'))
+      .map(item => item.getAsFile())
+      .filter(Boolean);
+  }
+
+  async function uploadPrettyImageFiles(files, sourceLabel) {
+    files = [...(files || [])].filter(file => file && String(file.type || '').startsWith('image/'));
+    const st = $('addUploadStatus');
+    const input = $('addImgUpload');
+    const saveBtn = $('saveAddQuestion');
+    if (!files.length) return;
+    if (!window.__LHUploadCloudinary) {
+      alert('Chưa sẵn sàng upload Cloudinary. Tải lại trang rồi thử lại.');
+      return;
+    }
+    addUploading++;
+    if (input) input.disabled = true;
+    if (saveBtn) saveBtn.disabled = true;
+    if (st) {
+      st.style.display = 'block';
+      st.textContent = 'Đang upload ' + files.length + ' ảnh lên Cloudinary...';
+    }
+    notifyOk(sourceLabel === 'paste' ? 'Đang upload ảnh vừa dán...' : 'Đang upload ảnh lên Cloudinary...');
+    try {
+      let done = 0;
+      for (const file of files) {
+        const uploaded = await window.__LHUploadCloudinary(file);
+        if (uploaded) addImages.push(uploaded);
+        done++;
+        if (st) st.textContent = 'Đang upload ảnh ' + done + '/' + files.length + '...';
+      }
+      if (window.__LHCleanImages) addImages = window.__LHCleanImages(addImages);
+      renderPrettyImages();
+      if (st) {
+        st.textContent = 'Đã upload xong. URL nằm dưới ảnh.';
+        setTimeout(() => { if (addUploading === 0) st.style.display = 'none'; }, 2200);
+      }
+      notifyOk('Đã upload ảnh thành URL');
+    } catch (err) {
+      if (st) st.textContent = 'Upload lỗi: ' + (err.message || err);
+      alert(err.message || err);
+    } finally {
+      addUploading = Math.max(0, addUploading - 1);
+      if (addUploading === 0) {
+        if (input) { input.disabled = false; input.value = ''; }
+        if (saveBtn) saveBtn.disabled = false;
+      }
+    }
+  }
+
   function ensurePrettyModal() {
     let modal = $('addQuestionModal');
     if (!modal) {
@@ -2715,6 +2770,7 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
               <div class="v7Field" style="margin-top: 10px;">
                 <label>Hình ảnh</label>
                 <input id="addImgUpload" type="file" accept="image/*" multiple>
+                <div class="pasteImageHint addPasteImageHint">Có thể chụp/copy ảnh rồi bấm Ctrl + V trong khung này để tự upload URL.</div>
                 <div id="addUploadStatus" style="display:none;margin-top:7px;color:var(--gold2);font-weight:900;font-size:.86rem;">Đang upload ảnh...</div>
                 <div id="addImgs" class="editImgs addImgs" style="margin-top: 8px;">Chưa có hình.</div>
               </div>
@@ -2762,33 +2818,27 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
     $('addQuestionClose').onclick = closePrettyAddModal;
     $('cancelAddQuestion').onclick = closePrettyAddModal;
     $('saveAddQuestion').onclick = savePrettyQuestion;
-    $('addImgUpload').onchange = async e => {
-      const input = e.target;
-      const files = [...(input.files || [])];
-      const st = $('addUploadStatus');
+    $('addImgUpload').onchange = e => uploadPrettyImageFiles(e.target.files, 'file');
+    modal.addEventListener('paste', e => {
+      const files = getImageFilesFromPaste(e);
       if (!files.length) return;
-      input.disabled = true;
-      if (st) { st.style.display = 'block'; st.textContent = 'Đang upload ' + files.length + ' ảnh lên Cloudinary...'; }
-      notifyOk('Đang upload ảnh lên Cloudinary...');
-      try {
-        for (const file of files) {
-          if (!window.__LHUploadCloudinary) throw new Error('Chưa sẵn sàng upload Cloudinary. Tải lại trang rồi thử lại.');
-          const uploaded = await window.__LHUploadCloudinary(file);
-          console.log('[Cloudinary add question uploaded]', uploaded);
-          if (uploaded) addImages.push(uploaded);
-        }
-        if (window.__LHCleanImages) addImages = window.__LHCleanImages(addImages);
-        renderPrettyImages();
-        if (st) { st.textContent = 'Đã upload xong. URL nằm dưới ảnh.'; setTimeout(() => { st.style.display = 'none' }, 2200); }
-        notifyOk('Đã upload ảnh thành URL');
-      } catch (err) {
-        if (st) { st.textContent = 'Upload lỗi: ' + (err.message || err); }
-        alert(err.message || err);
-      } finally {
-        input.disabled = false;
-        input.value = '';
-      }
-    };
+      e.preventDefault();
+      uploadPrettyImageFiles(files, 'paste');
+    });
+    modal.addEventListener('dragover', e => {
+      const hasFile = [...(e.dataTransfer?.items || [])].some(item => item.kind === 'file');
+      if (!hasFile) return;
+      e.preventDefault();
+      modal.classList.add('dragImageOver');
+    });
+    modal.addEventListener('dragleave', () => modal.classList.remove('dragImageOver'));
+    modal.addEventListener('drop', e => {
+      const files = [...(e.dataTransfer?.files || [])].filter(file => String(file.type || '').startsWith('image/'));
+      if (!files.length) return;
+      e.preventDefault();
+      modal.classList.remove('dragImageOver');
+      uploadPrettyImageFiles(files, 'drop');
+    });
     $('addImgs').onclick = e => {
       const b = e.target.closest('[data-add-rm]');
       if (!b) return;
@@ -2831,6 +2881,7 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
   }
   async function savePrettyQuestion() {
     if (!canManage()) return alert('Tài khoản này không có quyền thêm câu hỏi.');
+    if (addUploading > 0) return alert('Ảnh đang upload, chờ xong rồi lưu nha.');
     const c = client(); if (!c) return alert('Chưa kết nối Supabase.');
     const subject = subjectCode(); if (!subject) return alert('Bạn cần chọn môn trước.');
 
@@ -6970,3 +7021,185 @@ window.clearLearningHubQuestionCache = function () {
   normalizeAll();
 })();
 // ===== END COPILOT_KEEP_IMPORT_QUESTION_ATTRIBUTES_20260629 =====
+
+
+
+
+// ===== EDIT_RENDER_NULL_GUARD_20260629 =====
+(function () {
+  function $(id) { return document.getElementById(id); }
+  function safeSrc(im) { return im && typeof im === 'object' ? (im.src || im.url || im.secure_url || im.publicUrl || im.public_url || '') : (im || ''); }
+  function safeEsc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+  function ensureEditImgsBox() {
+    let box = $('editImgs');
+    if (box) return box;
+    const input = $('imgUpload');
+    if (!input) return null;
+    box = document.createElement('div');
+    box.id = 'editImgs';
+    box.className = 'editImgs';
+    input.insertAdjacentElement('afterend', box);
+    return box;
+  }
+  window.renderEditImages = renderEditImages = function () {
+    const box = ensureEditImgsBox();
+    if (!box) return;
+    const imgs = (typeof editDraft !== 'undefined' && editDraft && Array.isArray(editDraft.images)) ? editDraft.images : [];
+    box.innerHTML = imgs.length ? imgs.map((im, i) => {
+      const src = safeSrc(im);
+      return `<div class="editImg"><button class="rm" data-rm="${i}">×</button><img src="${safeEsc(src)}"><input class="imgUrlBox" value="${safeEsc(src)}" readonly onclick="this.select()" title="Bấm để chọn URL ảnh" style="margin-top:6px;width:100%;max-width:260px;border:1px solid rgba(200,169,110,.24);border-radius:10px;background:rgba(0,0,0,.22);color:var(--gold2);padding:7px;font-size:.72rem;"></div>`;
+    }).join('') : '<p style="color:var(--mist)">Chưa có hình.</p>';
+  };
+})();
+// ===== END EDIT_RENDER_NULL_GUARD_20260629 =====
+
+
+// ===== EDIT_PREVIEW_CTRL_V_IMAGE_UPLOAD_20260629 =====
+// Đúng UI trong form "Sửa câu hỏi": vùng "Ảnh của câu hỏi" / nút "+ Thêm ảnh" dùng input #editPreviewImgInput.
+// Ctrl+V hoặc kéo thả ảnh sẽ đưa file vào input này, để handler upload Cloudinary có sẵn xử lý và redraw đúng khung ảnh.
+(function () {
+  function $(id) { return document.getElementById(id); }
+  function msg(t) { if (typeof notify === 'function') notify(t); else console.log(t); }
+  function imageFilesFromClipboard(e) {
+    return [...(e.clipboardData?.items || [])]
+      .filter(item => item.kind === 'file' && String(item.type || '').startsWith('image/'))
+      .map(item => item.getAsFile())
+      .filter(Boolean);
+  }
+  function imageFilesFromDrop(e) {
+    return [...(e.dataTransfer?.files || [])].filter(file => String(file.type || '').startsWith('image/'));
+  }
+  function setInputFilesAndUpload(files, source) {
+    files = [...(files || [])].filter(file => file && String(file.type || '').startsWith('image/'));
+    if (!files.length) return false;
+    const input = $('editPreviewImgInput') || $('imgUpload');
+    if (!input) {
+      alert('Chưa thấy ô thêm ảnh. Đóng/mở lại form sửa rồi thử lại.');
+      return true;
+    }
+    try {
+      const dt = new DataTransfer();
+      files.forEach(file => dt.items.add(file));
+      input.files = dt.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      msg(source === 'paste' ? 'Đang upload ảnh vừa dán...' : 'Đang upload ảnh...');
+    } catch (err) {
+      alert('Trình duyệt không hỗ trợ dán ảnh kiểu này. Hãy bấm + Thêm ảnh để chọn file.');
+    }
+    return true;
+  }
+  function ensureEditPasteHint() {
+    const modal = $('editModal');
+    if (!modal || modal.classList.contains('hidden')) return;
+    const imagesBox = modal.querySelector('.v7Images');
+    if (!imagesBox || imagesBox.querySelector('.editPasteImageHint')) return;
+    const head = imagesBox.querySelector('.v7ImagesHead') || imagesBox.firstElementChild;
+    const hint = document.createElement('div');
+    hint.className = 'pasteImageHint editPasteImageHint';
+    hint.textContent = 'Có thể chụp/copy ảnh rồi bấm Ctrl + V tại khung này để tự upload URL.';
+    if (head) head.insertAdjacentElement('afterend', hint);
+    else imagesBox.prepend(hint);
+  }
+  function bindEditPreviewPasteUpload() {
+    const modal = $('editModal');
+    if (!modal) return;
+    ensureEditPasteHint();
+    if (modal.__editPreviewPasteUploadBound) return;
+    modal.__editPreviewPasteUploadBound = true;
+    modal.addEventListener('paste', e => {
+      const files = imageFilesFromClipboard(e);
+      if (!files.length) return;
+      e.preventDefault();
+      setInputFilesAndUpload(files, 'paste');
+    }, true);
+    modal.addEventListener('dragover', e => {
+      const hasFile = [...(e.dataTransfer?.items || [])].some(item => item.kind === 'file');
+      if (!hasFile) return;
+      e.preventDefault();
+      modal.classList.add('dragImageOver');
+      ensureEditPasteHint();
+    }, true);
+    modal.addEventListener('dragleave', () => modal.classList.remove('dragImageOver'), true);
+    modal.addEventListener('drop', e => {
+      const files = imageFilesFromDrop(e);
+      if (!files.length) return;
+      e.preventDefault();
+      modal.classList.remove('dragImageOver');
+      setInputFilesAndUpload(files, 'drop');
+    }, true);
+  }
+  function boot() { bindEditPreviewPasteUpload(); ensureEditPasteHint(); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+  setTimeout(boot, 300);
+  setInterval(boot, 700);
+})();
+// ===== END EDIT_PREVIEW_CTRL_V_IMAGE_UPLOAD_20260629 =====
+
+
+// ===== IMPORT_PREVIEW_CTRL_V_IMAGE_UPLOAD_20260629 =====
+// Cho khung "Kiểm tra câu hỏi" Ctrl+V/kéo thả ảnh giống form sửa/thêm câu.
+(function () {
+  function msg(t) { if (typeof notify === 'function') notify(t); else console.log(t); }
+  function modal() { return document.getElementById('importPreviewModal'); }
+  function isOpen() { const m = modal(); return !!m && !m.classList.contains('hidden') && getComputedStyle(m).display !== 'none'; }
+  function filesFromPaste(e) {
+    return [...(e.clipboardData?.items || [])]
+      .filter(item => item.kind === 'file' && String(item.type || '').startsWith('image/'))
+      .map(item => item.getAsFile())
+      .filter(Boolean);
+  }
+  function filesFromDrop(e) { return [...(e.dataTransfer?.files || [])].filter(file => String(file.type || '').startsWith('image/')); }
+  function activeCard() {
+    const m = modal(); if (!m) return null;
+    return document.activeElement?.closest?.('[data-v7-card],[data-imgui-card]') ||
+      m.querySelector('[data-v7-card]:has([data-v7-input]),[data-imgui-card]:has([data-imgui-input])');
+  }
+  function activeInput() {
+    const c = activeCard();
+    const inp = c?.querySelector?.('[data-v7-input],[data-imgui-input]');
+    if (inp) return inp;
+    return modal()?.querySelector?.('[data-v7-input],[data-imgui-input]') || null;
+  }
+  function ensureHints() {
+    const m = modal(); if (!m || !isOpen()) return;
+    m.querySelectorAll('.v7Images,.simpleEditImages').forEach(box => {
+      if (box.querySelector('.importPasteImageHint')) return;
+      const head = box.querySelector('.v7ImagesHead,.simpleEditImagesHead') || box.firstElementChild;
+      const hint = document.createElement('div');
+      hint.className = 'pasteImageHint importPasteImageHint';
+      hint.textContent = 'Có thể chụp/copy ảnh rồi bấm Ctrl + V tại khung này để tự upload URL.';
+      if (head) head.insertAdjacentElement('afterend', hint); else box.prepend(hint);
+    });
+  }
+  function uploadByInput(files, source) {
+    files = [...(files || [])].filter(file => file && String(file.type || '').startsWith('image/'));
+    if (!files.length || !isOpen()) return false;
+    const input = activeInput();
+    if (!input) { alert('Bấm Sửa ở câu cần thêm ảnh trước, rồi dán ảnh lại nha.'); return true; }
+    try {
+      const dt = new DataTransfer();
+      files.forEach(file => dt.items.add(file));
+      input.files = dt.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      msg(source === 'paste' ? 'Đang upload ảnh vừa dán...' : 'Đang upload ảnh...');
+    } catch (err) {
+      alert('Trình duyệt không hỗ trợ dán ảnh kiểu này. Hãy bấm + Thêm ảnh để chọn file.');
+    }
+    return true;
+  }
+  function bind() {
+    const m = modal(); if (!m) return;
+    ensureHints();
+    if (m.__importPreviewPasteBound) return;
+    m.__importPreviewPasteBound = true;
+    m.addEventListener('paste', e => { const files = filesFromPaste(e); if (!files.length) return; e.preventDefault(); uploadByInput(files, 'paste'); }, true);
+    m.addEventListener('dragover', e => { const has = [...(e.dataTransfer?.items || [])].some(item => item.kind === 'file'); if (!has) return; e.preventDefault(); m.classList.add('dragImageOver'); ensureHints(); }, true);
+    m.addEventListener('dragleave', () => m.classList.remove('dragImageOver'), true);
+    m.addEventListener('drop', e => { const files = filesFromDrop(e); if (!files.length) return; e.preventDefault(); m.classList.remove('dragImageOver'); uploadByInput(files, 'drop'); }, true);
+  }
+  function boot() { bind(); ensureHints(); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+  document.addEventListener('click', () => setTimeout(boot, 0), true);
+  setInterval(boot, 700);
+})();
+// ===== END IMPORT_PREVIEW_CTRL_V_IMAGE_UPLOAD_20260629 =====

@@ -36,5 +36,5 @@ export function json(res, status = 200) {
 }
 
 export function getAdminEmail() {
-  return (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
+  return clean(process.env.ADMIN_EMAIL).toLowerCase().trim();
 }

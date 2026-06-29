@@ -17,6 +17,12 @@ export default async function handler(req) {
     const adminEmail = getAdminEmail();
     const isAdmin = adminEmail && trimmedEmail === adminEmail;
 
+    console.log('[profile] Admin matching debug:', {
+      trimmedEmail,
+      adminEmail,
+      isAdmin: !!isAdmin
+    });
+
     // 1. Kiểm tra xem profile đã tồn tại chưa
     const existing = await db.execute({
       sql: 'select * from profiles where id = ?',

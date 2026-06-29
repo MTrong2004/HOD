@@ -5045,10 +5045,6 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
     return { id: data.public_id, public_id: data.public_id, src: data.secure_url, url: data.secure_url, width: data.width, height: data.height, source: 'cloudinary' };
   }
 
-  window.loadCurrentSubjectOnly = loadSubjectLight;
-  function patchApi() { if (window.HODSupabase) window.HODSupabase.loadQuestionsFromSupabase = loadSubjectLight; }
-  patchApi(); setTimeout(patchApi, 500); setTimeout(patchApi, 1500);
-
   async function fetchImagesForCurrent() {
     const c = supa(); const q = (pool && pool[ci]) || null;
     if (!c || !q || !q.id || q.__imagesChecked) return;
@@ -5092,7 +5088,7 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
     };
     openEditor.__cloudinaryPatch = true; window.openEditor = openEditor;
   }
-  document.addEventListener('DOMContentLoaded', () => { patchApi(); setTimeout(bindEditorUpload, 300); });
+  document.addEventListener('DOMContentLoaded', () => { setTimeout(bindEditorUpload, 300); });
 })();
 
 // ===== FINAL_URL_ONLY_IMAGES_AND_CURRENT_RELOAD_20260628 =====

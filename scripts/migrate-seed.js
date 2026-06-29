@@ -21,16 +21,19 @@ content = content.replace(/public\.questions/g, 'questions');
 content = content.replace(/::jsonb/g, '');
 
 // 3. Thay thế boolean: "true" -> "1", "false" -> "0"
-// Để chính xác và tránh thay thế nhầm chữ trong câu hỏi, ta chỉ thay thế khi nằm ngoài dấu nháy hoặc dựa vào vị trí của câu lệnh SQL.
-// Nhưng trong seed_questions.sql, các dòng có dạng:
-//   ('HOD102', 1, '...', '...', '...', '...', '...', true, false, 'low', null)
-// Chúng ta có thể dùng regex thay thế các giá trị boolean độc lập ở cuối câu insert:
-// Thay thế ", true," thành ", 1," và ", false," thành ", 0,"
-// Thay thế ", true)" thành ", 1)" và ", false)" thành ", 0)"
+// Chạy lặp lại để giải quyết các trường hợp gối đầu như ", true, true,"
 content = content.replace(/,\s*true\s*,/g, ', 1,');
+content = content.replace(/,\s*true\s*,/g, ', 1,');
+content = content.replace(/,\s*false\s*,/g, ', 0,');
 content = content.replace(/,\s*false\s*,/g, ', 0,');
 content = content.replace(/,\s*true\s*\)/g, ', 1)');
 content = content.replace(/,\s*false\s*\)/g, ', 0)');
+
+// 4. Thay thế now() thành datetime('now')
+content = content.replace(/now\(\)/g, "datetime('now')");
+
+// 5. Loại bỏ lệnh NOTIFY của Postgres
+content = content.replace(/notify\s+pgrst.*/gi, '');
 
 // Ghi kết quả ra file mới
 fs.writeFileSync(outputPath, content, 'utf8');

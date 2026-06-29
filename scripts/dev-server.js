@@ -45,9 +45,7 @@ const server = http.createServer(async (req, res) => {
 
   // 1. Xử lý API
   if (req.url.startsWith('/api/')) {
-    const parsedUrl = new URL(req.url, 'http://localhost');
-    const route = parsedUrl.pathname.replace('/api/', '');
-    const filePath = path.join(root, 'api', `${route}.js`);
+    const filePath = path.join(root, 'api', 'index.js');
 
     if (!fs.existsSync(filePath)) {
       res.writeHead(404, { 'Content-Type': 'application/json' });

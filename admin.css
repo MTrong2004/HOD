@@ -954,3 +954,192 @@ body:not(.role-admin) .adminOnly,body:not(.role-admin) [data-admin-only="true"]{
   #subjectsAdmin .subjectNewToggle{flex:1 1 auto!important;}
 }
 /* ===== END_COPILOT_SUBJECT_NEW_BADGE_ON_CARD_20260630 ===== */
+
+
+/* ===== COPILOT_SUBJECT_ADMIN_NO_OVERLAP_POLISH_20260630 ===== */
+/* Quản lý môn học: sửa chồng chữ, bố trí lại số câu, card thoáng hơn */
+#subjectsAdmin .subjectAdminPanel{
+  padding:18px!important;
+  border-radius:24px!important;
+}
+#subjectsAdmin .subjectAdminList{
+  gap:10px!important;
+  padding-right:12px!important;
+  overflow:auto!important;
+}
+#subjectsAdmin .subjectAdminItem{
+  display:grid!important;
+  grid-template-columns:40px 112px minmax(0,1fr) auto!important;
+  gap:12px!important;
+  align-items:center!important;
+  min-height:88px!important;
+  height:auto!important;
+  padding:12px 15px!important;
+  border-radius:18px!important;
+  overflow:visible!important;
+  transform:none!important;
+}
+#subjectsAdmin .subjectDragHandle,
+#subjectsAdmin .subjectAdminItem > :first-child:not(.subjectAdminCode):not(.subjectAdminInfo):not(.subjectAdminActions){
+  width:34px!important;
+  height:34px!important;
+  min-width:34px!important;
+  border-radius:12px!important;
+  display:grid!important;
+  place-items:center!important;
+  align-self:center!important;
+}
+#subjectsAdmin .subjectAdminCode{
+  min-width:104px!important;
+  max-width:112px!important;
+  height:38px!important;
+  padding:0 12px!important;
+  font-size:.84rem!important;
+  align-self:center!important;
+}
+#subjectsAdmin .subjectAdminInfo{
+  display:grid!important;
+  grid-template-columns:1fr!important;
+  gap:4px!important;
+  min-width:0!important;
+  overflow:visible!important;
+  align-content:center!important;
+}
+#subjectsAdmin .subjectAdminInfo b{
+  display:block!important;
+  margin:0!important;
+  font-size:1.02rem!important;
+  line-height:1.22!important;
+  white-space:nowrap!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+}
+#subjectsAdmin .subjectAdminInfo p{
+  display:block!important;
+  margin:0!important;
+  font-size:.88rem!important;
+  line-height:1.32!important;
+  white-space:nowrap!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+  -webkit-line-clamp:unset!important;
+  -webkit-box-orient:unset!important;
+}
+#subjectsAdmin .subjectQuestionCount,
+#subjectsAdmin .subjectAdminInfo .subjectQuestionCount{
+  position:static!important;
+  display:inline-flex!important;
+  width:max-content!important;
+  max-width:100%!important;
+  height:auto!important;
+  min-height:28px!important;
+  margin:2px 0 0!important;
+  padding:5px 11px!important;
+  align-items:center!important;
+  gap:6px!important;
+  border-radius:999px!important;
+  background:rgba(114,197,140,.10)!important;
+  border:1px solid rgba(114,197,140,.30)!important;
+  color:rgba(245,240,232,.78)!important;
+  font-size:.80rem!important;
+  font-weight:850!important;
+  line-height:1!important;
+  transform:none!important;
+  inset:auto!important;
+  box-shadow:none!important;
+}
+#subjectsAdmin .subjectQuestionCount b{
+  color:#82e6a3!important;
+  font-size:.86rem!important;
+  line-height:1!important;
+}
+#subjectsAdmin .subjectAdminActions{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:flex-end!important;
+  gap:8px!important;
+  flex-wrap:nowrap!important;
+  min-width:254px!important;
+  max-width:none!important;
+  overflow:visible!important;
+}
+#subjectsAdmin .subjectAdminActions .act,
+#subjectsAdmin .subjectAdminActions button{
+  min-height:38px!important;
+  height:38px!important;
+  padding:0 14px!important;
+  border-radius:999px!important;
+  font-size:.86rem!important;
+  line-height:1!important;
+  white-space:nowrap!important;
+}
+#subjectsAdmin .subjectNewToggle{
+  min-width:96px!important;
+  height:38px!important;
+}
+#subjectsAdmin .subjectOrderHint{
+  margin:0 0 10px!important;
+  padding:10px 14px!important;
+  border-radius:16px!important;
+  background:rgba(0,0,0,.18)!important;
+  border:1px solid rgba(200,169,110,.12)!important;
+}
+@media (max-width:1100px){
+  #subjectsAdmin .subjectAdminItem{
+    grid-template-columns:38px 104px minmax(0,1fr)!important;
+    min-height:112px!important;
+  }
+  #subjectsAdmin .subjectAdminActions{
+    grid-column:2 / -1!important;
+    justify-content:flex-start!important;
+    min-width:0!important;
+    flex-wrap:wrap!important;
+  }
+}
+@media (max-width:760px){
+  #subjectsAdmin .subjectAdminItem{
+    grid-template-columns:38px minmax(0,1fr)!important;
+    min-height:0!important;
+    padding:13px!important;
+  }
+  #subjectsAdmin .subjectAdminCode{
+    grid-column:2!important;
+    min-width:0!important;
+    max-width:max-content!important;
+    height:34px!important;
+  }
+  #subjectsAdmin .subjectAdminInfo,
+  #subjectsAdmin .subjectAdminActions{
+    grid-column:1 / -1!important;
+  }
+  #subjectsAdmin .subjectAdminActions{
+    display:grid!important;
+    grid-template-columns:1fr 1fr 1fr!important;
+    width:100%!important;
+  }
+  #subjectsAdmin .subjectAdminActions .act,
+  #subjectsAdmin .subjectAdminActions button{
+    width:100%!important;
+    min-width:0!important;
+  }
+}
+/* ===== END_COPILOT_SUBJECT_ADMIN_NO_OVERLAP_POLISH_20260630 ===== */
+
+
+/* ===== COPILOT_EDITOR_ACCESS_HIDE_20260630 ===== */
+.accessHidden,
+.accessHiddenPage{
+  display:none!important;
+  visibility:hidden!important;
+  pointer-events:none!important;
+}
+body.role-editor-limited #exportBtn,
+body.role-editor-limited [data-page="approvals"],
+body.role-editor-limited [data-page="users"],
+body.role-editor-limited [data-page="logs"],
+body.role-editor-limited [data-page="trash"],
+body.role-editor-limited [data-page="trashBin"],
+body.role-editor-limited [data-page="deletedQuestions"]{
+  display:none!important;
+}
+/* ===== END_COPILOT_EDITOR_ACCESS_HIDE_20260630 ===== */

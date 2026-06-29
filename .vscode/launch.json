@@ -1,0 +1,19 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Mở lxpacademy trên Trình duyệt (Chrome)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:3000",
+      "webRoot": "${workspaceFolder}"
+    },
+    {
+      "name": "Mở trang Admin (Chrome)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:3000/admin.html",
+      "webRoot": "${workspaceFolder}"
+    }
+  ]
+}

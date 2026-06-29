@@ -3375,158 +3375,6 @@ async function sendLoginToDiscord(email, role) {
 }
 
 
-// ===== PATCH_AVATAR_ROLE_ACTIONS_APPROVAL_20260625 =====
-(function(){
-  function avUrl(p){return p?.avatar_url||p?.picture||p?.photo_url||p?.image_url||'';}
-  function avChar(p){return String(p?.email||p?.id||'?').trim().slice(0,1).toUpperCase()||'?';}
-  function avHtml(p,cls='userAvatar'){
-    const u=avUrl(p);
-    if(u) return `<button class="${cls}" onclick="openUserAvatar('${esc(p.id)}')" title="Xem avatar"><img src="${esc(u)}" alt="Avatar" loading="lazy" referrerpolicy="no-referrer" onerror="this.closest('button').classList.add('avatarBroken');this.remove();"></button>`;
-    return `<button class="${cls} avatarFallback" onclick="openUserAvatar('${esc(p.id)}')" title="Xem avatar"><span>${esc(avChar(p))}</span></button>`;
-  }
-  function rBadge(p){const r=p?.role||'user';return `<span class="badge roleBadge role-${esc(r)}">${esc(r)}</span>`;}
-  function menu(html){return `<details class="userActionMenu"><summary>Thao tác</summary><div class="userActionMenuBox">${html}</div></details>`;}
-  function at(p){return p?.last_activity||p?.last_login||p?.updated_at||p?.created_at||'';}
-  function ams(p){const n=new Date(at(p)).getTime();return Number.isFinite(n)?n:0;}
-  function atext(p){const t=at(p); if(!t)return 'Chưa có'; const d=Date.now()-new Date(t).getTime(); if(!Number.isFinite(d))return date(t); if(d<120000)return 'Đang hoạt động'; if(d<3600000)return Math.max(1,Math.floor(d/60000))+' phút trước'; return date(t);}
-
-  window.openUserAvatar=function(uid){
-    const p=(cache.profiles||[]).find(x=>String(x.id)===String(uid)); if(!p)return alert('Không tìm thấy người dùng.');
-    const u=avUrl(p), name=p.email||p.id||'Người dùng';
-    openModal('Avatar - '+name, u ? `<div class="avatarPreview"><img src="${esc(u)}" alt="Avatar" referrerpolicy="no-referrer"><p class="muted">${esc(name)}</p></div>` : `<div class="avatarPreview avatarPreviewFallback"><div>${esc(avChar(p))}</div><p class="muted">Chưa có ảnh avatar.</p><p class="muted">${esc(name)}</p></div>`);
-  };
-
-  const oldLP=typeof loadProfile==='function'?loadProfile:null;
-  if(oldLP&&!window.__avatarProfilePatch){window.__avatarProfilePatch=true;loadProfile=async function(){const out=await oldLP.apply(this,arguments);try{const a=user?.user_metadata?.avatar_url||user?.user_metadata?.picture||'';if(a&&profile&&profile.avatar_url!==a){await client.from('profiles').update({avatar_url:a,email:user.email||profile.email}).eq('id',user.id);profile.avatar_url=a;}}catch(e){console.warn('[avatar]',e)}return out};window.loadProfile=loadProfile;}
-
-  window.renderUsers=renderUsers=function(){
-    const arr=(cache.profiles||[]).filter(p=>match(`${p.email||''} ${p.role||''} ${p.id} ${p.last_activity||''}`)).sort((a,b)=>ams(b)-ams(a));
-    $('userList').innerHTML='<div class="userRow muted tableHead"><b></b><b>Email</b><b>Role</b><b>TT</b><b>Hoạt động gần nhất</b><b>Hành động</b></div>'+arr.map(p=>{
-      const acts=isAdmin()?`<button class="act" onclick="viewUserEdits('${p.id}')">Lịch sử</button><button class="act ${isBlocked(p)?'ok':'bad'}" onclick="toggleBlock('${p.id}',${!isBlocked(p)})">${isBlocked(p)?'Unblock':'Block'}</button><button class="act warn" onclick="setRole('${p.id}','${p.role==='editor'?'user':'editor'}')">${p.role==='editor'?'Gỡ editor':'Cho editor'}</button><button class="act warn" onclick="setRole('${p.id}','${p.role==='admin'?'user':'admin'}')">${p.role==='admin'?'Gỡ admin':'Cho admin'}</button>`:`<button class="act" onclick="viewUserEdits('${p.id}')">Lịch sử</button>`;
-      const tx=atext(p), cls=tx==='Đang hoạt động'?'activityNow':'';
-      return `<div class="userRow activitySortedRow ${cls}"><div class="avatarCell">${avHtml(p)}</div><div><div class="mail">${esc(p.email||p.id)}</div><div class="uid">${esc(p.id)}</div></div><div>${rBadge(p)}</div><div>${isBlocked(p)?badge('blocked'):badge('active')}</div><div><b class="lastActivity ${cls}">${esc(tx)}</b><div class="uid">${esc(date(at(p)))}</div></div><div class="actions compactUserActions">${menu(acts)}</div></div>`;
-    }).join('');
-  };
-
-  const oldReject=typeof rejectUser==='function'?rejectUser:null;
-  if(oldReject&&!window.__rejectReloadPatch){window.__rejectReloadPatch=true;rejectUser=async function(uid){await oldReject.apply(this,arguments);try{await loadAll()}catch(e){renderApprovals?.();renderUsers?.();}};window.rejectUser=rejectUser;}
-
-  if(typeof renderApprovals==='function'){
-    window.renderApprovals=renderApprovals=function(){
-      const pending=(cache.profiles||[]).filter(p=>p.approved===false), approved=(cache.profiles||[]).filter(p=>p.approved!==false);
-      const ab=document.getElementById('approvalBadge'); if(ab){ab.textContent=pending.length;ab.classList.toggle('hidden',pending.length===0)}
-      const ep=document.getElementById('afPending'),ea=document.getElementById('afApproved'),eall=document.getElementById('afAll'); if(ep)ep.textContent=pending.length;if(ea)ea.textContent=approved.length;if(eall)eall.textContent=(cache.profiles||[]).length;
-      const el=document.getElementById('approvalList'); if(!el)return; let arr=cache.profiles||[]; const f=document.querySelector('.approvalFilter.active')?.dataset?.af||'pending'; if(f==='pending')arr=arr.filter(p=>p.approved===false); else if(f==='approved')arr=arr.filter(p=>p.approved!==false);
-      const k=(document.getElementById('search')?.value||'').trim().toLowerCase(); if(k)arr=arr.filter(p=>`${p.email||''} ${p.id||''}`.toLowerCase().includes(k));
-      if(!arr.length){el.innerHTML='<p class="muted">'+(f==='pending'?'Không có tài khoản nào đang chờ duyệt.':'Không có.')+'</p>';return;}
-      el.innerHTML=arr.map(p=>{const pend=p.approved===false; const status=pend?'<span class="badge rejected">Chờ duyệt</span>':'<span class="badge approved">Đã duyệt</span>'; const acts=pend?`<button class="act ok" onclick="approveUser('${esc(p.id)}')">Phê duyệt</button><button class="act bad" onclick="rejectUser('${esc(p.id)}')">Từ chối & xóa</button>`:`<button class="act warn" onclick="revokeApproval('${esc(p.id)}')">Thu hồi quyền</button>`; return `<div class="approvalCard ${pend?'isPending':''}">${avHtml(p,'userAvatar approvalAvatar')}<div class="approvalCardInfo"><div class="mail">${esc(p.email||p.id)}</div><div class="meta">${rBadge(p)} ${status} · Đăng ký: ${esc(date(p.created_at))} · Login: ${esc(date(p.last_login||p.created_at))}</div></div><div class="approvalCardActions">${isAdmin()?menu(acts):'<span class="muted">Chỉ admin</span>'}</div></div>`}).join('');
-    };
-  }
-})();
-
-
-// ===== FINAL_USER_AVATAR_DOTS_ROLE_UI_20260625 =====
-(function(){
-  function avatarUrl(p){
-    return p?.avatar_url || p?.avatar || p?.picture || p?.photo_url || p?.image_url || '';
-  }
-  function avatarLetter(p){
-    return String(p?.email || p?.id || '?').trim().slice(0,1).toUpperCase() || '?';
-  }
-  function avatarButton(p){
-    const src = avatarUrl(p);
-    const title = esc(p?.email || 'Avatar');
-    if(src){
-      return `<button class="lhUserAvatar" type="button" title="Phóng to avatar" onclick="openUserAvatarFinal('${esc(p.id)}')"><img src="${esc(src)}" alt="${title}" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentElement.classList.add('isBroken');this.remove();"></button>`;
-    }
-    return `<button class="lhUserAvatar avatarNoImage" type="button" title="Chưa có avatar" onclick="openUserAvatarFinal('${esc(p.id)}')"><span>${esc(avatarLetter(p))}</span></button>`;
-  }
-  function roleBadgeFinal(role){
-    const r = role || 'user';
-    return `<span class="badge lhRoleBadge lhRole-${esc(r)}">${esc(r)}</span>`;
-  }
-  function actionMenu(html){
-    return `<details class="lhDotsMenu"><summary title="Thao tác">...</summary><div class="lhDotsMenuBox">${html}</div></details>`;
-  }
-  function actTime(p){
-    return p?.last_activity || p?.last_login || p?.updated_at || p?.created_at || '';
-  }
-  function actMs(p){
-    const n = new Date(actTime(p)).getTime();
-    return Number.isFinite(n) ? n : 0;
-  }
-  function actText(p){
-    const t = actTime(p);
-    if(!t) return 'Chưa có';
-    const diff = Date.now() - new Date(t).getTime();
-    if(!Number.isFinite(diff)) return date(t);
-    if(diff < 2 * 60 * 1000) return 'Đang hoạt động';
-    if(diff < 60 * 60 * 1000) return Math.max(1, Math.floor(diff / 60000)) + ' phút trước';
-    return date(t);
-  }
-
-  window.openUserAvatarFinal = function(uid){
-    const p = (cache.profiles || []).find(x => String(x.id) === String(uid));
-    if(!p) return alert('Không tìm thấy người dùng.');
-    const src = avatarUrl(p);
-    const name = p.email || p.id || 'Người dùng';
-    if(src){
-      openModal('Avatar - ' + name, `<div class="lhAvatarPreview"><img src="${esc(src)}" alt="Avatar" referrerpolicy="no-referrer"><p class="muted">${esc(name)}</p></div>`);
-    }else{
-      openModal('Avatar - ' + name, `<div class="lhAvatarPreview lhAvatarPreviewEmpty"><div>${esc(avatarLetter(p))}</div><p class="muted">Tài khoản này chưa có avatar trong database.</p><p class="muted">${esc(name)}</p></div>`);
-    }
-  };
-
-  // Đồng bộ avatar Google của tài khoản admin/editor đang đăng nhập vào profiles.
-  const oldLoadProfile = typeof loadProfile === 'function' ? loadProfile : null;
-  if(oldLoadProfile && !window.__lhAvatarLoadProfileFinal){
-    window.__lhAvatarLoadProfileFinal = true;
-    loadProfile = async function(){
-      const out = await oldLoadProfile.apply(this, arguments);
-      try{
-        const a = user?.user_metadata?.avatar_url || user?.user_metadata?.picture || '';
-        if(a && profile){
-          await client.from('profiles').update({ avatar_url:a, email:user.email || profile.email }).eq('id', user.id);
-          profile.avatar_url = a;
-        }
-      }catch(e){ console.warn('[avatar sync]', e); }
-      return out;
-    };
-    window.loadProfile = loadProfile;
-  }
-
-  window.renderUsers = renderUsers = function(){
-    const arr = (cache.profiles || [])
-      .filter(p => match(`${p.email || ''} ${p.role || ''} ${p.id || ''} ${p.last_activity || ''}`))
-      .sort((a,b) => actMs(b) - actMs(a));
-
-    $('userList').innerHTML = `<div class="userRow muted tableHead lhUserRowFinal">
-      <b>Avatar</b><b>Email</b><b>Role</b><b>TT</b><b>Hoạt động gần nhất</b><b>Hành động</b>
-    </div>` + arr.map(p => {
-      const acts = isAdmin()
-        ? `<button class="act" onclick="viewUserEdits('${p.id}')">Lịch sử</button>
-           <button class="act ${isBlocked(p) ? 'ok' : 'bad'}" onclick="toggleBlock('${p.id}',${!isBlocked(p)})">${isBlocked(p) ? 'Unblock' : 'Block'}</button>
-           <button class="act warn" onclick="setRole('${p.id}','${p.role === 'editor' ? 'user' : 'editor'}')">${p.role === 'editor' ? 'Gỡ editor' : 'Cho editor'}</button>
-           <button class="act warn" onclick="setRole('${p.id}','${p.role === 'admin' ? 'user' : 'admin'}')">${p.role === 'admin' ? 'Gỡ admin' : 'Cho admin'}</button>`
-        : `<button class="act" onclick="viewUserEdits('${p.id}')">Lịch sử</button>`;
-      const activeText = actText(p);
-      const activeClass = activeText === 'Đang hoạt động' ? 'activityNow' : '';
-      return `<div class="userRow activitySortedRow lhUserRowFinal ${activeClass}">
-        <div class="lhAvatarCell">${avatarButton(p)}</div>
-        <div><div class="mail">${esc(p.email || p.id)}</div><div class="uid">${esc(p.id)}</div></div>
-        <div>${roleBadgeFinal(p.role)}</div>
-        <div>${isBlocked(p) ? badge('blocked') : badge('active')}</div>
-        <div><b class="lastActivity ${activeClass}">${esc(activeText)}</b><div class="uid">${esc(date(actTime(p)))}</div></div>
-        <div class="actions lhActionsCell">${actionMenu(acts)}</div>
-      </div>`;
-    }).join('');
-  };
-
-  // Nếu đang ở tab Người dùng sau khi file load xong thì render lại ngay.
-  setTimeout(() => { try{ renderUsers(); }catch(e){} }, 300);
-})();
-
-
 // ===== FINAL_DOTS_MENU_FIXED_NO_JITTER_20260625 =====
 (function(){
   function avatarUrl(p){ return p?.avatar_url || p?.avatar || p?.picture || p?.photo_url || p?.image_url || ''; }
@@ -3634,600 +3482,6 @@ async function sendLoginToDiscord(email, role) {
   window.addEventListener('resize', closeUserActionMenuFinal);
   window.addEventListener('scroll', closeUserActionMenuFinal, true);
   document.addEventListener('keydown', e => { if(e.key === 'Escape') closeUserActionMenuFinal(); });
-})();
-
-
-// ===== REALTIME_ADMIN_UPDATES_NO_10S_20260625 =====
-(function(){
-  let rtChannel = null;
-  let rtTimer = null;
-  let rtBusy = false;
-  let rtPendingNotifyIds = new Set();
-  let rtRefreshTimer = null;
-
-  function rtSetChip(text, mode){
-    let chip = document.getElementById('adminAutoCheckChip');
-    if(!chip){
-      chip = document.createElement('div');
-      chip.id = 'adminAutoCheckChip';
-      chip.innerHTML = '<span class="autoDot" aria-hidden="true"></span><span class="autoText"></span>';
-      document.body.appendChild(chip);
-    }
-    chip.classList.remove('hidden','is-checking','is-idle','is-live','is-error');
-    chip.classList.add(mode || 'is-live');
-    const t = chip.querySelector('.autoText');
-    if(t) t.textContent = text || 'Realtime';
-  }
-
-  function rtPendingSet(){
-    return new Set((cache.requests || []).filter(x => x.status === 'pending').map(x => String(x.id)));
-  }
-
-  async function rtReloadLight(reason, payload){
-    if(rtBusy || !client || !user || !profile || !isEditor()) return;
-    rtBusy = true;
-    rtSetChip('Realtime...', 'is-checking');
-    try{
-      const oldPending = rtPendingSet();
-      const [profiles, requests, history] = await Promise.all([
-        client.from('profiles').select('*').order('last_activity', { ascending:false, nullsFirst:false }),
-        client.from('edit_requests').select('*').order('created_at', { ascending:false }),
-        client.from('question_history').select('*').order('created_at', { ascending:false }).limit(500)
-      ]);
-      if(!profiles.error) cache.profiles = profiles.data || [];
-      if(!requests.error) cache.requests = requests.data || [];
-      if(!history.error) cache.history = history.data || [];
-      if(isAdmin()){
-        const logs = await client.from('admin_logs').select('*').order('created_at', { ascending:false }).limit(500);
-        if(!logs.error) cache.logs = logs.data || [];
-      }
-
-      // Nếu câu hỏi đổi thì tải lại toàn bộ để tab Câu hỏi luôn đúng.
-      if(reason === 'questions'){
-        try{ await loadAll(); return; }catch(e){ console.warn('[realtime full reload]', e); }
-      }else{
-        render();
-        if(typeof renderApprovals === 'function') renderApprovals();
-      }
-
-      const newPending = rtPendingSet();
-      let added = 0;
-      newPending.forEach(id => { if(!oldPending.has(id) && !rtPendingNotifyIds.has(id)){ added++; rtPendingNotifyIds.add(id); } });
-      if(added > 0) toast(added === 1 ? 'Có 1 yêu cầu mới' : `Có ${added} yêu cầu mới`);
-    }catch(e){
-      console.warn('[Admin realtime]', e);
-      rtSetChip('Realtime lỗi', 'is-error');
-    }finally{
-      rtBusy = false;
-      if(!document.hidden) rtSetChip('Realtime', 'is-live');
-    }
-  }
-
-  function rtDebounce(reason, payload){
-    clearTimeout(rtRefreshTimer);
-    rtRefreshTimer = setTimeout(() => rtReloadLight(reason, payload), 220);
-  }
-
-  window.startAdminRealtime = function(){
-    if(!client || !user || !profile || !isEditor()) return;
-    if(rtChannel) return;
-    rtPendingNotifyIds = rtPendingSet();
-    rtSetChip('Realtime', 'is-live');
-    try{
-      rtChannel = client.channel('learning-hub-admin-realtime')
-        .on('postgres_changes', { event:'*', schema:'public', table:'edit_requests' }, p => rtDebounce('edit_requests', p))
-        .on('postgres_changes', { event:'*', schema:'public', table:'profiles' }, p => rtDebounce('profiles', p))
-        .on('postgres_changes', { event:'*', schema:'public', table:'question_history' }, p => rtDebounce('question_history', p))
-        .on('postgres_changes', { event:'*', schema:'public', table:'subject_requests' }, p => {
-          rtDebounce('subject_requests', p);
-          if(typeof loadSubjectRequests === 'function') setTimeout(loadSubjectRequests, 250);
-        })
-        .on('postgres_changes', { event:'*', schema:'public', table:'questions' }, p => rtDebounce('questions', p))
-        .subscribe(status => {
-          if(status === 'SUBSCRIBED') rtSetChip('Realtime', 'is-live');
-          if(status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') rtSetChip('Realtime lỗi', 'is-error');
-        });
-    }catch(e){
-      console.warn('[startAdminRealtime]', e);
-      rtSetChip('Realtime lỗi', 'is-error');
-    }
-  };
-
-  window.stopAdminRealtime = function(){
-    try{ if(rtChannel) client.removeChannel(rtChannel); }catch(e){}
-    rtChannel = null;
-  };
-
-  const oldLoadAll = typeof loadAll === 'function' ? loadAll : null;
-  if(oldLoadAll && !window.__adminRealtimeLoadAllPatched){
-    window.__adminRealtimeLoadAllPatched = true;
-    loadAll = async function(){
-      const out = await oldLoadAll.apply(this, arguments);
-      try{ startAdminRealtime(); }catch(e){}
-      return out;
-    };
-    window.loadAll = loadAll;
-  }
-
-  // Tắt chip/vòng tự check 10s cũ nếu còn tồn tại; realtime thay thế nó.
-  const style = document.createElement('style');
-  style.textContent = `
-    #adminAutoCheckChip{min-width:auto!important;width:auto!important;height:34px!important;padding:0 12px!important;pointer-events:none!important;}
-    #adminAutoCheckChip .autoText{display:inline!important;font-size:12px!important;}
-    #adminAutoCheckChip .autoDot{width:9px!important;height:9px!important;border-radius:50%!important;border:0!important;animation:none!important;background:var(--ok)!important;box-shadow:0 0 0 0 rgba(114,197,140,.45)!important;}
-    #adminAutoCheckChip.is-checking .autoDot{background:var(--gold2)!important;animation:autoCheckSpin .65s linear infinite!important;}
-    #adminAutoCheckChip.is-error .autoDot{background:var(--bad)!important;}
-  `;
-  document.head.appendChild(style);
-})();
-
-
-// ===== KILL_OLD_10S_AUTO_CHECK_20260625 =====
-(function(){
-  // Xóa text/vòng "Realtime" cũ. Realtime sẽ tự bật sau loadAll.
-  function killOldAutoCheckText(){
-    const chip = document.getElementById('adminAutoCheckChip');
-    if(chip){
-      const text = chip.querySelector('.autoText');
-      if(text && /Realtime|Tự check|10s/i.test(text.textContent || '')) text.textContent = 'Realtime';
-      chip.classList.remove('is-idle');
-      chip.classList.add('is-live');
-    }
-  }
-  document.addEventListener('DOMContentLoaded', killOldAutoCheckText);
-  setTimeout(killOldAutoCheckText, 300);
-  setTimeout(killOldAutoCheckText, 1500);
-})();
-
-
-// ===== MOVE_REALTIME_CHIP_NEXT_TO_SEARCH_20260625 =====
-(function(){
-  function moveRealtimeChipNextToSearch(){
-    const chip = document.getElementById('adminAutoCheckChip');
-    const topTools = document.querySelector('.topTools');
-    if(!chip || !topTools) return;
-
-    chip.classList.add('realtimeTopChip');
-
-    const searchWrap = document.querySelector('.searchWrap');
-    const searchInput = document.getElementById('search');
-
-    if(searchWrap && searchWrap.parentElement === topTools){
-      searchWrap.insertAdjacentElement('afterend', chip);
-    }else if(searchInput && searchInput.parentElement === topTools){
-      searchInput.insertAdjacentElement('afterend', chip);
-    }else{
-      topTools.insertBefore(chip, topTools.firstChild);
-    }
-  }
-
-  const oldStartRealtimeMoveChip = window.startAdminRealtime;
-  if(typeof oldStartRealtimeMoveChip === 'function' && !window.__moveRealtimeChipPatched){
-    window.__moveRealtimeChipPatched = true;
-    window.startAdminRealtime = function(){
-      const out = oldStartRealtimeMoveChip.apply(this, arguments);
-      setTimeout(moveRealtimeChipNextToSearch, 50);
-      setTimeout(moveRealtimeChipNextToSearch, 500);
-      return out;
-    };
-  }
-
-  const oldLoadAllMoveChip = typeof loadAll === 'function' ? loadAll : null;
-  if(oldLoadAllMoveChip && !window.__moveRealtimeChipLoadAllPatched){
-    window.__moveRealtimeChipLoadAllPatched = true;
-    loadAll = async function(){
-      const out = await oldLoadAllMoveChip.apply(this, arguments);
-      setTimeout(moveRealtimeChipNextToSearch, 80);
-      setTimeout(moveRealtimeChipNextToSearch, 600);
-      return out;
-    };
-    window.loadAll = loadAll;
-  }
-
-  document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(moveRealtimeChipNextToSearch, 300);
-    setTimeout(moveRealtimeChipNextToSearch, 1500);
-  });
-})();
-
-
-// ===== USER_DOTS_REVOKE_APPROVAL_AVATAR_APPROVALS_20260625 =====
-(function(){
-  function uAvatarUrl(p){ return p?.avatar_url || p?.avatar || p?.picture || p?.photo_url || p?.image_url || ''; }
-  function uAvatarLetter(p){ return String(p?.email || p?.id || '?').trim().slice(0,1).toUpperCase() || '?'; }
-  function uAvatarButton(p, extraClass=''){
-    const src = uAvatarUrl(p);
-    const cls = `lhUserAvatar ${extraClass}`.trim();
-    if(src){
-      return `<button class="${cls}" type="button" title="Phóng to avatar" onclick="openUserAvatarFinal('${esc(p.id)}')"><img src="${esc(src)}" alt="Avatar" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentElement.classList.add('isBroken');this.remove();"></button>`;
-    }
-    return `<button class="${cls} avatarNoImage" type="button" title="Chưa có avatar" onclick="openUserAvatarFinal('${esc(p.id)}')"><span>${esc(uAvatarLetter(p))}</span></button>`;
-  }
-  function roleBadgeFinal(role){
-    const r = role || 'user';
-    return `<span class="badge lhRoleBadge lhRole-${esc(r)}">${esc(r)}</span>`;
-  }
-  function actTime(p){ return p?.last_activity || p?.last_login || p?.updated_at || p?.created_at || ''; }
-  function actMs(p){ const n = new Date(actTime(p)).getTime(); return Number.isFinite(n) ? n : 0; }
-  function actText(p){
-    const t = actTime(p);
-    if(!t) return 'Chưa có';
-    const diff = Date.now() - new Date(t).getTime();
-    if(!Number.isFinite(diff)) return date(t);
-    if(diff < 2 * 60 * 1000) return 'Đang hoạt động';
-    if(diff < 60 * 60 * 1000) return Math.max(1, Math.floor(diff / 60000)) + ' phút trước';
-    return date(t);
-  }
-
-  window.openUserAvatarFinal = window.openUserAvatarFinal || function(uid){
-    const p = (cache.profiles || []).find(x => String(x.id) === String(uid));
-    if(!p) return alert('Không tìm thấy người dùng.');
-    const src = uAvatarUrl(p), name = p.email || p.id || 'Người dùng';
-    if(src){
-      openModal('Avatar - ' + name, `<div class="lhAvatarPreview"><img src="${esc(src)}" alt="Avatar" referrerpolicy="no-referrer"><p class="muted">${esc(name)}</p></div>`);
-    }else{
-      openModal('Avatar - ' + name, `<div class="lhAvatarPreview lhAvatarPreviewEmpty"><div>${esc(uAvatarLetter(p))}</div><p class="muted">Tài khoản này chưa có avatar.</p><p class="muted">${esc(name)}</p></div>`);
-    }
-  };
-
-  // Ghi đè menu 3 chấm ở tab Người dùng: thêm Thu hồi quyền vào trong menu.
-  window.openUserActionMenuFinal = function(ev, uid){
-    ev?.preventDefault?.();
-    ev?.stopPropagation?.();
-    const btn = ev?.currentTarget || ev?.target;
-    const p = (cache.profiles || []).find(x => String(x.id) === String(uid));
-    if(!p) return alert('Không tìm thấy người dùng.');
-
-    const wasOpen = btn?.classList?.contains('isOpen');
-    if(typeof closeUserActionMenuFinal === 'function') closeUserActionMenuFinal();
-    if(wasOpen) return;
-    btn?.classList?.add('isOpen');
-
-    const backdrop = document.createElement('div');
-    backdrop.id = 'lhActionBackdrop';
-    backdrop.onclick = () => typeof closeUserActionMenuFinal === 'function' && closeUserActionMenuFinal();
-    document.body.appendChild(backdrop);
-
-    const canRevoke = p.approved !== false && p.role !== 'admin';
-    const revokeBtn = canRevoke
-      ? `<button class="act bad" onclick="revokeApproval('${p.id}');closeUserActionMenuFinal();">Thu hồi quyền</button>`
-      : '';
-
-    const menu = document.createElement('div');
-    menu.id = 'lhActionMenuFloat';
-    menu.innerHTML = isAdmin()
-      ? `<button class="act" onclick="viewUserEdits('${p.id}');closeUserActionMenuFinal();">Lịch sử</button>
-         <button class="act ${isBlocked(p) ? 'ok' : 'bad'}" onclick="toggleBlock('${p.id}',${!isBlocked(p)});closeUserActionMenuFinal();">${isBlocked(p) ? 'Unblock' : 'Block'}</button>
-         <button class="act warn" onclick="setRole('${p.id}','${p.role === 'editor' ? 'user' : 'editor'}');closeUserActionMenuFinal();">${p.role === 'editor' ? 'Gỡ editor' : 'Cho editor'}</button>
-         <button class="act warn" onclick="setRole('${p.id}','${p.role === 'admin' ? 'user' : 'admin'}');closeUserActionMenuFinal();">${p.role === 'admin' ? 'Gỡ admin' : 'Cho admin'}</button>
-         ${revokeBtn}`
-      : `<button class="act" onclick="viewUserEdits('${p.id}');closeUserActionMenuFinal();">Lịch sử</button>`;
-    document.body.appendChild(menu);
-
-    const r = btn.getBoundingClientRect();
-    const mw = menu.offsetWidth || 200;
-    const mh = menu.offsetHeight || 220;
-    let left = Math.min(window.innerWidth - mw - 14, Math.max(14, r.right - mw));
-    let top = r.bottom + 8;
-    if(top + mh > window.innerHeight - 14) top = Math.max(14, r.top - mh - 8);
-    menu.style.left = left + 'px';
-    menu.style.top = top + 'px';
-  };
-
-  // Ghi đè renderUsers để chắc chắn nút 3 chấm dùng menu mới.
-  window.renderUsers = renderUsers = function(){
-    if(typeof closeUserActionMenuFinal === 'function') closeUserActionMenuFinal();
-    const arr = (cache.profiles || [])
-      .filter(p => match(`${p.email || ''} ${p.role || ''} ${p.id || ''} ${p.last_activity || ''}`))
-      .sort((a,b) => actMs(b) - actMs(a));
-    $('userList').innerHTML = `<div class="userRow muted tableHead lhUserRowFinal">
-      <b>Avatar</b><b>Email</b><b>Role</b><b>TT</b><b>Hoạt động gần nhất</b><b>Hành động</b>
-    </div>` + arr.map(p => {
-      const activeText = actText(p);
-      const activeClass = activeText === 'Đang hoạt động' ? 'activityNow' : '';
-      return `<div class="userRow activitySortedRow lhUserRowFinal ${activeClass}">
-        <div class="lhAvatarCell">${uAvatarButton(p)}</div>
-        <div><div class="mail">${esc(p.email || p.id)}</div><div class="uid">${esc(p.id)}</div></div>
-        <div>${roleBadgeFinal(p.role)}</div>
-        <div>${isBlocked(p) ? badge('blocked') : badge('active')}</div>
-        <div><b class="lastActivity ${activeClass}">${esc(activeText)}</b><div class="uid">${esc(date(actTime(p)))}</div></div>
-        <div class="actions lhActionsCell"><button class="lhDotsBtn" type="button" title="Thao tác" onclick="openUserActionMenuFinal(event,'${esc(p.id)}')">...</button></div>
-      </div>`;
-    }).join('');
-  };
-
-  // Ghi đè renderApprovals: thêm avatar vào thẻ phê duyệt.
-  window.renderApprovals = renderApprovals = function(){
-    if(typeof renderApprovalCounts === 'function') renderApprovalCounts();
-    if(typeof updateApprovalBadge === 'function') updateApprovalBadge();
-
-    const el = document.getElementById('approvalList');
-    if(!el) return;
-
-    let arr = cache.profiles || [];
-    if(typeof approvalFilter !== 'undefined'){
-      if(approvalFilter === 'pending') arr = arr.filter(p => p.approved === false);
-      else if(approvalFilter === 'approved') arr = arr.filter(p => p.approved !== false);
-    }
-
-    const k = (document.getElementById('search')?.value || '').trim().toLowerCase();
-    if(k) arr = arr.filter(p => `${p.email || ''} ${p.id || ''} ${p.role || ''}`.toLowerCase().includes(k));
-
-    if(!arr.length){
-      el.innerHTML = '<p class="muted">Không có tài khoản.</p>';
-      return;
-    }
-
-    el.innerHTML = arr.map(p => {
-      const isPending = p.approved === false;
-      const statusBadge = isPending
-        ? '<span class="badge rejected">Chờ duyệt</span>'
-        : '<span class="badge approved">Đã duyệt</span>';
-      const actions = isPending
-        ? `<button class="act ok" onclick="approveUser('${esc(p.id)}')">Phê duyệt</button><button class="act bad" onclick="rejectUser('${esc(p.id)}')">Từ chối & xóa</button>`
-        : `<button class="act warn" onclick="revokeApproval('${esc(p.id)}')">Thu hồi quyền</button>`;
-      return `<div class="approvalCard ${isPending ? 'isPending' : ''}">
-        <div class="approvalAvatarCell">${uAvatarButton(p, 'approvalAvatar')}</div>
-        <div class="approvalCardInfo">
-          <div class="mail">${esc(p.email || p.id)}</div>
-          <div class="meta">${roleBadgeFinal(p.role)} ${statusBadge} · Đăng ký: ${esc(date(p.created_at))} · Login: ${esc(date(p.last_login || p.created_at))}</div>
-          <div class="uid">${esc(p.id)}</div>
-        </div>
-        <div class="approvalCardActions">${isAdmin() ? actions : '<span class="muted">Chỉ admin</span>'}</div>
-      </div>`;
-    }).join('');
-  };
-
-  setTimeout(() => {
-    try{ renderUsers(); }catch(e){}
-    try{ renderApprovals(); }catch(e){}
-  }, 300);
-})();
-
-
-// ===== FINAL_APPROVALS_FILTER_AVATAR_FIX_20260625 =====
-(function(){
-  window.__approvalFilter = window.__approvalFilter || 'pending';
-
-  function avUrl(p){ return p?.avatar_url || p?.avatar || p?.picture || p?.photo_url || p?.image_url || ''; }
-  function avLetter(p){ return String(p?.email || p?.id || '?').trim().slice(0,1).toUpperCase() || '?'; }
-  function avBtn(p){
-    const src = avUrl(p);
-    if(src){
-      return `<button class="lhUserAvatar approvalAvatar" type="button" title="Phóng to avatar" onclick="openUserAvatarFinal('${esc(p.id)}')"><img src="${esc(src)}" alt="Avatar" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentElement.classList.add('isBroken');this.remove();"></button>`;
-    }
-    return `<button class="lhUserAvatar approvalAvatar avatarNoImage" type="button" title="Chưa có avatar" onclick="openUserAvatarFinal('${esc(p.id)}')"><span>${esc(avLetter(p))}</span></button>`;
-  }
-  function roleBadge(role){
-    const r = role || 'user';
-    return `<span class="badge lhRoleBadge lhRole-${esc(r)}">${esc(r)}</span>`;
-  }
-  function pendingUsers(){ return (cache.profiles || []).filter(p => p.approved === false); }
-  function approvedUsers(){ return (cache.profiles || []).filter(p => p.approved !== false); }
-  function updateCounts(){
-    const pend = pendingUsers().length;
-    const appr = approvedUsers().length;
-    const all = (cache.profiles || []).length;
-    const ep = document.getElementById('afPending');
-    const ea = document.getElementById('afApproved');
-    const eall = document.getElementById('afAll');
-    if(ep) ep.textContent = pend;
-    if(ea) ea.textContent = appr;
-    if(eall) eall.textContent = all;
-    const badgeEl = document.getElementById('approvalBadge');
-    if(badgeEl){
-      badgeEl.textContent = pend;
-      badgeEl.classList.toggle('hidden', pend === 0);
-    }
-    const statPendingApproval = document.getElementById('statPendingApproval');
-    if(statPendingApproval) statPendingApproval.textContent = pend;
-  }
-
-  window.filterApprovals = function(f){
-    window.__approvalFilter = f || 'pending';
-    document.querySelectorAll('.approvalFilter').forEach(b => {
-      b.classList.toggle('active', b.dataset.af === window.__approvalFilter);
-    });
-    renderApprovals();
-  };
-
-  window.renderApprovals = renderApprovals = function(){
-    updateCounts();
-    const el = document.getElementById('approvalList');
-    if(!el) return;
-
-    let filter = window.__approvalFilter || 'pending';
-    const activeBtn = document.querySelector('.approvalFilter.active');
-    if(activeBtn?.dataset?.af) filter = activeBtn.dataset.af;
-    window.__approvalFilter = filter;
-
-    let arr = cache.profiles || [];
-    if(filter === 'pending') arr = arr.filter(p => p.approved === false);
-    else if(filter === 'approved') arr = arr.filter(p => p.approved !== false);
-
-    const k = (document.getElementById('search')?.value || '').trim().toLowerCase();
-    if(k) arr = arr.filter(p => `${p.email || ''} ${p.id || ''} ${p.role || ''}`.toLowerCase().includes(k));
-
-    if(!arr.length){
-      const msg = filter === 'pending' ? 'Không có tài khoản nào đang chờ duyệt.' : 'Không có tài khoản phù hợp.';
-      el.innerHTML = `<p class="muted">${msg}</p>`;
-      return;
-    }
-
-    el.innerHTML = arr.map(p => {
-      const isPending = p.approved === false;
-      const statusBadge = isPending
-        ? '<span class="badge rejected">Chờ duyệt</span>'
-        : '<span class="badge approved">Đã duyệt</span>';
-      const actions = isPending
-        ? `<button class="act ok" onclick="approveUser('${esc(p.id)}')">Phê duyệt</button><button class="act bad" onclick="rejectUser('${esc(p.id)}')">Từ chối & xóa</button>`
-        : (p.role === 'admin' ? '<span class="muted">Admin</span>' : `<button class="act warn" onclick="revokeApproval('${esc(p.id)}')">Thu hồi quyền</button>`);
-      return `<div class="approvalCard ${isPending ? 'isPending' : ''}">
-        <div class="approvalAvatarCell">${avBtn(p)}</div>
-        <div class="approvalCardInfo">
-          <div class="mail">${esc(p.email || p.id)}</div>
-          <div class="meta">${roleBadge(p.role)} ${statusBadge} · Đăng ký: ${esc(date(p.created_at))} · Login: ${esc(date(p.last_login || p.created_at))}</div>
-          <div class="uid">${esc(p.id)}</div>
-        </div>
-        <div class="approvalCardActions">${isAdmin() ? actions : '<span class="muted">Chỉ admin</span>'}</div>
-      </div>`;
-    }).join('');
-  };
-
-  const oldApproveUser = window.approveUser;
-  if(typeof oldApproveUser === 'function' && !window.__approvalApprovePatched){
-    window.__approvalApprovePatched = true;
-    window.approveUser = async function(uid){
-      const out = await oldApproveUser.apply(this, arguments);
-      setTimeout(() => { try{ renderApprovals(); }catch(e){} }, 150);
-      return out;
-    };
-  }
-
-  const oldRejectUser = window.rejectUser;
-  if(typeof oldRejectUser === 'function' && !window.__approvalRejectPatched){
-    window.__approvalRejectPatched = true;
-    window.rejectUser = async function(uid){
-      const out = await oldRejectUser.apply(this, arguments);
-      setTimeout(() => { try{ renderApprovals(); }catch(e){} }, 150);
-      return out;
-    };
-  }
-
-  const oldRevokeApproval = window.revokeApproval;
-  if(typeof oldRevokeApproval === 'function' && !window.__approvalRevokePatched){
-    window.__approvalRevokePatched = true;
-    window.revokeApproval = async function(uid){
-      const out = await oldRevokeApproval.apply(this, arguments);
-      setTimeout(() => { try{ renderApprovals(); renderUsers(); }catch(e){} }, 150);
-      return out;
-    };
-  }
-
-  setTimeout(() => { try{ renderApprovals(); }catch(e){} }, 300);
-})();
-
-
-// ===== APPROVAL_PENDING_ONLY_REVOKE_IN_USERS_DOTS_20260625 =====
-(function(){
-  function avUrl(p){ return p?.avatar_url || p?.avatar || p?.picture || p?.photo_url || p?.image_url || ''; }
-  function avLetter(p){ return String(p?.email || p?.id || '?').trim().slice(0,1).toUpperCase() || '?'; }
-  function avBtn(p){
-    const src = avUrl(p);
-    if(src){
-      return `<button class="lhUserAvatar approvalAvatar" type="button" title="Phóng to avatar" onclick="openUserAvatarFinal('${esc(p.id)}')"><img src="${esc(src)}" alt="Avatar" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentElement.classList.add('isBroken');this.remove();"></button>`;
-    }
-    return `<button class="lhUserAvatar approvalAvatar avatarNoImage" type="button" title="Chưa có avatar" onclick="openUserAvatarFinal('${esc(p.id)}')"><span>${esc(avLetter(p))}</span></button>`;
-  }
-  function roleBadge(role){
-    const r = role || 'user';
-    return `<span class="badge lhRoleBadge lhRole-${esc(r)}">${esc(r)}</span>`;
-  }
-  function pendingUsers(){ return (cache.profiles || []).filter(p => p.approved === false); }
-  function updatePendingCount(){
-    const pend = pendingUsers().length;
-    const ep = document.getElementById('afPending');
-    if(ep) ep.textContent = pend;
-    const badgeEl = document.getElementById('approvalBadge');
-    if(badgeEl){
-      badgeEl.textContent = pend;
-      badgeEl.classList.toggle('hidden', pend === 0);
-    }
-    const statPendingApproval = document.getElementById('statPendingApproval');
-    if(statPendingApproval) statPendingApproval.textContent = pend;
-  }
-  function hideApprovalExtraFilters(){
-    document.querySelectorAll('.approvalFilter').forEach(btn => {
-      const af = btn.dataset.af;
-      if(af === 'approved' || af === 'all') btn.classList.add('hidden');
-      if(af === 'pending') btn.classList.add('active');
-    });
-  }
-
-  // Tab Phê duyệt chỉ còn Chờ duyệt. Không còn Đã duyệt/Tất cả.
-  window.filterApprovals = function(){
-    window.__approvalFilter = 'pending';
-    hideApprovalExtraFilters();
-    renderApprovals();
-  };
-
-  window.renderApprovals = renderApprovals = function(){
-    window.__approvalFilter = 'pending';
-    hideApprovalExtraFilters();
-    updatePendingCount();
-
-    const el = document.getElementById('approvalList');
-    if(!el) return;
-
-    let arr = pendingUsers();
-    const k = (document.getElementById('search')?.value || '').trim().toLowerCase();
-    if(k) arr = arr.filter(p => `${p.email || ''} ${p.id || ''} ${p.role || ''}`.toLowerCase().includes(k));
-
-    if(!arr.length){
-      el.innerHTML = '<p class="muted">Không có tài khoản nào đang chờ duyệt.</p>';
-      return;
-    }
-
-    el.innerHTML = arr.map(p => {
-      return `<div class="approvalCard isPending">
-        <div class="approvalAvatarCell">${avBtn(p)}</div>
-        <div class="approvalCardInfo">
-          <div class="mail">${esc(p.email || p.id)}</div>
-          <div class="meta">${roleBadge(p.role)} <span class="badge rejected">Chờ duyệt</span> · Đăng ký: ${esc(date(p.created_at))} · Login: ${esc(date(p.last_login || p.created_at))}</div>
-          <div class="uid">${esc(p.id)}</div>
-        </div>
-        <div class="approvalCardActions">${isAdmin() ? `<button class="act ok" onclick="approveUser('${esc(p.id)}')">Phê duyệt</button><button class="act bad" onclick="rejectUser('${esc(p.id)}')">Từ chối & xóa</button>` : '<span class="muted">Chỉ admin</span>'}</div>
-      </div>`;
-    }).join('');
-  };
-
-  // Đảm bảo Thu hồi quyền nằm trong dấu 3 chấm ở tab Người dùng.
-  const oldOpenUserActionMenuFinal = window.openUserActionMenuFinal;
-  window.openUserActionMenuFinal = function(ev, uid){
-    ev?.preventDefault?.();
-    ev?.stopPropagation?.();
-    const btn = ev?.currentTarget || ev?.target;
-    const p = (cache.profiles || []).find(x => String(x.id) === String(uid));
-    if(!p) return alert('Không tìm thấy người dùng.');
-
-    const wasOpen = btn?.classList?.contains('isOpen');
-    if(typeof closeUserActionMenuFinal === 'function') closeUserActionMenuFinal();
-    if(wasOpen) return;
-    btn?.classList?.add('isOpen');
-
-    const backdrop = document.createElement('div');
-    backdrop.id = 'lhActionBackdrop';
-    backdrop.onclick = () => typeof closeUserActionMenuFinal === 'function' && closeUserActionMenuFinal();
-    document.body.appendChild(backdrop);
-
-    const revokeBtn = (p.approved !== false && p.role !== 'admin')
-      ? `<button class="act bad" onclick="revokeApproval('${p.id}');closeUserActionMenuFinal();">Thu hồi quyền</button>`
-      : '';
-
-    const menu = document.createElement('div');
-    menu.id = 'lhActionMenuFloat';
-    menu.innerHTML = isAdmin()
-      ? `<button class="act" onclick="viewUserEdits('${p.id}');closeUserActionMenuFinal();">Lịch sử</button>
-         <button class="act ${isBlocked(p) ? 'ok' : 'bad'}" onclick="toggleBlock('${p.id}',${!isBlocked(p)});closeUserActionMenuFinal();">${isBlocked(p) ? 'Unblock' : 'Block'}</button>
-         <button class="act warn" onclick="setRole('${p.id}','${p.role === 'editor' ? 'user' : 'editor'}');closeUserActionMenuFinal();">${p.role === 'editor' ? 'Gỡ editor' : 'Cho editor'}</button>
-         <button class="act warn" onclick="setRole('${p.id}','${p.role === 'admin' ? 'user' : 'admin'}');closeUserActionMenuFinal();">${p.role === 'admin' ? 'Gỡ admin' : 'Cho admin'}</button>
-         ${revokeBtn}`
-      : `<button class="act" onclick="viewUserEdits('${p.id}');closeUserActionMenuFinal();">Lịch sử</button>`;
-    document.body.appendChild(menu);
-
-    const r = btn.getBoundingClientRect();
-    const mw = menu.offsetWidth || 205;
-    const mh = menu.offsetHeight || 230;
-    let left = Math.min(window.innerWidth - mw - 14, Math.max(14, r.right - mw));
-    let top = r.bottom + 8;
-    if(top + mh > window.innerHeight - 14) top = Math.max(14, r.top - mh - 8);
-    menu.style.left = left + 'px';
-    menu.style.top = top + 'px';
-  };
-
-  setTimeout(() => {
-    try{ hideApprovalExtraFilters(); renderApprovals(); }catch(e){}
-  }, 300);
 })();
 
 
@@ -4892,162 +4146,6 @@ ${E(val)}</pre>`;
 // ===== END FIX_ADMIN_REQUEST_IMAGES_FORCE_20260628 =====
 
 
-// ===== FINAL_FORCE_ADMIN_REALTIME_RESTORE_20260628 =====
-// Khôi phục realtime sau các bản patch loadAll phía dưới ghi đè mất startAdminRealtime.
-(function(){
-  let ch = null;
-  let timer = null;
-  let loading = false;
-  let lastReason = '';
-  let reconnectTimer = null;
-  let reconnectDelay = 5000; // Khởi đầu chờ 5 giây để kết nối lại
-
-  function chip(text, cls){
-    let el = document.getElementById('adminAutoCheckChip');
-    if(!el){
-      el = document.createElement('div');
-      el.id = 'adminAutoCheckChip';
-      el.innerHTML = '<span class="autoDot" aria-hidden="true"></span><span class="autoText"></span>';
-      document.body.appendChild(el);
-    }
-    el.classList.remove('hidden','is-checking','is-idle','is-live','is-error');
-    el.classList.add(cls || 'is-live');
-    const t = el.querySelector('.autoText');
-    if(t) t.textContent = text || 'Realtime';
-    moveChip();
-  }
-
-  function moveChip(){
-    const el = document.getElementById('adminAutoCheckChip');
-    const wrap = document.querySelector('.topTools') || document.querySelector('.top');
-    if(el && wrap && el.parentElement !== wrap){
-      const search = document.querySelector('.searchWrap');
-      search && search.parentElement === wrap ? search.insertAdjacentElement('afterend', el) : wrap.appendChild(el);
-    }
-  }
-
-  function canRun(){
-    try{ return !!client && !!user && !!profile && typeof isEditor === 'function' && isEditor(); }
-    catch(e){ return false; }
-  }
-
-  async function reloadByRealtime(reason){
-    if(!canRun() || loading) return;
-    loading = true;
-    lastReason = reason || lastReason || 'change';
-    chip('Realtime...', 'is-checking');
-    try{
-      // Không gọi loadAll() ở đây nữa để tránh kéo lại toàn bộ profiles/questions/logs.
-      if(reason === 'edit_requests'){
-        cache.requests = await safeLoad('edit_requests', client.from('edit_requests').select('*').order('created_at', { ascending: false }), true);
-        if(typeof renderRequests === 'function') renderRequests();
-        if(typeof renderStats === 'function') renderStats();
-        toast('Có cập nhật yêu cầu sửa');
-      } else if(reason === 'subject_requests'){
-        if(typeof window.loadSubjectRequests === 'function') await window.loadSubjectRequests();
-      }
-      chip('Realtime', 'is-live');
-    }catch(e){
-      console.warn('[FINAL realtime reload]', e);
-      chip('Realtime lỗi', 'is-error');
-    }finally{
-      loading = false;
-    }
-  }
-
-  function debounced(reason){
-    clearTimeout(timer);
-    timer = setTimeout(() => reloadByRealtime(reason), 350);
-  }
-
-  window.startAdminRealtimeFinal = function(){
-    if(!canRun()) return;
-    if(ch) return;
-    
-    // Xóa timer chờ kết nối lại cũ nếu có để tránh trùng lặp
-    if(reconnectTimer){
-      clearTimeout(reconnectTimer);
-      reconnectTimer = null;
-    }
-
-    chip('Realtime...', 'is-checking');
-    try{
-      // Tối ưu tải dữ liệu: Chỉ lắng nghe edit_requests và subject_requests.
-      // Bỏ profiles (bị spam touchActivity từ người dùng học bài) và questions, question_history
-      ch = client.channel('learning-hub-admin-realtime-final')
-        .on('postgres_changes', {event:'*', schema:'public', table:'edit_requests'}, () => debounced('edit_requests'))
-        .on('postgres_changes', {event:'*', schema:'public', table:'subject_requests'}, () => debounced('subject_requests'))
-        .subscribe(status => {
-          if(status === 'SUBSCRIBED'){
-            chip('Realtime', 'is-live');
-            reconnectDelay = 5000; // Reset lại thời gian chờ kết nối lại khi thành công
-            if(reconnectTimer){
-              clearTimeout(reconnectTimer);
-              reconnectTimer = null;
-            }
-          }
-          if(status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED'){
-            chip('Realtime lỗi', 'is-error');
-            try{ if(ch) client.removeChannel(ch); }catch(e){}
-            ch = null;
-            
-            // Cơ chế Exponential Backoff để tránh spam kết nối lại liên tục làm treo máy và tốn tài nguyên
-            if(!reconnectTimer){
-              reconnectTimer = setTimeout(() => {
-                reconnectTimer = null;
-                window.startAdminRealtimeFinal();
-              }, reconnectDelay);
-              // Tăng thời gian chờ lên 1.5 lần cho lần sau, tối đa là 60 giây
-              reconnectDelay = Math.min(reconnectDelay * 1.5, 60000);
-            }
-          }
-        });
-    }catch(e){
-      console.warn('[startAdminRealtimeFinal]', e);
-      chip('Realtime lỗi', 'is-error');
-      ch = null;
-      
-      // Thử lại nếu xảy ra ngoại lệ
-      if(!reconnectTimer){
-        reconnectTimer = setTimeout(() => {
-          reconnectTimer = null;
-          window.startAdminRealtimeFinal();
-        }, reconnectDelay);
-        reconnectDelay = Math.min(reconnectDelay * 1.5, 60000);
-      }
-    }
-  };
-
-  window.stopAdminRealtimeFinal = function(){
-    if(reconnectTimer){
-      clearTimeout(reconnectTimer);
-      reconnectTimer = null;
-    }
-    try{ if(ch) client.removeChannel(ch); }catch(e){}
-    ch = null;
-  };
-
-  const oldLoadAllFinalRT = typeof loadAll === 'function' ? loadAll : null;
-  if(oldLoadAllFinalRT && !window.__finalRealtimeLoadAllPatched){
-    window.__finalRealtimeLoadAllPatched = true;
-    loadAll = window.loadAll = async function(){
-      const out = await oldLoadAllFinalRT.apply(this, arguments);
-      moveChip();
-      return out;
-    };
-  }
-
-  document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => { moveChip(); window.startAdminRealtimeFinal(); }, 600);
-    setTimeout(() => { moveChip(); window.startAdminRealtimeFinal(); }, 1800);
-  });
-  // Giãn cách việc di chuyển chip ra 15 giây, không tự reconnect bằng setInterval nữa 
-  // vì đã có cơ chế tự reconnect an toàn bằng exponential backoff ở trên.
-  setInterval(() => { moveChip(); }, 15000);
-})();
-// ===== END FINAL_FORCE_ADMIN_REALTIME_RESTORE_20260628 =====
-
-
 // ===== COPILOT_ADMIN_RELOAD_DATA_GUARD_20260628 =====
 // Giảm dữ liệu tải khi reload admin: không tải full question_history 500 dòng mỗi lần.
 // Dòng nặng nhất trước đây là question_history?select=*... ~1.4MB.
@@ -5486,29 +4584,6 @@ ${E(val)}</pre>`;
 })();
 // ===== END ADMIN_PROFILE_PATCH_DEDUPE_20260629 =====
 
-// ===== KILL_LEGACY_ADMIN_REALTIME_PROFILES_LOOP_20260629 =====
-// Khóa hoàn toàn Realtime cũ để tránh loop profiles -> reload -> tốn băng thông.
-// Chỉ dùng Realtime mới: window.startAdminRealtimeFinal().
-(function(){
-  if(window.__KILL_LEGACY_ADMIN_REALTIME_PROFILES_LOOP_20260629) return;
-  window.__KILL_LEGACY_ADMIN_REALTIME_PROFILES_LOOP_20260629 = true;
-
-  try{
-    if(typeof window.stopAdminRealtime === 'function') window.stopAdminRealtime();
-  }catch(e){}
-
-  window.startAdminRealtime = function(){
-    return;
-  };
-
-  window.stopAdminRealtime = function(){
-    return;
-  };
-})();
-// ===== END KILL_LEGACY_ADMIN_REALTIME_PROFILES_LOOP_20260629 =====
-
-
-
 // ===== COPILOT_COMPACT_DRAG_SUBJECT_ORDER_20260630 =====
 // Quản lý môn học: card nhỏ gọn + kéo thả đổi thứ tự, kéo lên đầu = vị trí 1.
 (function(){
@@ -5557,6 +4632,21 @@ ${E(val)}</pre>`;
         margin-top:3px!important;font-size:.80rem!important;line-height:1.25!important;
         -webkit-line-clamp:1!important;
       }
+      #subjectsAdmin .subjectQuestionCount{
+        margin-top:5px!important;
+        display:inline-flex!important;
+        width:max-content!important;
+        align-items:center!important;
+        gap:4px!important;
+        border:1px solid rgba(114,197,140,.25)!important;
+        border-radius:999px!important;
+        padding:4px 9px!important;
+        background:rgba(114,197,140,.08)!important;
+        color:rgba(245,240,232,.78)!important;
+        font-size:.78rem!important;
+        font-weight:800!important;
+      }
+      #subjectsAdmin .subjectQuestionCount b{color:var(--ok)!important;font-size:.82rem!important;}
       #subjectsAdmin .subjectAdminActions{gap:6px!important;flex-wrap:nowrap!important;}
       #subjectsAdmin .subjectAdminActions .act{min-height:31px!important;padding:6px 10px!important;font-size:.82rem!important;}
       #subjectsAdmin .subjectOrderHint{font-size:.82rem!important;color:rgba(245,240,232,.62)!important;margin:0 0 8px!important;}
@@ -5572,11 +4662,47 @@ ${E(val)}</pre>`;
   function escJs(s){ return String(s || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
   function subjectKey(s){ return String(s.id ?? s.code ?? ''); }
 
+  function isActiveSubjectRow(s){
+    return !(s?.is_active === false || s?.is_active === 0 || s?.is_active === '0');
+  }
+
+  function isActiveQuestionRow(q){
+    return !(q?.is_active === false || q?.is_active === 0 || q?.is_active === '0');
+  }
+
+  async function loadQuestionCountsForSubjects(){
+    let rows = [];
+    try{
+      if(typeof fetchAllRows === 'function'){
+        rows = await fetchAllRows('questions', 'subject_code,is_active');
+      }else{
+        const res = await client.from('questions').select('subject_code,is_active');
+        if(res.error) throw res.error;
+        rows = res.data || [];
+      }
+    }catch(e){
+      console.warn('Không tải đủ số câu theo môn, dùng cache tạm:', e);
+      rows = cache.questions || [];
+    }
+    const counts = {};
+    (rows || []).forEach(q => {
+      if(!isActiveQuestionRow(q)) return;
+      const code = String(q.subject_code || 'HOD102');
+      counts[code] = (counts[code] || 0) + 1;
+    });
+    return counts;
+  }
+
+  function getSubjectQuestionCount(s){
+    const code = String(s?.code || '');
+    return Number(s?.__question_count || s?.question_count || s?.questions_count || (code ? 0 : 0)) || 0;
+  }
+
   function filteredSubjects(){
     const q = String(document.getElementById('search')?.value || '').trim().toLowerCase();
-    const arr = dragSubjectCache.slice().sort((a,b)=>(Number(a.sort_order)||0)-(Number(b.sort_order)||0) || String(a.code||'').localeCompare(String(b.code||'')));
+    const arr = dragSubjectCache.filter(isActiveSubjectRow).slice().sort((a,b)=>(Number(a.sort_order)||0)-(Number(b.sort_order)||0) || String(a.code||'').localeCompare(String(b.code||'')));
     if(!q) return arr;
-    return arr.filter(s => `${s.code||''} ${s.name||''} ${s.description||''}`.toLowerCase().includes(q));
+    return arr.filter(s => `${s.code||''} ${s.name||''} ${s.description||''} ${getSubjectQuestionCount(s)} câu`.toLowerCase().includes(q));
   }
 
   async function saveSubjectOrder(){
@@ -5614,13 +4740,15 @@ ${E(val)}</pre>`;
       list.innerHTML = '<p class="muted">Không có môn học phù hợp.</p>';
       return;
     }
-    list.innerHTML = '<p class="subjectOrderHint">Kéo dấu ☰ để đổi vị trí. Kéo môn lên đầu danh sách = vị trí 1.</p>' + arr.map((s, idx) => `
+    const totalQuestions = arr.reduce((sum, s) => sum + getSubjectQuestionCount(s), 0);
+    list.innerHTML = `<p class="subjectOrderHint">Tổng: <b>${arr.length}</b> môn · <b>${totalQuestions}</b> câu. Kéo dấu ☰ để đổi vị trí.</p>` + arr.map((s, idx) => `
       <div class="subjectAdminItem" draggable="true" data-subject-key="${esc(subjectKey(s))}" data-visible-index="${idx}">
         <div class="subjectDragHandle" title="Kéo để đổi vị trí">☰</div>
         <div class="subjectAdminCode">${esc(s.code || '')}</div>
         <div class="subjectAdminInfo">
           <b>${idx + 1}. ${esc(s.name || s.code || 'Chưa có tên môn')}</b>
           <p>${esc(s.description || 'Môn học chưa có mô tả.')}</p>
+          <div class="subjectQuestionCount">Tổng số câu: <b>${getSubjectQuestionCount(s)}</b> câu</div>
         </div>
         <div class="subjectAdminActions">
           <button class="act warn" type="button" onclick="openEditSubjectAdmin('${escJs(s.code)}')">Sửa</button>
@@ -5670,9 +4798,14 @@ ${E(val)}</pre>`;
     if(list) list.innerHTML = '<p class="muted">Đang tải môn học...</p>';
     setBusy(true, 'Đang tải môn...');
     try{
-      const {data, error} = await client.from('subjects').select('*').order('sort_order',{ascending:true}).order('code',{ascending:true});
-      if(error) return alert('Không tải được danh sách môn: ' + error.message);
-      dragSubjectCache = (data || []).filter(s => !(s?.is_active === false || s?.is_active === 0 || s?.is_active === '0')).slice();
+      const [subjectRes, questionCounts] = await Promise.all([
+        client.from('subjects').select('*').order('sort_order',{ascending:true}).order('code',{ascending:true}),
+        loadQuestionCountsForSubjects()
+      ]);
+      if(subjectRes.error) return alert('Không tải được danh sách môn: ' + subjectRes.error.message);
+      dragSubjectCache = (subjectRes.data || [])
+        .filter(isActiveSubjectRow)
+        .map(s => ({...s, __question_count: questionCounts[String(s.code || '')] || 0}));
       renderSubjectAdminList();
     }finally{
       setBusy(false);
@@ -6053,3 +5186,806 @@ ${E(val)}</pre>`;
   });
 })();
 // ===== END_COPILOT_ADMIN_RELOAD_FIX_20260630 =====
+
+
+// ===== COPILOT_HIDE_USERS_FROM_EDITOR_20260630 =====
+// Editor không được xem tab Người dùng. Chỉ admin mới thấy và mở được.
+(function(){
+  if(window.__COPILOT_HIDE_USERS_FROM_EDITOR_20260630) return;
+  window.__COPILOT_HIDE_USERS_FROM_EDITOR_20260630 = true;
+
+  function hideUsersForEditor(){
+    try{
+      const allow = typeof isAdmin === 'function' && isAdmin();
+      document.querySelectorAll('.nav[data-page="users"], .nav[data-page="approvals"]').forEach(el => {
+        el.classList.toggle('hidden', !allow);
+        el.style.display = allow ? '' : 'none';
+      });
+      if(!allow && document.getElementById('users')?.classList.contains('active')){
+        setPage('overview', 'Tổng quan');
+      }
+      if(!allow && document.getElementById('approvals')?.classList.contains('active')){
+        setPage('overview', 'Tổng quan');
+      }
+    }catch(e){}
+  }
+
+  const oldSetPageHideUsers = window.setPage || setPage;
+  setPage = window.setPage = function(id, n){
+    if((id === 'users' || id === 'approvals') && !(typeof isAdmin === 'function' && isAdmin())){
+      alert('Editor không được xem Người dùng.');
+      id = 'overview';
+      n = 'Tổng quan';
+    }
+    const res = oldSetPageHideUsers.apply(this, arguments.length ? [id, n] : arguments);
+    setTimeout(hideUsersForEditor, 0);
+    return res;
+  };
+
+  const oldRenderUsersHideEditor = window.renderUsers || renderUsers;
+  renderUsers = window.renderUsers = function(){
+    if(!(typeof isAdmin === 'function' && isAdmin())){
+      const el = document.getElementById('userList');
+      if(el) el.innerHTML = 'Editor không được xem danh sách người dùng.';
+      return;
+    }
+    return oldRenderUsersHideEditor.apply(this, arguments);
+  };
+
+  document.addEventListener('DOMContentLoaded', () => setTimeout(hideUsersForEditor, 300));
+  setTimeout(hideUsersForEditor, 800);
+})();
+// ===== END_COPILOT_HIDE_USERS_FROM_EDITOR_20260630 =====
+
+
+// ===== COPILOT_POLISH_SUBJECT_ADMIN_LAYOUT_20260630 =====
+// Làm lại layout Quản lý môn học: thẻ rộng hơn, số câu không bị đè, bố cục gọn và đẹp hơn.
+(function(){
+  if(window.__COPILOT_POLISH_SUBJECT_ADMIN_LAYOUT_20260630) return;
+  window.__COPILOT_POLISH_SUBJECT_ADMIN_LAYOUT_20260630 = true;
+
+  function injectPolishedSubjectAdminLayout(){
+    if(document.getElementById('copilotPolishSubjectAdminLayout20260630')) return;
+    const style = document.createElement('style');
+    style.id = 'copilotPolishSubjectAdminLayout20260630';
+    style.textContent = `
+      #subjectsAdmin.page.active{
+        display:flex!important;
+        flex-direction:column!important;
+        height:100%!important;
+        min-height:0!important;
+      }
+      #subjectsAdmin .subjectAdminPanel{
+        height:100%!important;
+        min-height:0!important;
+        display:flex!important;
+        flex-direction:column!important;
+        padding:20px!important;
+        border-radius:24px!important;
+        background:
+          radial-gradient(circle at 78% 12%, rgba(200,169,110,.09), transparent 30%),
+          linear-gradient(145deg,rgba(245,240,232,.065),rgba(255,255,255,.018))!important;
+      }
+      #subjectsAdmin .subjectAdminHead{
+        flex:0 0 auto!important;
+        display:flex!important;
+        align-items:center!important;
+        justify-content:space-between!important;
+        gap:18px!important;
+        margin:0 0 14px!important;
+        padding:0 0 16px!important;
+        border-bottom:1px solid rgba(200,169,110,.16)!important;
+      }
+      #subjectsAdmin .subjectAdminHead h3{
+        margin:0 0 6px!important;
+        font-size:1.18rem!important;
+        color:var(--gold2)!important;
+      }
+      #subjectsAdmin .subjectAdminHead .muted{
+        margin:0!important;
+        color:rgba(245,240,232,.68)!important;
+        line-height:1.45!important;
+      }
+      #subjectsAdmin .subjectAdminHead .act.ok{
+        min-width:124px!important;
+        height:44px!important;
+        padding:0 18px!important;
+        border-radius:999px!important;
+        background:linear-gradient(135deg,rgba(114,197,140,.22),rgba(114,197,140,.12))!important;
+        color:var(--ok)!important;
+        border-color:rgba(114,197,140,.30)!important;
+      }
+      #subjectsAdmin .subjectAdminList{
+        flex:1 1 auto!important;
+        min-height:0!important;
+        overflow:auto!important;
+        display:grid!important;
+        gap:12px!important;
+        padding:2px 10px 4px 0!important;
+        align-content:start!important;
+      }
+      #subjectsAdmin .subjectOrderHint{
+        position:sticky!important;
+        top:0!important;
+        z-index:5!important;
+        margin:0 0 4px!important;
+        padding:11px 14px!important;
+        border:1px solid rgba(200,169,110,.16)!important;
+        border-radius:16px!important;
+        background:linear-gradient(180deg,rgba(24,17,13,.98),rgba(17,12,10,.92))!important;
+        color:rgba(245,240,232,.72)!important;
+        font-size:.88rem!important;
+        font-weight:750!important;
+        box-shadow:0 10px 24px rgba(0,0,0,.20)!important;
+      }
+      #subjectsAdmin .subjectOrderHint b{
+        color:var(--gold2)!important;
+      }
+      #subjectsAdmin .subjectAdminItem{
+        min-height:98px!important;
+        padding:16px 18px!important;
+        border-radius:22px!important;
+        display:grid!important;
+        grid-template-columns:42px 112px minmax(0,1fr) auto!important;
+        gap:16px!important;
+        align-items:center!important;
+        background:
+          radial-gradient(circle at 92% 50%,rgba(232,212,168,.08),transparent 30%),
+          linear-gradient(145deg,rgba(245,240,232,.072),rgba(255,255,255,.022))!important;
+        border:1px solid rgba(200,169,110,.22)!important;
+        box-shadow:0 14px 36px rgba(0,0,0,.24)!important;
+        transform:none!important;
+      }
+      #subjectsAdmin .subjectAdminItem:hover{
+        border-color:rgba(232,212,168,.38)!important;
+        background:
+          radial-gradient(circle at 92% 50%,rgba(232,212,168,.12),transparent 32%),
+          linear-gradient(145deg,rgba(245,240,232,.092),rgba(255,255,255,.03))!important;
+        box-shadow:0 18px 42px rgba(0,0,0,.28),0 0 26px rgba(232,212,168,.08)!important;
+      }
+      #subjectsAdmin .subjectDragHandle{
+        width:38px!important;
+        height:38px!important;
+        border-radius:13px!important;
+        font-size:1.15rem!important;
+        background:rgba(255,255,255,.045)!important;
+        border-color:rgba(232,212,168,.20)!important;
+      }
+      #subjectsAdmin .subjectAdminCode{
+        min-width:104px!important;
+        max-width:112px!important;
+        height:36px!important;
+        padding:0 12px!important;
+        border-radius:999px!important;
+        font-size:.86rem!important;
+        letter-spacing:.03em!important;
+        background:rgba(200,169,110,.115)!important;
+        border-color:rgba(232,212,168,.25)!important;
+        color:var(--gold2)!important;
+      }
+      #subjectsAdmin .subjectAdminInfo{
+        min-width:0!important;
+        display:flex!important;
+        flex-direction:column!important;
+        gap:5px!important;
+        align-self:center!important;
+      }
+      #subjectsAdmin .subjectAdminInfo b{
+        display:block!important;
+        font-size:1.03rem!important;
+        line-height:1.22!important;
+        color:#fff!important;
+        font-weight:900!important;
+        white-space:nowrap!important;
+        overflow:hidden!important;
+        text-overflow:ellipsis!important;
+      }
+      #subjectsAdmin .subjectAdminInfo p{
+        display:block!important;
+        margin:0!important;
+        color:rgba(245,240,232,.62)!important;
+        font-size:.88rem!important;
+        line-height:1.35!important;
+        white-space:nowrap!important;
+        overflow:hidden!important;
+        text-overflow:ellipsis!important;
+        -webkit-line-clamp:unset!important;
+        -webkit-box-orient:unset!important;
+      }
+      #subjectsAdmin .subjectQuestionCount{
+        margin:4px 0 0!important;
+        position:static!important;
+        display:inline-flex!important;
+        align-self:flex-start!important;
+        width:max-content!important;
+        max-width:100%!important;
+        align-items:center!important;
+        gap:6px!important;
+        min-height:30px!important;
+        padding:5px 12px!important;
+        border-radius:999px!important;
+        background:linear-gradient(135deg,rgba(114,197,140,.16),rgba(114,197,140,.07))!important;
+        border:1px solid rgba(114,197,140,.30)!important;
+        color:rgba(245,240,232,.82)!important;
+        font-size:.84rem!important;
+        font-weight:900!important;
+        box-shadow:none!important;
+      }
+      #subjectsAdmin .subjectQuestionCount b{
+        color:var(--ok)!important;
+        font-size:.92rem!important;
+        font-weight:950!important;
+      }
+      #subjectsAdmin .subjectAdminActions{
+        display:flex!important;
+        align-items:center!important;
+        justify-content:flex-end!important;
+        gap:9px!important;
+        flex-wrap:nowrap!important;
+        min-width:250px!important;
+      }
+      #subjectsAdmin .subjectAdminActions .act{
+        min-height:38px!important;
+        padding:0 16px!important;
+        border-radius:999px!important;
+        font-size:.88rem!important;
+        font-weight:950!important;
+      }
+      #subjectsAdmin .subjectNewToggle{
+        min-width:86px!important;
+        border-color:rgba(232,212,168,.26)!important;
+      }
+      #subjectsAdmin .subjectNewToggle.isOn{
+        background:linear-gradient(135deg,#ffe7a8,#e8c46e)!important;
+        color:#111!important;
+        border-color:transparent!important;
+        box-shadow:0 12px 26px rgba(232,212,168,.16)!important;
+      }
+      @media (max-width:980px){
+        #subjectsAdmin .subjectAdminItem{
+          grid-template-columns:40px 100px minmax(0,1fr)!important;
+          gap:12px!important;
+        }
+        #subjectsAdmin .subjectAdminActions{
+          grid-column:3!important;
+          justify-content:flex-start!important;
+          min-width:0!important;
+          margin-top:8px!important;
+        }
+      }
+      @media (max-width:680px){
+        #subjectsAdmin .subjectAdminPanel{padding:14px!important;}
+        #subjectsAdmin .subjectAdminHead{align-items:flex-start!important;flex-direction:column!important;}
+        #subjectsAdmin .subjectAdminHead .act.ok{width:100%!important;}
+        #subjectsAdmin .subjectAdminItem{
+          grid-template-columns:38px minmax(0,1fr)!important;
+          min-height:0!important;
+          padding:14px!important;
+        }
+        #subjectsAdmin .subjectAdminCode{
+          grid-column:2!important;
+          grid-row:1!important;
+          justify-self:start!important;
+          min-width:92px!important;
+        }
+        #subjectsAdmin .subjectAdminInfo{grid-column:1 / -1!important;margin-top:4px!important;}
+        #subjectsAdmin .subjectAdminActions{
+          grid-column:1 / -1!important;
+          width:100%!important;
+          min-width:0!important;
+          display:grid!important;
+          grid-template-columns:repeat(3,minmax(0,1fr))!important;
+        }
+        #subjectsAdmin .subjectAdminActions .act{padding:0 10px!important;}
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  document.addEventListener('DOMContentLoaded', () => setTimeout(injectPolishedSubjectAdminLayout, 0));
+  setTimeout(injectPolishedSubjectAdminLayout, 0);
+  setTimeout(injectPolishedSubjectAdminLayout, 800);
+})();
+// ===== END_COPILOT_POLISH_SUBJECT_ADMIN_LAYOUT_20260630 =====
+
+
+// ===== COPILOT_SUBJECT_ADMIN_NO_OVERLAP_RUNTIME_20260630 =====
+// Giao diện Quản lý môn học: chặn CSS cũ làm chồng chữ/số câu.
+(function(){
+  if(window.__COPILOT_SUBJECT_ADMIN_NO_OVERLAP_RUNTIME_20260630) return;
+  window.__COPILOT_SUBJECT_ADMIN_NO_OVERLAP_RUNTIME_20260630 = true;
+
+  function injectFinalSubjectAdminPolish(){
+    let style = document.getElementById('subjectAdminNoOverlapFinalStyle');
+    if(!style){
+      style = document.createElement('style');
+      style.id = 'subjectAdminNoOverlapFinalStyle';
+      document.head.appendChild(style);
+    }
+    style.textContent = `
+      body #subjectsAdmin .subjectAdminPanel{padding:18px!important;border-radius:24px!important;}
+      body #subjectsAdmin .subjectAdminList{gap:10px!important;padding-right:12px!important;overflow:auto!important;}
+      body #subjectsAdmin .subjectAdminItem{
+        display:grid!important;grid-template-columns:40px 112px minmax(0,1fr) auto!important;gap:12px!important;
+        align-items:center!important;min-height:88px!important;height:auto!important;padding:12px 15px!important;
+        border-radius:18px!important;overflow:visible!important;transform:none!important;
+      }
+      body #subjectsAdmin .subjectDragHandle,
+      body #subjectsAdmin .subjectAdminItem > :first-child:not(.subjectAdminCode):not(.subjectAdminInfo):not(.subjectAdminActions){
+        width:34px!important;height:34px!important;min-width:34px!important;border-radius:12px!important;display:grid!important;place-items:center!important;align-self:center!important;
+      }
+      body #subjectsAdmin .subjectAdminCode{min-width:104px!important;max-width:112px!important;height:38px!important;padding:0 12px!important;font-size:.84rem!important;align-self:center!important;}
+      body #subjectsAdmin .subjectAdminInfo{display:grid!important;grid-template-columns:1fr!important;gap:4px!important;min-width:0!important;overflow:visible!important;align-content:center!important;}
+      body #subjectsAdmin .subjectAdminInfo b{display:block!important;margin:0!important;font-size:1.02rem!important;line-height:1.22!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;}
+      body #subjectsAdmin .subjectAdminInfo p{display:block!important;margin:0!important;font-size:.88rem!important;line-height:1.32!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;-webkit-line-clamp:unset!important;-webkit-box-orient:unset!important;}
+      body #subjectsAdmin .subjectQuestionCount,
+      body #subjectsAdmin .subjectAdminInfo .subjectQuestionCount{
+        position:static!important;display:inline-flex!important;width:max-content!important;max-width:100%!important;height:auto!important;min-height:28px!important;
+        margin:2px 0 0!important;padding:5px 11px!important;align-items:center!important;gap:6px!important;border-radius:999px!important;
+        background:rgba(114,197,140,.10)!important;border:1px solid rgba(114,197,140,.30)!important;color:rgba(245,240,232,.78)!important;
+        font-size:.80rem!important;font-weight:850!important;line-height:1!important;transform:none!important;inset:auto!important;box-shadow:none!important;
+      }
+      body #subjectsAdmin .subjectQuestionCount b{color:#82e6a3!important;font-size:.86rem!important;line-height:1!important;}
+      body #subjectsAdmin .subjectAdminActions{display:flex!important;align-items:center!important;justify-content:flex-end!important;gap:8px!important;flex-wrap:nowrap!important;min-width:254px!important;max-width:none!important;overflow:visible!important;}
+      body #subjectsAdmin .subjectAdminActions .act,
+      body #subjectsAdmin .subjectAdminActions button{min-height:38px!important;height:38px!important;padding:0 14px!important;border-radius:999px!important;font-size:.86rem!important;line-height:1!important;white-space:nowrap!important;}
+      body #subjectsAdmin .subjectNewToggle{min-width:96px!important;height:38px!important;}
+      body #subjectsAdmin .subjectOrderHint{margin:0 0 10px!important;padding:10px 14px!important;border-radius:16px!important;background:rgba(0,0,0,.18)!important;border:1px solid rgba(200,169,110,.12)!important;}
+      @media (max-width:1100px){
+        body #subjectsAdmin .subjectAdminItem{grid-template-columns:38px 104px minmax(0,1fr)!important;min-height:112px!important;}
+        body #subjectsAdmin .subjectAdminActions{grid-column:2 / -1!important;justify-content:flex-start!important;min-width:0!important;flex-wrap:wrap!important;}
+      }
+      @media (max-width:760px){
+        body #subjectsAdmin .subjectAdminItem{grid-template-columns:38px minmax(0,1fr)!important;min-height:0!important;padding:13px!important;}
+        body #subjectsAdmin .subjectAdminCode{grid-column:2!important;min-width:0!important;max-width:max-content!important;height:34px!important;}
+        body #subjectsAdmin .subjectAdminInfo,body #subjectsAdmin .subjectAdminActions{grid-column:1 / -1!important;}
+        body #subjectsAdmin .subjectAdminActions{display:grid!important;grid-template-columns:1fr 1fr 1fr!important;width:100%!important;}
+        body #subjectsAdmin .subjectAdminActions .act,body #subjectsAdmin .subjectAdminActions button{width:100%!important;min-width:0!important;}
+      }
+    `;
+  }
+
+  function keepStyleLast(){
+    injectFinalSubjectAdminPolish();
+    const style = document.getElementById('subjectAdminNoOverlapFinalStyle');
+    if(style && style.parentNode) document.head.appendChild(style);
+  }
+
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', keepStyleLast);
+  else keepStyleLast();
+  setTimeout(keepStyleLast, 300);
+  setTimeout(keepStyleLast, 1200);
+})();
+// ===== END_COPILOT_SUBJECT_ADMIN_NO_OVERLAP_RUNTIME_20260630 =====
+
+
+// ===== COPILOT_FIX_TRASH_PERMANENT_DELETE_SUBJECT_API_20260630 =====
+// Sửa lỗi không xóa vĩnh viễn môn trong Thùng rác khi dùng Turso API.
+(function(){
+  if(window.__COPILOT_FIX_TRASH_PERMANENT_DELETE_SUBJECT_API_20260630) return;
+  window.__COPILOT_FIX_TRASH_PERMANENT_DELETE_SUBJECT_API_20260630 = true;
+
+  async function adminApi(action, payload){
+    const res = await fetch('/api/admin-action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: user?.id || '',
+        action,
+        payload: payload || {}
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if(!res.ok || data.error) throw new Error(data.error || ('Máy chủ lỗi ' + res.status));
+    return data;
+  }
+
+  const oldPermanentDeleteSubject = window.permanentDeleteSubject;
+  window.permanentDeleteSubject = async function(id){
+    if(!isAdmin()) return alert('Chỉ admin.');
+    if(!confirm('Xóa VĨNH VIỄN môn này?\n\nKhông thể khôi phục sau thao tác này!')) return;
+    setBusy(true, 'Đang xóa vĩnh viễn...');
+    try{
+      if(window.APP_CONFIG?.USE_TURSO_API){
+        await adminApi('permanent_delete_subject', { subject_id: id });
+        if(typeof loadAll === 'function') await loadAll();
+        if(typeof loadTrash === 'function') await loadTrash();
+        toast('Đã xóa vĩnh viễn môn');
+        return;
+      }
+      if(typeof oldPermanentDeleteSubject === 'function') return await oldPermanentDeleteSubject.apply(this, arguments);
+    }catch(e){
+      alert('Lỗi xóa môn: ' + (e?.message || e));
+    }finally{
+      setBusy(false);
+    }
+  };
+
+  const oldPermanentDeleteQuestion = window.permanentDelete;
+  window.permanentDelete = async function(id){
+    if(!isAdmin()) return alert('Chỉ admin.');
+    if(window.APP_CONFIG?.USE_TURSO_API){
+      if(!confirm('Xóa VĨNH VIỄN câu hỏi này?\n\nKhông thể khôi phục sau thao tác này!')) return;
+      setBusy(true, 'Đang xóa vĩnh viễn...');
+      try{
+        await adminApi('permanent_delete_question', { question_id: id });
+        if(typeof loadTrash === 'function') await loadTrash();
+        toast('Đã xóa vĩnh viễn câu hỏi');
+      }catch(e){
+        alert('Lỗi xóa câu hỏi: ' + (e?.message || e));
+      }finally{
+        setBusy(false);
+      }
+      return;
+    }
+    if(typeof oldPermanentDeleteQuestion === 'function') return oldPermanentDeleteQuestion.apply(this, arguments);
+  };
+})();
+// ===== END_COPILOT_FIX_TRASH_PERMANENT_DELETE_SUBJECT_API_20260630 =====
+
+
+// ===== COPILOT_EDITOR_ACCESS_HIDE_20260630 =====
+// Editor: ẩn các mục không có quyền truy cập và chặn mở trang bị cấm.
+(function(){
+  if(window.__COPILOT_EDITOR_ACCESS_HIDE_20260630) return;
+  window.__COPILOT_EDITOR_ACCESS_HIDE_20260630 = true;
+
+  const ADMIN_ONLY_PAGES = new Set([
+    'approvals',      // Phê duyệt tài khoản
+    'users',          // Người dùng / phân quyền
+    'logs',           // Admin logs
+    'trash',          // Thùng rác
+    'trashBin',
+    'deletedQuestions'
+  ]);
+
+  const EDITOR_ALLOWED_PAGES = new Set([
+    'overview',
+    'requests',       // Yêu cầu sửa
+    'subjectRequests',// Yêu cầu thêm môn
+    'subjectsAdmin',  // Môn học
+    'questions',      // Câu hỏi
+    'history'         // Lịch sử sửa câu
+  ]);
+
+  function roleName(){
+    return String(profile?.role || '').toLowerCase();
+  }
+
+  function canOpenPage(pageId){
+    pageId = String(pageId || 'overview');
+    if(isAdmin()) return true;
+    if(roleName() === 'editor' && !isBlocked(profile)){
+      return EDITOR_ALLOWED_PAGES.has(pageId) && !ADMIN_ONLY_PAGES.has(pageId);
+    }
+    return pageId === 'overview';
+  }
+
+  function isDeniedNav(el){
+    const page = el?.dataset?.page || '';
+    if(!page) return false;
+    return !canOpenPage(page);
+  }
+
+  function hideDeniedMenus(){
+    // Đợi load xong profile rồi mới kiểm tra quyền. Nếu chạy quá sớm sẽ hiểu nhầm là không có quyền và ép về Tổng quan.
+    if(!profile || !profile.role) return;
+    const isEditorOnly = roleName() === 'editor' && !isAdmin();
+    document.body.classList.toggle('role-editor-limited', isEditorOnly);
+
+    document.querySelectorAll('.nav[data-page]').forEach(btn => {
+      const deny = isDeniedNav(btn);
+      btn.classList.toggle('accessHidden', deny);
+      btn.setAttribute('aria-hidden', deny ? 'true' : 'false');
+      if(deny) btn.tabIndex = -1;
+      else btn.removeAttribute('tabindex');
+    });
+
+    // Các nút/hộp chỉ admin mới nên thấy.
+    document.querySelectorAll('[data-page="approvals"], [data-page="users"], [data-page="logs"], [data-page="trash"], #exportBtn').forEach(el => {
+      const deny = !isAdmin();
+      el.classList.toggle('accessHidden', deny);
+      el.setAttribute('aria-hidden', deny ? 'true' : 'false');
+    });
+
+    // Ẩn cả trang nếu không được quyền, để không hiện do nhớ tab cũ trong sessionStorage.
+    document.querySelectorAll('.page').forEach(p => {
+      if(!p.id) return;
+      const deny = !canOpenPage(p.id);
+      p.classList.toggle('accessHiddenPage', deny);
+      if(deny) p.classList.remove('active');
+    });
+
+    const current = sessionStorage.getItem('admin_current_page') || document.querySelector('.page.active')?.id || 'overview';
+    if(!canOpenPage(current)){
+      try{
+        sessionStorage.setItem('admin_current_page', 'overview');
+        sessionStorage.setItem('admin_current_page_name', 'Tổng quan');
+      }catch(e){}
+      if(typeof setPage === 'function') setPage('overview', 'Tổng quan');
+    }
+  }
+
+  // Chặn click trước khi vào handler cũ.
+  document.addEventListener('click', function(e){
+    const nav = e.target.closest?.('.nav[data-page]');
+    if(!nav) return;
+    const page = nav.dataset.page || '';
+    if(!canOpenPage(page)){
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      toast('Tài khoản editor không có quyền vào mục này');
+      hideDeniedMenus();
+      return false;
+    }
+  }, true);
+
+  // Bọc setPage để chặn mở bằng sessionStorage hoặc gọi hàm trực tiếp.
+  const oldSetPage = typeof setPage === 'function' ? setPage : null;
+  if(oldSetPage && !oldSetPage.__editorAccessGuarded){
+    const guardedSetPage = function(id, name){
+      if(!canOpenPage(id)){
+        id = 'overview';
+        name = 'Tổng quan';
+      }
+      const r = oldSetPage.call(this, id, name);
+      setTimeout(hideDeniedMenus, 0);
+      return r;
+    };
+    guardedSetPage.__editorAccessGuarded = true;
+    setPage = guardedSetPage;
+    window.setPage = guardedSetPage;
+  }
+
+  // Sau khi load profile/load all thì áp lại quyền hiển thị.
+  const oldLoadProfile = typeof loadProfile === 'function' ? loadProfile : null;
+  if(oldLoadProfile && !oldLoadProfile.__editorAccessPatched){
+    const patchedLoadProfile = async function(){
+      const r = await oldLoadProfile.apply(this, arguments);
+      hideDeniedMenus();
+      setTimeout(hideDeniedMenus, 200);
+      return r;
+    };
+    patchedLoadProfile.__editorAccessPatched = true;
+    loadProfile = patchedLoadProfile;
+    window.loadProfile = patchedLoadProfile;
+  }
+
+  const oldLoadAll = typeof loadAll === 'function' ? loadAll : null;
+  if(oldLoadAll && !oldLoadAll.__editorAccessPatched){
+    const patchedLoadAll = async function(){
+      const r = await oldLoadAll.apply(this, arguments);
+      hideDeniedMenus();
+      setTimeout(hideDeniedMenus, 200);
+      return r;
+    };
+    patchedLoadAll.__editorAccessPatched = true;
+    loadAll = patchedLoadAll;
+    window.loadAll = patchedLoadAll;
+  }
+
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', hideDeniedMenus);
+  else hideDeniedMenus();
+  setTimeout(hideDeniedMenus, 300);
+  setTimeout(hideDeniedMenus, 1200);
+  setInterval(hideDeniedMenus, 2500);
+})();
+// ===== END_COPILOT_EDITOR_ACCESS_HIDE_20260630 =====
+
+
+// ===== COPILOT_KEEP_ADMIN_TAB_AFTER_RESET_20260630 =====
+// Giữ đúng tab đang mở sau khi reset/F5 trang.
+(function(){
+  if(window.__COPILOT_KEEP_ADMIN_TAB_AFTER_RESET_20260630) return;
+  window.__COPILOT_KEEP_ADMIN_TAB_AFTER_RESET_20260630 = true;
+
+  const PAGE_KEY = 'admin_current_page';
+  const PAGE_NAME_KEY = 'admin_current_page_name';
+
+  function saveAdminPage(id, name){
+    if(!id) return;
+    try{
+      sessionStorage.setItem(PAGE_KEY, id);
+      localStorage.setItem(PAGE_KEY, id);
+      if(name){
+        sessionStorage.setItem(PAGE_NAME_KEY, name);
+        localStorage.setItem(PAGE_NAME_KEY, name);
+      }
+    }catch(e){}
+  }
+
+  function getSavedAdminPage(){
+    try{
+      return {
+        id: sessionStorage.getItem(PAGE_KEY) || localStorage.getItem(PAGE_KEY) || 'overview',
+        name: sessionStorage.getItem(PAGE_NAME_KEY) || localStorage.getItem(PAGE_NAME_KEY) || ''
+      };
+    }catch(e){ return { id:'overview', name:'' }; }
+  }
+
+  const oldSetPageKeepTab = typeof setPage === 'function' ? setPage : null;
+  if(oldSetPageKeepTab && !oldSetPageKeepTab.__keepTabAfterReset){
+    const patchedSetPage = function(id, name){
+      const nav = document.querySelector('.nav[data-page="' + id + '"]');
+      const title = name || nav?.textContent?.trim() || id || 'Tổng quan';
+      const out = oldSetPageKeepTab.call(this, id, title);
+      saveAdminPage(id, title);
+      return out;
+    };
+    patchedSetPage.__keepTabAfterReset = true;
+    setPage = window.setPage = patchedSetPage;
+  }
+
+  document.addEventListener('click', function(e){
+    const nav = e.target.closest?.('.nav[data-page]');
+    if(nav) saveAdminPage(nav.dataset.page, nav.textContent.trim());
+  }, true);
+
+  function restoreSavedAdminPage(){
+    if(!user || !profile || !profile.role) return;
+    const saved = getSavedAdminPage();
+    if(!saved.id || saved.id === 'overview') return;
+    const nav = document.querySelector('.nav[data-page="' + saved.id + '"]');
+    const page = document.getElementById(saved.id);
+    if(!nav || !page || typeof setPage !== 'function') return;
+    setPage(saved.id, saved.name || nav.textContent.trim());
+    if(saved.id === 'approvals' && typeof window.loadRegistrationMode === 'function') setTimeout(window.loadRegistrationMode, 50);
+    if(saved.id === 'subjectsAdmin' && typeof window.loadSubjectsAdmin === 'function') setTimeout(window.loadSubjectsAdmin, 50);
+    if(saved.id === 'trash' && typeof window.loadTrash === 'function') setTimeout(window.loadTrash, 50);
+    if(saved.id === 'subjectRequests' && typeof window.loadSubjectRequests === 'function') setTimeout(window.loadSubjectRequests, 50);
+  }
+
+  // Chạy nhiều lần vì init/loadProfile/loadAll là async.
+  [600, 1200, 2200, 3500].forEach(ms => setTimeout(restoreSavedAdminPage, ms));
+})();
+// ===== END_COPILOT_KEEP_ADMIN_TAB_AFTER_RESET_20260630 =====
+
+
+// ===== COPILOT_ADMIN_REG_MODE_AND_PAGE_RESTORE_FIX_20260630 =====
+// Fix: đổi cổng đăng ký sang MỞ không bị F5 đọc lại cache cũ; F5 giữ đúng tab đang mở.
+(function(){
+  if(window.__COPILOT_ADMIN_REG_MODE_AND_PAGE_RESTORE_FIX_20260630) return;
+  window.__COPILOT_ADMIN_REG_MODE_AND_PAGE_RESTORE_FIX_20260630 = true;
+
+  const PAGE_KEY = 'admin_current_page';
+  const PAGE_NAME_KEY = 'admin_current_page_name';
+  const MODE_KEY = 'admin_registration_mode_last_v1';
+
+  function normalizeMode(v){
+    if(v && typeof v === 'object' && 'value' in v) v = v.value;
+    if(typeof v !== 'string') v = String(v || 'approval');
+    try{
+      const parsed = JSON.parse(v);
+      if(typeof parsed === 'string') v = parsed;
+    }catch(e){}
+    v = String(v || 'approval').replace(/^"+|"+$/g, '').trim();
+    return ['open','approval','closed'].includes(v) ? v : 'approval';
+  }
+
+  function clearSoftCache(kind){
+    try{
+      if(typeof client?.clearCache === 'function') client.clearCache();
+      if(typeof window.clearLearningHubSupabaseCache === 'function') window.clearLearningHubSupabaseCache(kind || 'site_settings');
+      Object.keys(sessionStorage).forEach(function(k){
+        const s = String(k);
+        if(s.includes('site_settings') || s.includes('registration_mode') || s.startsWith('admin_f5_micro_cache:') || s.startsWith('lh_f5_cache:')){
+          sessionStorage.removeItem(k);
+        }
+      });
+    }catch(e){}
+  }
+
+  function paintRegistrationMode(mode){
+    mode = normalizeMode(mode);
+    const status = document.getElementById('registrationGateStatus');
+    const openBtn = document.getElementById('regGateOpen');
+    const approvalBtn = document.getElementById('regGateApproval');
+    const closedBtn = document.getElementById('regGateClosed');
+    if(status){
+      if(mode === 'open') status.innerHTML = '<span style="color:#66bb6a;font-weight:900">MỞ</span> — Ai đăng ký cũng vào được ngay, không cần duyệt';
+      else if(mode === 'closed') status.innerHTML = '<span style="color:#ef5350;font-weight:900">ĐÓNG</span> — Không ai đăng ký mới được';
+      else status.innerHTML = '<span style="color:#ffc107;font-weight:900">CẦN DUYỆT</span> — User mới phải chờ admin phê duyệt';
+    }
+    if(openBtn) openBtn.classList.toggle('active', mode === 'open');
+    if(approvalBtn) approvalBtn.classList.toggle('active', mode === 'approval');
+    if(closedBtn) closedBtn.classList.toggle('active', mode === 'closed');
+  }
+
+  window.loadRegistrationMode = async function(){
+    try{
+      if(!client) return;
+      // Select thêm updated_at để tránh trùng URL cache cũ select=value.
+      const res = await client.from('site_settings')
+        .select('key,value,updated_at')
+        .eq('key','registration_mode')
+        .maybeSingle();
+      if(res.error) throw res.error;
+      const mode = normalizeMode(res.data?.value || localStorage.getItem(MODE_KEY) || 'approval');
+      localStorage.setItem(MODE_KEY, mode);
+      paintRegistrationMode(mode);
+      return mode;
+    }catch(e){
+      console.warn('[registration_mode reload fix]', e);
+      const mode = normalizeMode(localStorage.getItem(MODE_KEY) || 'approval');
+      paintRegistrationMode(mode);
+      return mode;
+    }
+  };
+
+  window.setRegistrationMode = async function(mode){
+    if(!isAdmin()) return alert('Chỉ admin.');
+    mode = normalizeMode(mode);
+    const label = {open:'MỞ — ai cũng vào được', approval:'CẦN DUYỆT — user mới phải chờ', closed:'ĐÓNG — chặn đăng ký mới'}[mode] || mode;
+    if(!confirm('Chuyển cổng đăng ký sang: ' + label + '?')) return;
+    setBusy(true, 'Đang cập nhật...');
+    try{
+      clearSoftCache('site_settings');
+      const res = await client.from('site_settings').upsert({
+        key: 'registration_mode',
+        value: mode,
+        updated_at: new Date().toISOString(),
+        updated_by: user?.id || null
+      }, { onConflict: 'key' }).select('key,value,updated_at').single();
+      if(res.error) return alert('Lỗi: ' + res.error.message);
+      localStorage.setItem(MODE_KEY, mode);
+      clearSoftCache('site_settings');
+      paintRegistrationMode(mode);
+      try{ await logAction('set_registration_mode', 'site_settings', 'registration_mode', { mode }); }catch(e){}
+      toast('Đã chuyển cổng đăng ký: ' + mode);
+    }finally{
+      setBusy(false);
+    }
+  };
+
+  const oldSetPage = typeof setPage === 'function' ? setPage : null;
+  if(oldSetPage && !oldSetPage.__copilotPageRestoreFix){
+    const fixedSetPage = function(id, name){
+      oldSetPage.apply(this, arguments);
+      try{
+        if(id){
+          sessionStorage.setItem(PAGE_KEY, id);
+          sessionStorage.setItem(PAGE_NAME_KEY, name || document.querySelector('.nav[data-page="'+id+'"]')?.textContent?.trim() || id);
+          localStorage.setItem(PAGE_KEY, id);
+          localStorage.setItem(PAGE_NAME_KEY, name || document.querySelector('.nav[data-page="'+id+'"]')?.textContent?.trim() || id);
+        }
+      }catch(e){}
+    };
+    fixedSetPage.__copilotPageRestoreFix = true;
+    window.setPage = setPage = fixedSetPage;
+  }
+
+  function restoreSavedPage(beforeId, beforeName){
+    const id = beforeId || sessionStorage.getItem(PAGE_KEY) || localStorage.getItem(PAGE_KEY) || '';
+    if(!id || id === 'overview') return;
+    const btn = document.querySelector('.nav[data-page="'+id+'"]');
+    const page = document.getElementById(id);
+    if(!btn || !page) return;
+    const name = beforeName || sessionStorage.getItem(PAGE_NAME_KEY) || localStorage.getItem(PAGE_NAME_KEY) || btn.textContent.trim();
+    if(typeof setPage === 'function') setPage(id, name);
+    if(id === 'subjectsAdmin' && typeof window.loadSubjectsAdmin === 'function') window.loadSubjectsAdmin();
+    if(id === 'approvals' && typeof window.loadRegistrationMode === 'function') window.loadRegistrationMode();
+    if(id === 'trash' && typeof window.loadTrash === 'function') window.loadTrash();
+    if(id === 'subjectRequests' && typeof window.loadSubjectRequests === 'function') window.loadSubjectRequests();
+  }
+
+  const oldLoadAll = typeof loadAll === 'function' ? loadAll : null;
+  if(oldLoadAll && !oldLoadAll.__copilotPageRestoreFix){
+    const fixedLoadAll = async function(){
+      const keepId = sessionStorage.getItem(PAGE_KEY) || localStorage.getItem(PAGE_KEY) || '';
+      const keepName = sessionStorage.getItem(PAGE_NAME_KEY) || localStorage.getItem(PAGE_NAME_KEY) || '';
+      const out = await oldLoadAll.apply(this, arguments);
+      setTimeout(function(){ restoreSavedPage(keepId, keepName); }, 80);
+      return out;
+    };
+    fixedLoadAll.__copilotPageRestoreFix = true;
+    window.loadAll = loadAll = fixedLoadAll;
+  }
+
+  document.addEventListener('DOMContentLoaded', function(){
+    setTimeout(function(){ restoreSavedPage(); }, 700);
+    setTimeout(function(){ restoreSavedPage(); }, 1600);
+    setTimeout(function(){ if(typeof window.loadRegistrationMode === 'function') window.loadRegistrationMode(); }, 900);
+  });
+})();
+// ===== END COPILOT_ADMIN_REG_MODE_AND_PAGE_RESTORE_FIX_20260630 =====

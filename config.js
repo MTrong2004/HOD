@@ -1,6 +1,7 @@
 // ===== SUPABASE CONFIG =====
 // Sau này đổi Supabase thì chỉ sửa file này.
 window.APP_CONFIG = {
+  USE_TURSO_API: true,
   SUPABASE_URL: 'https://kxyukiwhhorvxgxxxmfq.supabase.co',
   SUPABASE_ANON_KEY: 'sb_publishable_yOIciG2SCPyu8mP5KWE5RQ_qIgCd4-f',
   get LOGIN_NOTIFY_ENDPOINT() {

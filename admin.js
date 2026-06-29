@@ -170,9 +170,308 @@ function hideProgress() {
   if(el) el.classList.add('hidden');
 }
 
+function createTursoClientMock(supaClient) {
+  let localCache = null;
+  let cachePromise = null;
+
+  async function fetchDashboardData() {
+    if (cachePromise) return cachePromise;
+    cachePromise = (async () => {
+      try {
+        const res = await fetch('/api/admin-dashboard');
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        localCache = data;
+        return data;
+      } catch (err) {
+        console.error('[fetchDashboardData Error]', err);
+        throw err;
+      } finally {
+        cachePromise = null;
+      }
+    })();
+    return cachePromise;
+  }
+
+  function getUserId() {
+    return user?.id || supaClient.auth.getUser()?.id || '';
+  }
+
+  const builder = (tableName) => {
+    let queryType = '';
+    let selectCols = '';
+    let filters = [];
+    let payload = null;
+    let orderCol = '';
+    let orderOpts = {};
+    let limitVal = null;
+
+    const chain = {
+      select: (cols) => {
+        queryType = 'select';
+        selectCols = cols || '*';
+        return chain;
+      },
+      eq: (col, val) => {
+        filters.push({ col, val });
+        return chain;
+      },
+      neq: (col, val) => {
+        filters.push({ col, val, op: 'neq' });
+        return chain;
+      },
+      in: (col, vals) => {
+        filters.push({ col, val: vals, op: 'in' });
+        return chain;
+      },
+      or: (expr) => {
+        filters.push({ col: 'or', val: expr, op: 'or' });
+        return chain;
+      },
+      order: (col, opts) => {
+        orderCol = col;
+        orderOpts = opts || {};
+        return chain;
+      },
+      limit: (val) => {
+        limitVal = val;
+        return chain;
+      },
+      insert: (data) => {
+        queryType = 'insert';
+        payload = data;
+        return chain;
+      },
+      update: (data) => {
+        queryType = 'update';
+        payload = data;
+        return chain;
+      },
+      upsert: (data) => {
+        queryType = 'upsert';
+        payload = data;
+        return chain;
+      },
+      delete: () => {
+        queryType = 'delete';
+        return chain;
+      },
+      single: () => {
+        return chain;
+      },
+      maybeSingle: () => {
+        return chain;
+      },
+      then: async (onfulfilled, onrejected) => {
+        try {
+          const resData = await executeQuery();
+          return onfulfilled({ data: resData, error: null });
+        } catch (err) {
+          console.error('[Mock Execution Error]', err);
+          if (onrejected) return onrejected({ data: null, error: err });
+          return { data: null, error: err };
+        }
+      }
+    };
+
+    async function executeQuery() {
+      if (queryType === 'select') {
+        if (!localCache) {
+          await fetchDashboardData();
+        }
+        
+        let list = [];
+        if (tableName === 'profiles') list = localCache.profiles || [];
+        else if (tableName === 'questions') list = localCache.questions || [];
+        else if (tableName === 'edit_requests') list = localCache.requests || [];
+        else if (tableName === 'question_history') list = localCache.history || [];
+        else if (tableName === 'admin_logs') list = localCache.logs || [];
+        else if (tableName === 'subjects') list = localCache.subjects || [];
+        else if (tableName === 'subject_requests') list = localCache.subject_requests || [];
+        else if (tableName === 'deleted_questions') list = localCache.deleted_questions || [];
+        else if (tableName === 'deleted_subjects') list = localCache.deleted_subjects || [];
+
+        let filtered = [...list];
+        for (const f of filters) {
+          if (f.op === 'neq') {
+            filtered = filtered.filter(x => x[f.col] !== f.val);
+          } else if (f.op === 'in') {
+            filtered = filtered.filter(x => Array.isArray(f.val) ? f.val.includes(x[f.col]) : false);
+          } else if (f.op === 'or') {
+            const exprs = String(f.val).split(',');
+            filtered = filtered.filter(x => {
+              return exprs.some(exp => {
+                const parts = exp.split('.');
+                const colName = parts[0];
+                const op = parts[1];
+                const target = parts[2];
+                if (op === 'eq') return String(x[colName] || '').toUpperCase() === String(target || '').toUpperCase();
+                if (op === 'like') {
+                  const pattern = String(target || '').replace(/%/g, '').toUpperCase();
+                  return String(x[colName] || '').toUpperCase().startsWith(pattern);
+                }
+                return false;
+              });
+            });
+          } else {
+            filtered = filtered.filter(x => x[f.col] === f.val);
+          }
+        }
+
+        if (orderCol) {
+          const asc = orderOpts.ascending !== false;
+          filtered.sort((a, b) => {
+            const va = a[orderCol], vb = b[orderCol];
+            if (va < vb) return asc ? -1 : 1;
+            if (va > vb) return asc ? 1 : -1;
+            return 0;
+          });
+        }
+
+        if (limitVal) {
+          filtered = filtered.slice(0, limitVal);
+        }
+
+        if (tableName === 'site_settings') {
+          const keyFilter = filters.find(f => f.col === 'key');
+          if (keyFilter) {
+            const val = keyFilter.val;
+            const match = list.find(x => x.key === val);
+            filtered = match ? [match] : [];
+          }
+        }
+
+        return filtered;
+      }
+
+      const idFilter = filters.find(f => f.col === 'id');
+      const idVal = idFilter ? idFilter.val : null;
+      const codeFilter = filters.find(f => f.col === 'code');
+      const codeVal = codeFilter ? codeFilter.val : null;
+
+      let apiAction = '';
+      let apiPayload = {};
+
+      if (queryType === 'update') {
+        if (tableName === 'edit_requests') {
+          if (payload.status === 'approved') {
+            apiAction = 'approve_request';
+            apiPayload = { request_id: idVal };
+          } else if (payload.status === 'rejected') {
+            apiAction = 'reject_request';
+            apiPayload = { request_id: idVal, admin_note: payload.admin_note };
+          }
+        } else if (tableName === 'questions') {
+          if (payload.is_active === false || payload.is_active === 0) {
+            apiAction = 'delete_question';
+            apiPayload = { question_id: idVal };
+          } else if (payload.is_active === true || payload.is_active === 1) {
+            apiAction = 'restore_question';
+            apiPayload = { question_id: idVal };
+          } else {
+            apiAction = 'save_question_direct';
+            apiPayload = { question_id: idVal, new_data: payload, old_data: {} };
+          }
+        } else if (tableName === 'profiles') {
+          if (payload.blocked !== undefined) {
+            apiAction = 'toggle_user_block';
+            apiPayload = { target_user_id: idVal, blocked: payload.blocked };
+          } else if (payload.role !== undefined) {
+            apiAction = 'set_user_role';
+            apiPayload = { target_user_id: idVal, role: payload.role };
+          } else if (payload.approved === true || payload.approved === 1) {
+            apiAction = 'approve_user_registration';
+            apiPayload = { target_user_id: idVal };
+          } else if (payload.approved === false || payload.approved === 0) {
+            apiAction = 'reject_user_registration';
+            apiPayload = { target_user_id: idVal };
+          }
+        } else if (tableName === 'subjects') {
+          if (payload.is_active === false || payload.is_active === 0) {
+            apiAction = 'delete_subject';
+            apiPayload = { subject_id: idVal };
+          } else if (payload.is_active === true || payload.is_active === 1) {
+            apiAction = 'restore_subject';
+            apiPayload = { subject_id: idVal, code: payload.code };
+          } else {
+            apiAction = 'edit_subject';
+            apiPayload = { id: idVal, name: payload.name, description: payload.description, sort_order: payload.sort_order };
+          }
+        } else if (tableName === 'subject_requests') {
+          if (payload.status === 'approved') {
+            apiAction = 'approve_subject_request';
+            apiPayload = { request_id: idVal };
+          } else if (payload.status === 'rejected') {
+            apiAction = 'reject_subject_request';
+            apiPayload = { request_id: idVal, admin_note: payload.admin_note };
+          }
+        }
+      } else if (queryType === 'insert') {
+        if (tableName === 'subjects') {
+          apiAction = 'add_subject';
+          apiPayload = payload;
+        } else if (tableName === 'questions') {
+          apiAction = 'add_question';
+          apiPayload = { question_data: payload };
+        } else if (tableName === 'subject_requests') {
+          apiAction = 'add_subject_request';
+          apiPayload = payload;
+        } else if (tableName === 'deleted_questions') {
+          return payload;
+        } else if (tableName === 'admin_logs') {
+          return payload;
+        }
+      } else if (queryType === 'delete') {
+        if (tableName === 'profiles') {
+          apiAction = 'reject_user_registration';
+          apiPayload = { target_user_id: idVal };
+        } else if (tableName === 'questions') {
+          apiAction = 'permanent_delete_question';
+          apiPayload = { question_id: idVal };
+        }
+      } else if (queryType === 'upsert' && tableName === 'site_settings') {
+        apiAction = 'set_registration_mode';
+        apiPayload = { mode: payload.value };
+      }
+
+      if (!apiAction) {
+        return { ok: true };
+      }
+
+      const res = await fetch('/api/admin-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: getUserId(),
+          action: apiAction,
+          payload: apiPayload
+        })
+      });
+      
+      const r = await res.json();
+      if (r.error) throw new Error(r.error);
+      localCache = null;
+      return r;
+    }
+
+    return chain;
+  };
+
+  return {
+    from: builder,
+    auth: supaClient.auth,
+    clearCache: () => { localCache = null; }
+  };
+}
+
 async function init() {
   if (!window.supabase) return alert('Không tải được Supabase');
-  client = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+  const baseClient = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+  if (window.APP_CONFIG?.USE_TURSO_API) {
+    client = createTursoClientMock(baseClient);
+  } else {
+    client = baseClient;
+  }
   bind();
 
   const s = await client.auth.getSession();
@@ -284,6 +583,7 @@ async function safeLoad(name, promise, silent = false) {
 async function loadAll() {
   clearErr();
   setBusy(true);
+  if (client.clearCache) client.clearCache();
   try {
     cache.profiles = await safeLoad('profiles', client.from('profiles').select('*').order('created_at', { ascending: false }));
     cache.questions = await safeLoad('questions', client.from('questions').select('id,num,subject_code,question,options,answer,is_active,updated_at,created_at,has_image,error_risk,error_risk_reason').order('num', { ascending: true }));

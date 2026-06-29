@@ -489,7 +489,47 @@ window.HODSupabase = (() => {
   let activeProfilePromise = null;
   async function loadProfile() {
     if (!client || !currentUser) { currentProfile = null; updateAuthUI(); return null; }
-    if (activeProfilePromise) return activeProfilePromise;
+    
+    if (window.APP_CONFIG?.USE_TURSO_API) {
+      if (activeProfilePromise) return activeProfilePromise;
+      activeProfilePromise = (async () => {
+        try {
+          const res = await fetch('/api/profile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: currentUser.id,
+              email: currentUser.email,
+              full_name: currentUser.user_metadata?.full_name || '',
+              avatar_url: currentUser.user_metadata?.avatar_url || ''
+            })
+          });
+          const data = await res.json();
+          if (data.error) throw new Error(data.error);
+          currentProfile = data.data;
+          
+          if (currentProfile?.blocked || currentProfile?.is_blocked || currentProfile?.status === 'blocked') {
+            alert('Tài khoản của bạn đã bị khóa.');
+            await signOut();
+            return null;
+          }
+          await notifyLoginToDiscordOnce();
+          if (currentProfile?.approved === 0 || currentProfile?.approved === false) {
+            showPendingApproval();
+            return null;
+          }
+          hidePendingApproval();
+          updateAuthUI();
+          return currentProfile;
+        } catch (e) {
+          console.error('[loadProfile API Error]', e);
+          return null;
+        } finally {
+          activeProfilePromise = null;
+        }
+      })();
+      return activeProfilePromise;
+    }
 
     activeProfilePromise = (async () => {
       try {
@@ -580,6 +620,32 @@ window.HODSupabase = (() => {
 
   async function loadQuestionsFromSupabase() {
     if (!client || !currentUser) return false;
+
+    if (window.APP_CONFIG?.USE_TURSO_API) {
+      try {
+        const activeSubject = localStorage.getItem('learninghub_subject_code_merged_v1') || '';
+        const res = await fetch(`/api/questions?subject_code=${activeSubject}`);
+        const r = await res.json();
+        if (r.error) throw new Error(r.error);
+        RAW = (r.data || []).map(rowToQuestion);
+        pool = [...RAW];
+        var _asub = localStorage.getItem('learninghub_subject_code_merged_v1') || '';
+        var _sci = _asub ? (+localStorage.getItem('learninghub_progress_' + _asub) || 0) : ci;
+        ci = Math.max(0, Math.min(_sci, pool.length - 1));
+        flipped = false;
+        if ($id('total')) $id('total').textContent = pool.length;
+        renderCard();
+        renderQuiz();
+        renderStudy();
+        notify2('Đã tải câu hỏi từ Turso');
+        return true;
+      } catch (e) {
+        console.error('[loadQuestions API Error]', e);
+        notify2('Không tải được câu hỏi từ Turso.');
+        return false;
+      }
+    }
+
     const activeSubject = localStorage.getItem('learninghub_subject_code_merged_v1') || '';
     let query = client.from('questions').select('id,subject_code,num,question,options,answer,answer_text,is_active,updated_at,has_image,error_risk,error_risk_reason').eq('is_active', true);
     if (activeSubject) query = query.eq('subject_code', activeSubject);
@@ -653,6 +719,34 @@ window.HODSupabase = (() => {
       alert('Câu hỏi hiện đang lấy từ data local. Hãy đăng nhập và tải questions từ Supabase trước khi gửi yêu cầu sửa.');
       return;
     }
+
+    if (window.APP_CONFIG?.USE_TURSO_API) {
+      const payload = {
+        question_id: oldQ.id,
+        question_num: oldQ.num,
+        user_id: currentUser.id,
+        user_email: currentUser.email || currentProfile?.email || '',
+        old_data: questionToRow(oldQ),
+        new_data: questionToRow(newDraft),
+        reason: '',
+        status: 'pending'
+      };
+      try {
+        const res = await fetch('/api/edit-requests', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const r = await res.json();
+        if (r.error) throw new Error(r.error);
+        $id('editModal')?.classList.add('hidden');
+        notify2('Đã gửi yêu cầu sửa, đang chờ admin duyệt');
+      } catch (e) {
+        alert('Gửi yêu cầu sửa thất bại: ' + e.message);
+      }
+      return;
+    }
+
     const payload = {
       question_id: oldQ.id,
       question_num: oldQ.num,
@@ -940,7 +1034,20 @@ return list.map(s => {
   return { ...s, question_count: n };
 });
 }
-async function getSubjects() { const supa = c(); if (!supa || !logged()) return fallbackSubjects(); const { data, error } = await supa.from('subjects').select('*').eq('is_active', true).order('sort_order', { ascending: true }).order('code', { ascending: true }); if (error || !data || !data.length) { console.warn(error || 'No subjects'); showErr('Không tải được danh sách môn học. Đang dùng môn mặc định.'); return fallbackSubjects(); } return await addQuestionCounts(data); }
+async function getSubjects() {
+  if (window.APP_CONFIG?.USE_TURSO_API && logged()) {
+    try {
+      const res = await fetch('/api/subjects');
+      const r = await res.json();
+      if (r.error) throw new Error(r.error);
+      return await addQuestionCounts(r.data || []);
+    } catch (e) {
+      console.error('[getSubjects API Error]', e);
+      showErr('Không tải được danh sách môn học. Đang dùng môn mặc định.');
+      return fallbackSubjects();
+    }
+  }
+  const supa = c(); if (!supa || !logged()) return fallbackSubjects(); const { data, error } = await supa.from('subjects').select('*').eq('is_active', true).order('sort_order', { ascending: true }).order('code', { ascending: true }); if (error || !data || !data.length) { console.warn(error || 'No subjects'); showErr('Không tải được danh sách môn học. Đang dùng môn mặc định.'); return fallbackSubjects(); } return await addQuestionCounts(data); }
   function card(s) {
     const rawCode = String(s.code || '');
     const code = esc2(displayCode(rawCode));
@@ -1012,7 +1119,56 @@ async function getSubjects() { const supa = c(); if (!supa || !logged()) return 
     localStorage.setItem('learninghub_subject_gate_open_v1', 'false');
     gateOn(false);
   }
-  async function loadBySubject(code) { const supa = c(); if (!supa || !logged() || !code) return false; const { data, error } = await supa.from('questions').select('id,subject_code,num,question,options,answer,answer_text,is_active,updated_at,has_image,error_risk,error_risk_reason').eq('is_active', true).eq('subject_code', code).order('num', { ascending: true }); if (error) { console.warn(error); notifyUX('Không tải được dữ liệu môn học.'); return false; } if (!data || !data.length) { RAW = []; pool = []; ci = 0; if ($('idx')) $('idx').textContent = '0'; if ($('total')) $('total').textContent = '0'; try { renderStudy() } catch (e) { } try { renderQuiz() } catch (e) { } notifyUX(`Môn ${code} chưa có dữ liệu.`); return false; } RAW = data.map(r => ({ id: r.id, subject_code: r.subject_code || code, num: r.num, question: r.question, options: r.options || {}, answer: r.answer, answer_text: r.answer_text, images: (typeof cleanImages === 'function' ? cleanImages(r.images || []) : r.images || []), has_image: !!(r.has_image || (r.images || []).length), error_risk: r.error_risk || 'low', error_risk_reason: r.error_risk_reason || '' })); pool = [...RAW]; var _saved = +localStorage.getItem('learninghub_progress_' + code) || 0; ci = Math.max(0, Math.min(_saved, pool.length - 1)); flipped = false; if ($('idx')) $('idx').textContent = String(ci + 1); if ($('total')) $('total').textContent = String(pool.length); updateBrand(code); syncSubjectTexts(); try { renderCard() } catch (e) { } try { renderQuiz() } catch (e) { } try { renderStudy() } catch (e) { } notifyUX(`Đã tải ${label(code)}`); return true; }
+  async function loadBySubject(code) {
+    if (!logged() || !code) return false;
+    if (window.APP_CONFIG?.USE_TURSO_API) {
+      try {
+        const res = await fetch(`/api/questions?subject_code=${code}`);
+        const r = await res.json();
+        if (r.error) throw new Error(r.error);
+        const data = r.data || [];
+        if (!data.length) {
+          RAW = []; pool = []; ci = 0;
+          if ($('idx')) $('idx').textContent = '0';
+          if ($('total')) $('total').textContent = '0';
+          try { renderStudy() } catch (e) { }
+          try { renderQuiz() } catch (e) { }
+          notifyUX(`Môn ${code} chưa có dữ liệu.`);
+          return false;
+        }
+        RAW = data.map(r => ({
+          id: r.id,
+          subject_code: r.subject_code || code,
+          num: r.num,
+          question: r.question,
+          options: r.options || {},
+          answer: r.answer,
+          answer_text: r.answer_text,
+          images: r.images || [],
+          has_image: !!(r.has_image || (r.images || []).length),
+          error_risk: r.error_risk || 'low',
+          error_risk_reason: r.error_risk_reason || ''
+        }));
+        pool = [...RAW];
+        var _saved = +localStorage.getItem('learninghub_progress_' + code) || 0;
+        ci = Math.max(0, Math.min(_saved, pool.length - 1));
+        flipped = false;
+        if ($('idx')) $('idx').textContent = String(ci + 1);
+        if ($('total')) $('total').textContent = String(pool.length);
+        updateBrand(code);
+        syncSubjectTexts();
+        try { renderCard() } catch (e) { }
+        try { renderQuiz() } catch (e) { }
+        try { renderStudy() } catch (e) { }
+        notifyUX(`Đã tải ${label(code)}`);
+        return true;
+      } catch (e) {
+        console.error('[loadBySubject API Error]', e);
+        notifyUX('Không tải được dữ liệu môn học.');
+        return false;
+      }
+    }
+    const supa = c(); if (!supa || !logged() || !code) return false; const { data, error } = await supa.from('questions').select('id,subject_code,num,question,options,answer,answer_text,is_active,updated_at,has_image,error_risk,error_risk_reason').eq('is_active', true).eq('subject_code', code).order('num', { ascending: true }); if (error) { console.warn(error); notifyUX('Không tải được dữ liệu môn học.'); return false; } if (!data || !data.length) { RAW = []; pool = []; ci = 0; if ($('idx')) $('idx').textContent = '0'; if ($('total')) $('total').textContent = '0'; try { renderStudy() } catch (e) { } try { renderQuiz() } catch (e) { } notifyUX(`Môn ${code} chưa có dữ liệu.`); return false; } RAW = data.map(r => ({ id: r.id, subject_code: r.subject_code || code, num: r.num, question: r.question, options: r.options || {}, answer: r.answer, answer_text: r.answer_text, images: (typeof cleanImages === 'function' ? cleanImages(r.images || []) : r.images || []), has_image: !!(r.has_image || (r.images || []).length), error_risk: r.error_risk || 'low', error_risk_reason: r.error_risk_reason || '' })); pool = [...RAW]; var _saved = +localStorage.getItem('learninghub_progress_' + code) || 0; ci = Math.max(0, Math.min(_saved, pool.length - 1)); flipped = false; if ($('idx')) $('idx').textContent = String(ci + 1); if ($('total')) $('total').textContent = String(pool.length); updateBrand(code); syncSubjectTexts(); try { renderCard() } catch (e) { } try { renderQuiz() } catch (e) { } try { renderStudy() } catch (e) { } notifyUX(`Đã tải ${label(code)}`); return true; }
   async function enterSubject() { if (!pickedCode) return; setSubject(pickedCode); closeGate(); if (typeof window.loadCurrentSubjectOnly === 'function') await window.loadCurrentSubjectOnly(false); else await loadBySubject(pickedCode); }
   async function logoutGate() { closeGate(); setSubject(''); await window.HODSupabase?.signOut?.(); }
   function patchSubmit() { if (window.__hubPatchSubmitMerged || !window.HODSupabase?.submitEditRequest) return; window.__hubPatchSubmitMerged = true; const old = window.HODSupabase.submitEditRequest.bind(window.HODSupabase); window.HODSupabase.submitEditRequest = async function (newDraft, oldQ) { if (oldQ?.id) return old(newDraft, oldQ); const supa = c(); const code = oldQ?.subject_code || subjectCode(); const num = oldQ?.num; if (supa && code && num) { const { data, error } = await supa.from('questions').select('id,subject_code').eq('subject_code', code).eq('num', num).maybeSingle(); if (!error && data) oldQ = { ...oldQ, id: data.id, subject_code: data.subject_code || code }; } return old(newDraft, oldQ); }; }
@@ -4595,7 +4751,7 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
   function redrawImg() { const h = $('editPreviewImageHost'); if (h && window.editDraft) h.innerHTML = editImgs(window.editDraft) }
   function redrawOpt() { const h = $('editPreviewOptions'); if (h && window.editDraft) h.innerHTML = optRows(window.editDraft.options || {}) }
   function openEditPreview() { const c = ((typeof pool !== 'undefined' && pool[ci]) || (typeof RAW !== 'undefined' && RAW[0])); if (!c) return; window.editDraft = clone(c); if (typeof editDraft !== 'undefined') editDraft = window.editDraft; const role = String(window.HODSupabase?.getProfile?.()?.role || '').trim().toLowerCase(); const canDirect = ['admin', 'editor'].includes(role); const reporting = !!(window.HODSupabase?.getUser?.()) && !canDirect; const modal = $('editModal'), box = modal?.querySelector('.box'); if (!modal || !box) return; box.classList.add('editPreviewBox', 'quizEditLayoutV2'); box.innerHTML = `<button class="modalX" type="button" data-edit-preview-close>×</button><div class="v7Head editPreviewHead"><div><span class="v7Label">SỬA CÂU HỎI</span><h2>${esc((reporting ? 'Báo cáo / đề xuất sửa câu ' : 'Sửa câu ') + (c.num || ''))}</h2><p class="v7Hint">Sửa nhanh nội dung quiz, đáp án và ảnh.</p></div><div class="v7TopActions"><button class="btn ${reporting ? 'hidden' : ''}" type="button" data-edit-preview-restore>Khôi phục</button><button class="primary v7SaveTop" type="button" data-edit-preview-save>${canDirect ? 'Lưu trực tiếp' : reporting ? 'Gửi báo cáo' : 'Lưu sửa'}</button></div></div><article class="v7Card editPreviewCard"><div class="editPreviewTwoColumns"><div class="editPreviewLeftCol"><div class="v7Field"><label>Câu hỏi</label><textarea data-edit-question>${esc(c.question || '')}</textarea></div><div class="v7Field"><label>Đáp án đúng</label><input data-edit-answer value="${esc(ans(c))}" placeholder="VD: A hoặc AC"></div><div id="editPreviewImageHost">${editImgs(c)}</div></div><div class="editPreviewRightCol"><div class="v7Field"><label>Các đáp án</label><div id="editPreviewOptions" class="v7Options">${optRows(c.options || {})}</div></div><div class="v7Bottom"><button class="btn" type="button" data-edit-add-opt>+ Thêm đáp án</button></div></div></div></article>`; modal.classList.remove('hidden') }
-  async function saveEditPreview() { if (!window.editDraft) return; const oldQ = clone((typeof RAW !== 'undefined' && (RAW.find(c => c.num === window.editDraft.num))) || window.editDraft); const modal = $('editModal'); const q = (modal?.querySelector('[data-edit-question]')?.value || '').trim(); const a = (modal?.querySelector('[data-edit-answer]')?.value || '').trim().toUpperCase().replace(/[^A-Z]/g, ''); if (!q) return alert('Câu hỏi không được để trống.'); if (!a) return alert('Đáp án đúng không được để trống.'); const opts = {}; modal?.querySelectorAll('[data-edit-opt]').forEach(inp => { const k = String(inp.dataset.editOpt || '').toUpperCase(), v = (inp.value || '').trim(); if (k && v) opts[k] = v }); if (!Object.keys(opts).length) return alert('Cần ít nhất 1 đáp án.'); for (const k of a.split('')) if (!opts[k]) return alert('Đáp án đúng ' + k + ' chưa có nội dung.'); Object.assign(window.editDraft, { question: q, answer: a, options: opts, answer_text: a.split('').map(k => k + '. ' + (opts[k] || '')).join('; '), subject_code: localStorage.getItem('learninghub_subject_code_merged_v1') || window.editDraft.subject_code || '' }); if (window.HODSupabase && window.HODSupabase.isReady()) { const role = String(window.HODSupabase?.getProfile?.()?.role || '').trim().toLowerCase(); const canDirect = ['admin', 'editor'].includes(role); if (canDirect) { const c = window.HODSupabase?.__client; const id = oldQ?.id || window.editDraft?.id; if (!c || !id) { alert('Không tìm thấy ID câu hỏi trên Supabase. Hãy tải lại trang rồi thử lại.'); return } const list = window.editDraft.images || []; const localHasImg = oldQ?.__imagesLoaded ? (list.length > 0) : !!(list.length || oldQ?.has_image); const text = window.editDraft.question + ' ' + Object.values(window.editDraft.options || {}).join(' '); const needsImg = /(hình vẽ|hình bên|đồ thị|bảng biến thiên|sơ đồ)/gi.test(text); const hasPlaceholder = list.some(im => { const src = typeof im === 'string' ? im : (im.src || im.url || im.secure_url || ''); return !src || src.includes('URL_') || src.includes('MÔ_TẢ') || src.includes('PLACEHOLDER') }); let risk = ''; let reason = ''; if ((localHasImg && hasPlaceholder) || (needsImg && list.length === 0)) { risk = 'high'; reason = 'Cần hình vẽ/ảnh minh họa nhưng chưa có ảnh thực tế' } else if (window.editDraft.answer.length > 1) { risk = 'medium'; reason = 'Câu chọn nhiều đáp án đúng, cần rà soát kỹ' } else { risk = 'low' } const payload = { question: window.editDraft.question, options: window.editDraft.options || {}, answer: window.editDraft.answer, answer_text: window.editDraft.answer_text, images: window.editDraft.images || [], updated_at: new Date().toISOString(), has_image: localHasImg || needsImg, error_risk: risk, error_risk_reason: reason || null }; const r = await c.from('questions').update(payload).eq('id', id); if (r.error) { alert('Sửa trực tiếp thất bại: ' + r.error.message); return } if (typeof window.clearLearningHubQuestionCache === 'function') { window.clearLearningHubQuestionCache(); } try { const u = window.HODSupabase?.getUser?.(); await c.from('question_history').insert({ question_id: id, request_id: null, previous_data: { question: oldQ.question, options: oldQ.options || {}, answer: oldQ.answer, answer_text: oldQ.answer_text, images: oldQ.images || [] }, new_data: payload, changed_by: u?.id || null, approved_by: u?.id || null }) } catch (e) { } $('editModal')?.classList.add('hidden'); notify('Đã sửa trực tiếp'); if (typeof window.loadCurrentSubjectOnly === 'function') await window.loadCurrentSubjectOnly(true); else if (window.HODSupabase?.loadQuestionsFromSupabase) await window.HODSupabase.loadQuestionsFromSupabase(true); return } await window.HODSupabase.submitEditRequest(window.editDraft, oldQ); return } if (window.HODSupabase?.getUser?.()) { alert('Chưa kết nối được dữ liệu duyệt. Hãy tải lại trang rồi gửi lại báo cáo.'); return } edits[window.editDraft.num] = { question: window.editDraft.question, options: window.editDraft.options, answer: window.editDraft.answer, answer_text: window.editDraft.answer_text, images: window.editDraft.images || [] }; localStorage.setItem('hod102_user_edits_v1', JSON.stringify(edits)); rebuild(); ci = pool.findIndex(c => c.num === window.editDraft.num); if (ci < 0) ci = 0; flipped = false; renderCard(); renderQuiz(); renderStudy(); $('editModal')?.classList.add('hidden'); notify('Đã lưu sửa local') }
+  async function saveEditPreview() { if (!window.editDraft) return; const oldQ = clone((typeof RAW !== 'undefined' && (RAW.find(c => c.num === window.editDraft.num))) || window.editDraft); const modal = $('editModal'); const q = (modal?.querySelector('[data-edit-question]')?.value || '').trim(); const a = (modal?.querySelector('[data-edit-answer]')?.value || '').trim().toUpperCase().replace(/[^A-Z]/g, ''); if (!q) return alert('Câu hỏi không được để trống.'); if (!a) return alert('Đáp án đúng không được để trống.'); const opts = {}; modal?.querySelectorAll('[data-edit-opt]').forEach(inp => { const k = String(inp.dataset.editOpt || '').toUpperCase(), v = (inp.value || '').trim(); if (k && v) opts[k] = v }); if (!Object.keys(opts).length) return alert('Cần ít nhất 1 đáp án.'); for (const k of a.split('')) if (!opts[k]) return alert('Đáp án đúng ' + k + ' chưa có nội dung.'); Object.assign(window.editDraft, { question: q, answer: a, options: opts, answer_text: a.split('').map(k => k + '. ' + (opts[k] || '')).join('; '), subject_code: localStorage.getItem('learninghub_subject_code_merged_v1') || window.editDraft.subject_code || '' }); if (window.HODSupabase && window.HODSupabase.isReady()) { const role = String(window.HODSupabase?.getProfile?.()?.role || '').trim().toLowerCase(); const canDirect = ['admin', 'editor'].includes(role); if (canDirect) { const id = oldQ?.id || window.editDraft?.id; if (!id) { alert('Không tìm thấy ID câu hỏi. Hãy tải lại trang rồi thử lại.'); return } const list = window.editDraft.images || []; const localHasImg = oldQ?.__imagesLoaded ? (list.length > 0) : !!(list.length || oldQ?.has_image); const text = window.editDraft.question + ' ' + Object.values(window.editDraft.options || {}).join(' '); const needsImg = /(hình vẽ|hình bên|đồ thị|bảng biến thiên|sơ đồ)/gi.test(text); const hasPlaceholder = list.some(im => { const src = typeof im === 'string' ? im : (im.src || im.url || im.secure_url || ''); return !src || src.includes('URL_') || src.includes('MÔ_TẢ') || src.includes('PLACEHOLDER') }); let risk = ''; let reason = ''; if ((localHasImg && hasPlaceholder) || (needsImg && list.length === 0)) { risk = 'high'; reason = 'Cần hình vẽ/ảnh minh họa nhưng chưa có ảnh thực tế' } else if (window.editDraft.answer.length > 1) { risk = 'medium'; reason = 'Câu chọn nhiều đáp án đúng, cần rà soát kỹ' } else { risk = 'low' } const payload = { question: window.editDraft.question, options: window.editDraft.options || {}, answer: window.editDraft.answer, answer_text: window.editDraft.answer_text, images: window.editDraft.images || [], updated_at: new Date().toISOString(), has_image: localHasImg || needsImg, error_risk: risk, error_risk_reason: reason || null }; if (window.APP_CONFIG?.USE_TURSO_API) { try { const res = await fetch('/api/admin-action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: window.HODSupabase.getUser()?.id, action: 'save_question_direct', payload: { question_id: id, new_data: payload, old_data: { question: oldQ.question, options: oldQ.options || {}, answer: oldQ.answer, answer_text: oldQ.answer_text, images: oldQ.images || [] } } }) }); const r = await res.json(); if (r.error) throw new Error(r.error); if (typeof window.clearLearningHubQuestionCache === 'function') { window.clearLearningHubQuestionCache(); } $('editModal')?.classList.add('hidden'); notify('Đã sửa trực tiếp'); if (typeof window.loadCurrentSubjectOnly === 'function') await window.loadCurrentSubjectOnly(true); else if (window.HODSupabase?.loadQuestionsFromSupabase) await window.HODSupabase.loadQuestionsFromSupabase(true); return } catch (err) { alert('Sửa trực tiếp thất bại: ' + err.message); return } } const c = window.HODSupabase?.__client; const r = await c.from('questions').update(payload).eq('id', id); if (r.error) { alert('Sửa trực tiếp thất bại: ' + r.error.message); return } if (typeof window.clearLearningHubQuestionCache === 'function') { window.clearLearningHubQuestionCache(); } try { const u = window.HODSupabase?.getUser?.(); await c.from('question_history').insert({ question_id: id, request_id: null, previous_data: { question: oldQ.question, options: oldQ.options || {}, answer: oldQ.answer, answer_text: oldQ.answer_text, images: oldQ.images || [] }, new_data: payload, changed_by: u?.id || null, approved_by: u?.id || null }) } catch (e) { } $('editModal')?.classList.add('hidden'); notify('Đã sửa trực tiếp'); if (typeof window.loadCurrentSubjectOnly === 'function') await window.loadCurrentSubjectOnly(true); else if (window.HODSupabase?.loadQuestionsFromSupabase) await window.HODSupabase.loadQuestionsFromSupabase(true); return } await window.HODSupabase.submitEditRequest(window.editDraft, oldQ); return } if (window.HODSupabase?.getUser?.()) { alert('Chưa kết nối được dữ liệu duyệt. Hãy tải lại trang rồi gửi lại báo cáo.'); return } edits[window.editDraft.num] = { question: window.editDraft.question, options: window.editDraft.options, answer: window.editDraft.answer, answer_text: window.editDraft.answer_text, images: window.editDraft.images || [] }; localStorage.setItem('hod102_user_edits_v1', JSON.stringify(edits)); rebuild(); ci = pool.findIndex(c => c.num === window.editDraft.num); if (ci < 0) ci = 0; flipped = false; renderCard(); renderQuiz(); renderStudy(); $('editModal')?.classList.add('hidden'); notify('Đã lưu sửa local') }
   function apply() { try { openEditor = openEditPreview; saveEditor = saveEditPreview } catch (e) { } window.openEditor = openEditPreview; window.saveEditor = saveEditPreview }
   apply(); if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(apply, 0)); else setTimeout(apply, 0); setTimeout(apply, 900);
   document.addEventListener('click', e => { if (e.target.closest('[data-edit-preview-close]')) return $('editModal')?.classList.add('hidden'); if (e.target.closest('[data-edit-preview-save]')) return saveEditPreview(); if (e.target.closest('[data-edit-preview-restore]')) return typeof restoreEditor === 'function' && restoreEditor(); if (e.target.closest('[data-edit-pick-img]')) return $('editPreviewImgInput')?.click(); const rm = e.target.closest('[data-edit-rm-img]'); if (rm && window.editDraft) { window.editDraft.images = window.editDraft.images || []; window.editDraft.images.splice(+rm.dataset.editRmImg, 1); redrawImg(); return } if (e.target.closest('[data-edit-add-opt]') && window.editDraft) { window.editDraft.options = window.editDraft.options || {}; const k = nextKey(window.editDraft.options); if (!k) return alert('Đã đủ số đáp án.'); window.editDraft.options[k] = ''; redrawOpt(); setTimeout(() => document.querySelector(`[data-edit-opt="${k}"]`)?.focus(), 0); return } const del = e.target.closest('[data-edit-del-opt]'); if (del && window.editDraft) { delete window.editDraft.options[String(del.dataset.editDelOpt || '').toUpperCase()]; redrawOpt() } });
@@ -4888,20 +5044,7 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
     if (!res.ok) throw new Error(data.error?.message || 'Upload Cloudinary thất bại');
     return { id: data.public_id, public_id: data.public_id, src: data.secure_url, url: data.secure_url, width: data.width, height: data.height, source: 'cloudinary' };
   }
-  async function loadSubjectLight(force = false) {
-    const c = supa(), code = subject();
-    if (!c || !user()) return false;
-    if (!code) return false;
-    const { data, error } = await c.from('questions').select(QUESTION_LIGHT_COLUMNS).eq('is_active', true).eq('subject_code', code).order('num', { ascending: true });
-    if (error) { console.warn('[light load]', error); return false; }
-    RAW = (data || []).map(r => ({ id: r.id, subject_code: r.subject_code || code, num: r.num, question: r.question, options: r.options || {}, answer: r.answer || '', answer_text: r.answer_text || '', images: (typeof cleanImages === 'function' ? cleanImages(r.images || []) : (r.images || [])), has_image: r.has_image, error_risk: r.error_risk, error_risk_reason: r.error_risk_reason, __imagesChecked: true, __imagesLoaded: true }));
-    pool = [...RAW];
-    const saved = +localStorage.getItem('learninghub_progress_' + code) || 0;
-    ci = Math.max(0, Math.min(saved, Math.max(0, pool.length - 1)));
-    flipped = false;
-    try { renderCard(); renderQuiz(); renderStudy(); } catch (e) { }
-    return true;
-  }
+
   window.loadCurrentSubjectOnly = loadSubjectLight;
   function patchApi() { if (window.HODSupabase) window.HODSupabase.loadQuestionsFromSupabase = loadSubjectLight; }
   patchApi(); setTimeout(patchApi, 500); setTimeout(patchApi, 1500);
@@ -5148,13 +5291,38 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
 
   let activeLoadPromises = {};
   async function loadSubjectLight(force = false) {
-    const c = supa(), code = subject();
-    if (!c || !user() || !code) return false;
+    const code = subject();
+    if (!user() || !code) return false;
     if (!force) {
       const cached = readQuestionCache(code);
       if (cached && cached.length) { applyQuestionRows(cached, code); return true; }
     }
     
+    if (window.APP_CONFIG?.USE_TURSO_API) {
+      if (activeLoadPromises[code]) {
+        console.warn('[loadSubjectLight] Trả về promise tải đang chạy cho môn:', code);
+        return activeLoadPromises[code];
+      }
+      activeLoadPromises[code] = (async () => {
+        try {
+          const res = await fetch(`/api/questions?subject_code=${code}`);
+          const r = await res.json();
+          if (r.error) throw new Error(r.error);
+          const data = r.data || [];
+          writeQuestionCache(code, data);
+          applyQuestionRows(data, code);
+          return true;
+        } catch (e) {
+          console.error('[loadSubjectLight API Error]', e);
+          return false;
+        } finally {
+          delete activeLoadPromises[code];
+        }
+      })();
+      return activeLoadPromises[code];
+    }
+
+    const c = supa(); if (!c) return false;
     // Nếu môn học này đang được tải từ Supabase, trả về Promise đang chạy đó
     if (activeLoadPromises[code]) {
       console.warn('[loadSubjectLight] Trả về promise tải đang chạy cho môn:', code);

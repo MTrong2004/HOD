@@ -4606,11 +4606,16 @@ ${E(val)}</pre>`;
     lastReason = reason || lastReason || 'change';
     chip('Realtime...', 'is-checking');
     try{
-      if(typeof loadAll === 'function') await loadAll();
-      if(typeof renderApprovals === 'function') renderApprovals();
-      if(typeof window.loadSubjectRequests === 'function') window.loadSubjectRequests();
+      // Không gọi loadAll() ở đây nữa để tránh kéo lại toàn bộ profiles/questions/logs.
+      if(reason === 'edit_requests'){
+        cache.requests = await safeLoad('edit_requests', client.from('edit_requests').select('*').order('created_at', { ascending: false }), true);
+        if(typeof renderRequests === 'function') renderRequests();
+        if(typeof renderStats === 'function') renderStats();
+        toast('Có cập nhật yêu cầu sửa');
+      } else if(reason === 'subject_requests'){
+        if(typeof window.loadSubjectRequests === 'function') await window.loadSubjectRequests();
+      }
       chip('Realtime', 'is-live');
-      if(reason === 'edit_requests') toast('Có cập nhật yêu cầu sửa');
     }catch(e){
       console.warn('[FINAL realtime reload]', e);
       chip('Realtime lỗi', 'is-error');
@@ -4696,8 +4701,7 @@ ${E(val)}</pre>`;
     window.__finalRealtimeLoadAllPatched = true;
     loadAll = window.loadAll = async function(){
       const out = await oldLoadAllFinalRT.apply(this, arguments);
-      setTimeout(() => { moveChip(); window.startAdminRealtimeFinal(); }, 80);
-      setTimeout(() => { moveChip(); window.startAdminRealtimeFinal(); }, 800);
+      moveChip();
       return out;
     };
   }
@@ -5112,4 +5116,63 @@ ${E(val)}</pre>`;
   setTimeout(install, 1200);
 })();
 // ===== MOBILE_APPROVAL_LITE_ADMIN_20260629_END =====
+
+
+
+// ===== ADMIN_PROFILE_PATCH_DEDUPE_20260629 =====
+// Chặn ghi profiles lặp trong tab Admin để giảm băng thông Supabase.
+(function(){
+  if(window.__ADMIN_PROFILE_PATCH_DEDUPE_20260629) return;
+  window.__ADMIN_PROFILE_PATCH_DEDUPE_20260629 = true;
+  const nativeFetch = window.fetch ? window.fetch.bind(window) : null;
+  if(!nativeFetch) return;
+  const lastMap = new Map();
+  const GAP = 5 * 60 * 1000;
+  function methodOf(init){ return String(init && init.method ? init.method : 'GET').toUpperCase(); }
+  function shouldSkip(url, init){
+    const method = methodOf(init);
+    if(method !== 'PATCH' && method !== 'PUT') return false;
+    if(!/\/rest\/v1\/profiles/.test(url.pathname)) return false;
+    const body = String(init && init.body ? init.body : '');
+    if(!/last_activity|avatar_url|email/.test(body)) return false;
+    if(/last_login|role|approved|blocked|is_blocked|status/.test(body)) return false;
+    const key = url.origin + url.pathname + url.search + '|' + body.replace(/"last_activity"\s*:\s*"[^"]+"/g, '"last_activity":"TIME"');
+    const now = Date.now();
+    const last = lastMap.get(key) || 0;
+    if(now - last < GAP) return true;
+    lastMap.set(key, now);
+    return false;
+  }
+  window.fetch = function(input, init){
+    let url;
+    try{ url = new URL(typeof input === 'string' ? input : input.url, location.href); }
+    catch(e){ return nativeFetch(input, init); }
+    if(shouldSkip(url, init)){
+      return Promise.resolve(new Response(null, {status:204, statusText:'No Content', headers:{'x-learninghub-skip':'admin-profile-patch-duplicate'}}));
+    }
+    return nativeFetch(input, init);
+  };
+})();
+// ===== END ADMIN_PROFILE_PATCH_DEDUPE_20260629 =====
+
+// ===== KILL_LEGACY_ADMIN_REALTIME_PROFILES_LOOP_20260629 =====
+// Khóa hoàn toàn Realtime cũ để tránh loop profiles -> reload -> tốn băng thông.
+// Chỉ dùng Realtime mới: window.startAdminRealtimeFinal().
+(function(){
+  if(window.__KILL_LEGACY_ADMIN_REALTIME_PROFILES_LOOP_20260629) return;
+  window.__KILL_LEGACY_ADMIN_REALTIME_PROFILES_LOOP_20260629 = true;
+
+  try{
+    if(typeof window.stopAdminRealtime === 'function') window.stopAdminRealtime();
+  }catch(e){}
+
+  window.startAdminRealtime = function(){
+    return;
+  };
+
+  window.stopAdminRealtime = function(){
+    return;
+  };
+})();
+// ===== END KILL_LEGACY_ADMIN_REALTIME_PROFILES_LOOP_20260629 =====
 

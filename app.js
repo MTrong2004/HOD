@@ -2033,21 +2033,26 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
 // ===== FINAL_USER_LAST_ACTIVITY_TRACKING_20260613 =====
 // Cập nhật hoạt động gần nhất của người dùng trên web.
 (function () {
-  const MIN_GAP = 60 * 1000; // tối đa 1 lần / 1 phút để phù hợp trạng thái hiển thị của Admin
-  let lastSent = Date.now();
+  if (window.__LH_FINAL_USER_LAST_ACTIVITY_BOUND_20260613) return;
+  window.__LH_FINAL_USER_LAST_ACTIVITY_BOUND_20260613 = true;
+
+  const MIN_GAP = 60 * 1000; // tối đa 1 lần / 1 phút
+  const GLOBAL_KEY = '__LH_LAST_ACTIVITY_SENT_AT_20260613';
   let sending = false;
 
   function client() { return window.HODSupabase?.__client || null; }
   function user() { return window.HODSupabase?.getUser?.() || null; }
+  function lastSent() { return Number(window[GLOBAL_KEY] || 0); }
+  function markSent(t) { window[GLOBAL_KEY] = t || Date.now(); }
 
   async function touchActivity(force = false) {
     const c = client();
     const u = user();
     if (!c || !u || sending) return;
     const nowMs = Date.now();
-    if (!force && nowMs - lastSent < MIN_GAP) return;
+    if (!force && nowMs - lastSent() < MIN_GAP) return;
     sending = true;
-    lastSent = nowMs;
+    markSent(nowMs);
     try {
       await c.from('profiles').update({
         email: u.email || '',
@@ -2065,15 +2070,11 @@ if (typeof finalAnswerText !== 'function') { function finalAnswerText(c) { const
       window.addEventListener(ev, () => touchActivity(false), { passive: true });
     });
     // Tắt ping activity khi focus/interval để giảm gọi Supabase.
-    // document.addEventListener('visibilitychange', () => { if(!document.hidden) touchActivity(true); });
-    // window.addEventListener('focus', () => touchActivity(true));
-    // // setInterval(() => { if(!document.hidden) touchActivity(false); }, 60000); // TẮT: chỉ cập nhật khi user đăng nhập/mở web hoặc có thao tác
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindActivityEvents);
   else bindActivityEvents();
   setTimeout(() => touchActivity(true), 2500);
-  // setTimeout(() => touchActivity(true), 7000); // giảm gọi Supabase
 })();
 
 // ===== FINAL_HEADER_SUBJECT_DYNAMIC_FIX_20260613 =====

@@ -1747,134 +1747,200 @@ Bắt đầu ngay từ câu 1.`;
     if (!name) { alert('Vui lòng nhập tên môn'); $('addSubjectName')?.focus(); return; }
     if (!parsedQuestions.length) { alert('Bạn cần chọn file và bấm Xem trước trước khi lưu môn học.'); return; }
 
-    const c = client();
-    if (!c) { alert('Chưa kết nối Supabase'); return; }
+    const isTurso = window.APP_CONFIG?.USE_TURSO_API;
+    let c = null;
+    if (!isTurso) {
+      c = client();
+      if (!c) { alert('Chưa kết nối Supabase'); return; }
+    }
 
     const btn = $('userImportBtn');
     if (btn) { btn.disabled = true; btn.textContent = 'Đang lưu...'; }
 
-    // Hiển thị thanh tiến trình ngay từ khi bắt đầu
     showProgress('Bắt đầu khởi tạo môn học...', 0, 100, 'Đang chuẩn bị dữ liệu...');
     await new Promise(resolve => setTimeout(resolve, 100));
 
     try {
-      // Cho phép trùng mã môn + tên môn (nhiều bộ câu hỏi cùng mã)
-
       let successMsg = '';
-      if (isAdminOrEditor()) {
-        // Cho phép thêm nhiều môn cùng mã gốc: HOD102, HOD102_2, HOD102_3...
-        // Như vậy không bị lỗi trùng câu số 1,2,3... trong database.
-        let finalCode = code;
-        const { data: existedList } = await c.from('subjects').select('code').or('code.eq.' + code + ',code.like.' + code + '_%');
-        const usedCodes = new Set((existedList || []).map(x => String(x.code || '').toUpperCase()));
-        if (usedCodes.has(finalCode)) {
-          let n = 2;
-          while (usedCodes.has(code + '_' + n)) n++;
-          finalCode = code + '_' + n;
-        }
-
-        const maxOrder = await c.from('subjects').select('sort_order').order('sort_order', { ascending: false }).limit(1);
-        const nextOrder = ((maxOrder.data?.[0]?.sort_order) || 0) + 1;
-        const { error } = await c.from('subjects').insert({
-          code: finalCode, name: name || code, description: desc || null,
-          is_active: true, sort_order: nextOrder
-        });
-        if (error) { alert('Lỗi tạo môn: ' + error.message); return; }
-
-        let success = 0, errors = 0, firstErr = '';
-        const total = parsedQuestions.length;
-        for (let i = 0; i < total; i++) {
-          const q = parsedQuestions[i];
-          // Nhường luồng cho trình duyệt vẽ lại giao diện tiến trình
-          showProgress('Đang lưu câu hỏi...', i + 1, total, `Đang xử lý câu ${q.num || i + 1}: ${q.question ? q.question.substring(0, 50) + '...' : ''}`);
-          await new Promise(r => setTimeout(r, 10));
-
-          const list = q.images || [];
-          const localHasImg = !!(list.length || q.has_image);
-          const text = (q.question || '') + ' ' + Object.values(q.options || {}).join(' ');
-          const needsImg = /(hình vẽ|hình bên|đồ thị|bảng biến thiên|sơ đồ)/gi.test(text);
-          const hasPlaceholder = list.some(im => {
-            const src = typeof im === 'string' ? im : (im.src || im.url || im.secure_url || '');
-            return !src || src.includes('URL_') || src.includes('MÔ_TẢ') || src.includes('PLACEHOLDER');
-          });
-
-          let risk = q.error_risk || '';
-          let reason = q.error_risk_reason || '';
-          if (!risk) {
-            if ((localHasImg && hasPlaceholder) || (needsImg && list.length === 0)) {
-              risk = 'high';
-              reason = 'Cần hình vẽ/ảnh minh họa nhưng chưa có ảnh thực tế';
-            } else if ((q.answer || '').length > 1) {
-              risk = 'medium';
-              reason = 'Câu chọn nhiều đáp án đúng, cần rà soát kỹ';
-            } else {
-              risk = 'low';
-            }
-          }
-
-          const payload = {
-            subject_code: finalCode,
-            num: q.num || (i + 1),
-            question: q.question || '',
-            options: q.options || {},
-            answer: (q.answer || '').toUpperCase(),
-            answer_text: q.answer_text || '',
-            images: q.images || [],
-            is_active: true,
-            updated_at: new Date().toISOString(),
-            has_image: localHasImg || needsImg,
-            error_risk: risk,
-            error_risk_reason: reason || null
+      if (isTurso) {
+        const u = window.HODSupabase?.getUser?.();
+        const p = window.HODSupabase?.getProfile?.() || null;
+        
+        let apiAction = '';
+        let apiPayload = {};
+        
+        if (isAdminOrEditor()) {
+          apiAction = 'add_subject';
+          apiPayload = {
+            code,
+            name,
+            description: desc,
+            questions: parsedQuestions
           };
-          const r = await c.from('questions').insert(payload);
-          if (r.error) { errors++; if (!firstErr) firstErr = r.error.message; }
-          else success++;
+        } else {
+          apiAction = 'add_subject_request';
+          apiPayload = {
+            code,
+            name,
+            description: desc,
+            questions_data: parsedQuestions
+          };
         }
-        successMsg = 'Đã thêm môn ' + finalCode + ' với ' + success + ' câu hỏi' + (errors ? ' (' + errors + ' lỗi: ' + firstErr + ')' : '');
+
+        showProgress('Đang gửi yêu cầu lên máy chủ...', 50, 100, 'Đang ghi dữ liệu vào cơ sở dữ liệu Turso...');
+
+        const res = await fetch('/api/admin-action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: u?.id || '',
+            action: apiAction,
+            payload: apiPayload
+          })
+        });
+
+        const r = await res.json();
+        if (r.error) {
+          alert('Lỗi lưu môn: ' + r.error);
+          return;
+        }
+
+        showProgress('Đang hoàn thành...', 100, 100, 'Lưu thành công!');
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        successMsg = isAdminOrEditor()
+          ? `Đã thêm môn ${code} với ${parsedQuestions.length} câu hỏi thành công!`
+          : `Gửi yêu cầu thêm môn học ${code} thành công, đang chờ phê duyệt.`;
+
         try {
           const key = 'learninghub_subject_counts_cache_v3';
-          const store = JSON.parse(localStorage.getItem(key) || '{}') || {};
-          store.counts = store.counts || {};
-          store.confirmed = store.confirmed || {};
-          store.counts[finalCode] = success;
-          store.confirmed[finalCode] = true;
-          store.updated_at = new Date().toISOString();
-          localStorage.setItem(key, JSON.stringify(store));
-          localStorage.setItem('learninghub_subjects_dirty_v3', String(Date.now()));
           localStorage.removeItem('learninghub_subjects_cache_v1');
+          localStorage.removeItem(key);
           sessionStorage.removeItem('learninghub_subject_counts_cache_v1');
           window.clearLearningHubSupabaseCache?.('subjects');
           window.clearLearningHubSupabaseCache?.('questions');
-        } catch(e) {}
+        } catch (e) {}
+
         alert(successMsg);
         notify(successMsg);
         window.__switchSubjectGateTab('list');
+        
         try {
           $('subjectRefresh')?.click();
-          setTimeout(() => $('subjectRefresh')?.click(), 5600);
-          setTimeout(() => window.refreshSubjectCountsOnce?.(), 6500);
+          setTimeout(() => $('subjectRefresh')?.click(), 1000);
         } catch(e) {}
       } else {
-        // Học viên/User gửi request: Hiển thị thanh tiến trình khi upload tệp tin lớn
-        showProgress('Đang gửi yêu cầu tạo môn học...', 50, 100, 'Đang tải dữ liệu câu hỏi lên máy chủ...');
-        await new Promise(resolve => setTimeout(resolve, 100));
+        if (isAdminOrEditor()) {
+          let finalCode = code;
+          const { data: existedList } = await c.from('subjects').select('code').or('code.eq.' + code + ',code.like.' + code + '_%');
+          const usedCodes = new Set((existedList || []).map(x => String(x.code || '').toUpperCase()));
+          if (usedCodes.has(finalCode)) {
+            let n = 2;
+            while (usedCodes.has(code + '_' + n)) n++;
+            finalCode = code + '_' + n;
+          }
 
-        const u = window.HODSupabase?.getUser?.();
-        const p = window.HODSupabase?.getProfile?.() || null;
-        const { error } = await c.from('subject_requests').insert({
-          code: code,
-          name: name,
-          description: desc || null,
-          questions_data: parsedQuestions || [],
-          user_id: u?.id,
-          user_email: u?.email || p?.email || '',
-          status: 'pending'
-        });
-        if (error) { alert('Lỗi gửi yêu cầu: ' + error.message); return; }
-        successMsg = 'Đã gửi yêu cầu thêm môn ' + code + '. Vui lòng chờ admin duyệt.';
-        alert(successMsg);
-        notify(successMsg);
-        window.__switchSubjectGateTab('list');
+          const maxOrder = await c.from('subjects').select('sort_order').order('sort_order', { ascending: false }).limit(1);
+          const nextOrder = ((maxOrder.data?.[0]?.sort_order) || 0) + 1;
+          const { error } = await c.from('subjects').insert({
+            code: finalCode, name: name || code, description: desc || null,
+            is_active: true, sort_order: nextOrder
+          });
+          if (error) { alert('Lỗi tạo môn: ' + error.message); return; }
+
+          let success = 0, errors = 0, firstErr = '';
+          const total = parsedQuestions.length;
+          for (let i = 0; i < total; i++) {
+            const q = parsedQuestions[i];
+            showProgress('Đang lưu câu hỏi...', i + 1, total, `Đang xử lý câu ${q.num || i + 1}: ${q.question ? q.question.substring(0, 50) + '...' : ''}`);
+            await new Promise(r => setTimeout(r, 10));
+
+            const list = q.images || [];
+            const localHasImg = !!(list.length || q.has_image);
+            const text = (q.question || '') + ' ' + Object.values(q.options || {}).join(' ');
+            const needsImg = /(hình vẽ|hình bên|đồ thị|bảng biến thiên|sơ đồ)/gi.test(text);
+            const hasPlaceholder = list.some(im => {
+              const src = typeof im === 'string' ? im : (im.src || im.url || im.secure_url || '');
+              return !src || src.includes('URL_') || src.includes('MÔ_TẢ') || src.includes('PLACEHOLDER');
+            });
+
+            let risk = q.error_risk || '';
+            let reason = q.error_risk_reason || '';
+            if (!risk) {
+              if ((localHasImg && hasPlaceholder) || (needsImg && list.length === 0)) {
+                risk = 'high';
+                reason = 'Cần hình vẽ/ảnh minh họa nhưng chưa có ảnh thực tế';
+              } else if ((q.answer || '').length > 1) {
+                risk = 'medium';
+                reason = 'Câu chọn nhiều đáp án đúng, cần rà soát kỹ';
+              } else {
+                risk = 'low';
+              }
+            }
+
+            const payload = {
+              subject_code: finalCode,
+              num: q.num || (i + 1),
+              question: q.question || '',
+              options: q.options || {},
+              answer: (q.answer || '').toUpperCase(),
+              answer_text: q.answer_text || '',
+              images: q.images || [],
+              is_active: true,
+              updated_at: new Date().toISOString(),
+              has_image: localHasImg || needsImg,
+              error_risk: risk,
+              error_risk_reason: reason || null
+            };
+            const r = await c.from('questions').insert(payload);
+            if (r.error) { errors++; if (!firstErr) firstErr = r.error.message; }
+            else success++;
+          }
+          successMsg = 'Đã thêm môn ' + finalCode + ' với ' + success + ' câu hỏi' + (errors ? ' (' + errors + ' lỗi: ' + firstErr + ')' : '');
+          try {
+            const key = 'learninghub_subject_counts_cache_v3';
+            const store = JSON.parse(localStorage.getItem(key) || '{}') || {};
+            store.counts = store.counts || {};
+            store.confirmed = store.confirmed || {};
+            store.counts[finalCode] = success;
+            store.confirmed[finalCode] = true;
+            store.updated_at = new Date().toISOString();
+            localStorage.setItem(key, JSON.stringify(store));
+            localStorage.setItem('learninghub_subjects_dirty_v3', String(Date.now()));
+            localStorage.removeItem('learninghub_subjects_cache_v1');
+            sessionStorage.removeItem('learninghub_subject_counts_cache_v1');
+            window.clearLearningHubSupabaseCache?.('subjects');
+            window.clearLearningHubSupabaseCache?.('questions');
+          } catch(e) {}
+          alert(successMsg);
+          notify(successMsg);
+          window.__switchSubjectGateTab('list');
+          try {
+            $('subjectRefresh')?.click();
+            setTimeout(() => $('subjectRefresh')?.click(), 5600);
+            setTimeout(() => window.refreshSubjectCountsOnce?.(), 6500);
+          } catch(e) {}
+        } else {
+          showProgress('Đang gửi yêu cầu tạo môn học...', 50, 100, 'Đang tải dữ liệu câu hỏi lên máy chủ...');
+          await new Promise(resolve => setTimeout(resolve, 100));
+
+          const u = window.HODSupabase?.getUser?.();
+          const p = window.HODSupabase?.getProfile?.() || null;
+          const { error } = await c.from('subject_requests').insert({
+            code: code,
+            name: name,
+            description: desc || null,
+            questions_data: parsedQuestions || [],
+            user_id: u?.id,
+            user_email: u?.email || p?.email || '',
+            status: 'pending'
+          });
+          if (error) { alert('Lỗi gửi yêu cầu: ' + error.message); return; }
+          successMsg = 'Đã gửi yêu cầu thêm môn ' + code + '. Vui lòng chờ admin duyệt.';
+          alert(successMsg);
+          notify(successMsg);
+          window.__switchSubjectGateTab('list');
+        }
       }
 
       parsedQuestions = [];

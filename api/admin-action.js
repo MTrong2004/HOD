@@ -263,14 +263,45 @@ export default async function handler(req) {
       }
 
       case 'add_subject': {
-        const { code, name, description, cover, sort_order } = payload;
+        const { code, name, description, cover, sort_order, questions } = payload;
+        let finalSortOrder = sort_order;
+        if (!finalSortOrder) {
+          const maxRes = await db.execute('select max(sort_order) as m from subjects');
+          finalSortOrder = (Number(maxRes.rows?.[0]?.m) || 0) + 1;
+        }
         const res = await db.execute({
           sql: `insert into subjects (code, name, description, cover, sort_order, is_active, created_at)
                 values (?, ?, ?, ?, ?, 1, ?)`,
-          args: [code.toUpperCase().trim(), name, description || '', cover || '', sort_order || 0, now]
+          args: [code.toUpperCase().trim(), name, description || '', cover || '', finalSortOrder, now]
         });
 
         const newId = Number(res.lastInsertRowid);
+
+        if (questions && questions.length > 0) {
+          for (const q of questions) {
+            const list = q.images || [];
+            const localHasImg = !!(list.length || q.has_image);
+            await db.execute({
+              sql: `insert into questions (subject_code, num, question, options, answer, answer_text, images, is_active, has_image, error_risk, error_risk_reason, created_at, updated_at)
+                    values (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
+              args: [
+                code.toUpperCase().trim(),
+                q.num,
+                q.question || '',
+                JSON.stringify(q.options || {}),
+                (q.answer || '').toUpperCase(),
+                q.answer_text || '',
+                JSON.stringify(q.images || []),
+                localHasImg ? 1 : 0,
+                q.error_risk || 'low',
+                q.error_risk_reason || null,
+                now,
+                now
+              ]
+            });
+          }
+        }
+
         await logAdminAction('add_subject', 'subjects', newId, { code });
         return json({ ok: true, id: newId });
       }

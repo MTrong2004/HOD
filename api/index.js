@@ -152,7 +152,7 @@ export default async function handler(req) {
       const args = [];
 
       if (subject) {
-        sql += ' and subject_code = ?';
+        sql += ' and upper(trim(subject_code)) = ?';
         args.push(subject);
       }
       sql += ' order by subject_code asc, num asc';
@@ -451,7 +451,7 @@ export default async function handler(req) {
 
         case 'add_question': {
           const { question_data } = payload;
-          const subjectCode = question_data.subject_code || 'HOD102';
+          const subjectCode = String(question_data.subject_code || 'HOD102').trim().toUpperCase();
           
           let finalNum = Number(question_data.num);
           const existRes = await db.execute({
@@ -678,7 +678,7 @@ export default async function handler(req) {
           if (!sub) return json({ error: 'Subject not found' }, 404);
 
           const qRes = await db.execute({
-            sql: 'select * from questions where subject_code = ? order by num asc',
+            sql: 'select * from questions where upper(trim(subject_code)) = upper(trim(?)) order by num asc',
             args: [sub.code]
           });
           const backup = { subject: sub, questions: qRes.rows || [] };
@@ -688,7 +688,7 @@ export default async function handler(req) {
             args: [subject_id]
           });
           await db.execute({
-            sql: 'update questions set is_active = 0, updated_at = ? where subject_code = ?',
+            sql: 'update questions set is_active = 0, updated_at = ? where upper(trim(subject_code)) = upper(trim(?))',
             args: [now, sub.code]
           });
 
@@ -726,7 +726,7 @@ export default async function handler(req) {
           const code = String(sub.code || '').trim();
 
           if (code) {
-            await db.execute({ sql: 'delete from questions where subject_code = ?', args: [code] });
+            await db.execute({ sql: 'delete from questions where upper(trim(subject_code)) = upper(trim(?))', args: [code] });
             await db.execute({ sql: 'delete from subjects where code = ?', args: [code] });
           }
 

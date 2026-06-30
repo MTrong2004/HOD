@@ -445,7 +445,7 @@ to{transform:translate(-24px,30px) scale(1.12)}
 .subjectGateTools,.subjectGateFooter{flex:0 0 auto !important}
 .subjectGateTools input{flex:1;min-width:260px;padding:14px 18px;border:1px solid rgba(200,169,110,.2);background:rgba(255,255,255,.04);color:var(--fog);height:42px !important;border-radius:16px !important}
 .subjectCard h3{margin:0 0 8px;color:#fff;font-size:.96rem !important;white-space:nowrap !important;overflow:hidden !important;text-overflow:ellipsis !important}
-.subjectCard p{margin:0;color:var(--mist);font-size:.80rem !important;line-height:1.38 !important;display:-webkit-box !important;-webkit-line-clamp:2 !important;-webkit-box-orient:vertical !important;overflow:hidden !important;min-height:0 !important}
+.subjectCard p{margin:0;color:var(--mist);font-size:.80rem !important;line-height:1.38 !important;display:-webkit-box !important;line-clamp:2!important;-webkit-line-clamp:2!important;-webkit-box-orient:vertical !important;overflow:hidden !important;min-height:0 !important}
 #subjectRefresh.is-loading{color:transparent !important;pointer-events:none !important}
 #subjectRefresh.is-loading:after{content:"" !important;width:18px !important;height:18px !important;border-radius:50% !important;border:2px solid rgba(232,212,168,.34) !important;border-top-color:var(--gold2) !important;position:absolute !important;animation:subjectReloadSpin .72s linear infinite !important}
 @keyframes subjectReloadSpin{to{transform:rotate(360deg)}
@@ -641,7 +641,7 @@ body{--headH:122px !important;min-height:100dvh !important}
 .hodGoogleClean#hodGateLoginBtn{left:18px !important;right:18px !important;bottom:16px !important;height:48px !important;min-height:48px !important;font-size:.88rem !important}
 }
 html,body,*,*::before,*::after{-webkit-tap-highlight-color:transparent !important}
-button,a,input,textarea,select,label,.tab,.btn,.navBtn,.modeBtn,.cnt,.primary,.start,.retry,.card,.zone,.face,.opt,.qopt,.sopt,.subjectCard,.subjectChoose,.hodGoogleClean,.hodTopAvatar,.hodAccountMenu button,.hodOpenReportsBtn,.mobileCardNav button,.cardToolBtn,.edit,.modalX{-webkit-tap-highlight-color:transparent !important;tap-highlight-color:transparent !important;touch-action:manipulation;outline-color:transparent !important}
+button,a,input,textarea,select,label,.tab,.btn,.navBtn,.modeBtn,.cnt,.primary,.start,.retry,.card,.zone,.face,.opt,.qopt,.sopt,.subjectCard,.subjectChoose,.hodGoogleClean,.hodTopAvatar,.hodAccountMenu button,.hodOpenReportsBtn,.mobileCardNav button,.cardToolBtn,.edit,.modalX{-webkit-tap-highlight-color:transparent !important;touch-action:manipulation;outline-color:transparent !important}
 button:focus,a:focus,.tab:focus,.btn:focus,.navBtn:focus,.modeBtn:focus,.cnt:focus,.primary:focus,.start:focus,.retry:focus,.card:focus,.zone:focus,.opt:focus,.qopt:focus,.sopt:focus,.subjectCard:focus,.subjectChoose:focus,.hodGoogleClean:focus,.hodTopAvatar:focus,.hodAccountMenu button:focus,.hodOpenReportsBtn:focus,.mobileCardNav button:focus,.cardToolBtn:focus,.edit:focus,.modalX:focus{outline:none !important;box-shadow:inherit}
 button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:1px solid rgba(232,212,168,.45) !important;outline-offset:2px !important}
 @media (max-width:860px){button,a,input,textarea,select,.tab,.btn,.card,.zone,.subjectCard,.hodGoogleClean,.hodTopAvatar{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
@@ -814,8 +814,8 @@ to{filter:brightness(1.04)}
 #study .sitem,#study .qcard,#studyList .sitem,#studyList .qcard,.list .sitem,.list .qcard,.sitem.studyItem,.sitem{height:auto !important;min-height:76px !important;max-height:112px !important;padding:12px 16px !important;margin:8px 0 !important;overflow:hidden !important;display:block !important;border-radius:16px !important;cursor:pointer !important;transition:max-height .24s ease,border-color .18s ease,background .18s ease,box-shadow .18s ease,transform .18s ease !important}
 #study .sitem.open,#study .sitem.expanded,#study .sitem.active,#study .sitem:focus-within,#study .qcard.open,#study .qcard.expanded,#study .qcard.active,#study .qcard:focus-within,#studyList .sitem.open,#studyList .sitem.expanded,#studyList .sitem.active,#studyList .sitem:focus-within,.list .sitem.open,.list .sitem.expanded,.list .sitem.active,.list .sitem:focus-within,.sitem.open,.sitem.expanded,.sitem.active,.sitem:focus-within{max-height:900px !important;overflow:visible !important}
 #study .snum,#study .qnum,.snum,.qnum{margin:0 0 7px !important;padding:4px 10px !important;line-height:1 !important;font-size:.68rem !important}
-#study .sq,#study .qq,.sq,.qq{margin:0 !important;padding-right:86px !important;font-size:.98rem !important;line-height:1.34 !important;font-weight:620 !important;color:rgba(245,240,232,.84) !important;display:-webkit-box !important;-webkit-line-clamp:2 !important;-webkit-box-orient:vertical !important;overflow:hidden !important}
-#study .sitem.open .sq,#study .sitem.expanded .sq,#study .sitem.active .sq,#study .sitem:focus-within .sq,#study .qcard.open .qq,#study .qcard.expanded .qq,#study .qcard.active .qq,#study .qcard:focus-within .qq,.sitem.open .sq,.sitem.expanded .sq,.sitem.active .sq,.sitem:focus-within .sq{display:block !important;-webkit-line-clamp:unset !important;overflow:visible !important}
+#study .sq,#study .qq,.sq,.qq{margin:0 !important;padding-right:86px !important;font-size:.98rem !important;line-height:1.34 !important;font-weight:620 !important;color:rgba(245,240,232,.84) !important;display:-webkit-box !important;line-clamp:2!important;-webkit-line-clamp:2!important;-webkit-box-orient:vertical !important;overflow:hidden !important}
+#study .sitem.open .sq,#study .sitem.expanded .sq,#study .sitem.active .sq,#study .sitem:focus-within .sq,#study .qcard.open .qq,#study .qcard.expanded .qq,#study .qcard.active .qq,#study .qcard:focus-within .qq,.sitem.open .sq,.sitem.expanded .sq,.sitem.active .sq,.sitem:focus-within .sq{display:block !important;line-clamp:unset!important;-webkit-line-clamp:unset!important;overflow:visible !important}
 #study .sitem:not(.open):not(.expanded):not(.active):not(:focus-within) .sopts,#study .sitem:not(.open):not(.expanded):not(.active):not(:focus-within) .qopts,#study .sitem:not(.open):not(.expanded):not(.active):not(:focus-within) .qimgs,#study .sitem:not(.open):not(.expanded):not(.active):not(:focus-within) .imgs,#study .sitem:not(.open):not(.expanded):not(.active):not(:focus-within) .answerLine,#study .sitem:not(.open):not(.expanded):not(.active):not(:focus-within) .fb,#study .qcard:not(.open):not(.expanded):not(.active):not(:focus-within) .qopts,#study .qcard:not(.open):not(.expanded):not(.active):not(:focus-within) .sopts,#study .qcard:not(.open):not(.expanded):not(.active):not(:focus-within) .qimgs,#study .qcard:not(.open):not(.expanded):not(.active):not(:focus-within) .imgs,#study .qcard:not(.open):not(.expanded):not(.active):not(:focus-within) .answerLine,#study .qcard:not(.open):not(.expanded):not(.active):not(:focus-within) .fb,.sitem:not(.open):not(.expanded):not(.active):not(:focus-within) .sopts,.sitem:not(.open):not(.expanded):not(.active):not(:focus-within) .qopts,.sitem:not(.open):not(.expanded):not(.active):not(:focus-within) .qimgs,.sitem:not(.open):not(.expanded):not(.active):not(:focus-within) .imgs,.sitem:not(.open):not(.expanded):not(.active):not(:focus-within) .answerLine,.sitem:not(.open):not(.expanded):not(.active):not(:focus-within) #study .sitem.open .sopts,#study .sitem.expanded .sopts,#study .sitem.active .sopts,#study .sitem:focus-within .sopts,#study .sitem.open .qopts,#study .sitem.expanded .qopts,#study .sitem.active .qopts,#study .sitem:focus-within .qopts,#study .qcard.open .qopts,#study .qcard.expanded .qopts,#study .qcard.active .qopts,#study .qcard:focus-within .qopts,.sitem.open .sopts,.sitem.expanded .sopts,.sitem.active .sopts,.sitem:focus-within .sopts{display:flex !important;flex-direction:column !important;height:auto !important;max-height:none !important;margin-top:12px !important;padding:0 !important;overflow:visible !important;opacity:1 !important;gap:7px !important}
 #study .sitem::after,#study .qcard::after,.sitem::after{content:"Mở" !important;position:absolute !important;right:16px !important;top:16px !important;min-width:54px !important;height:28px !important;padding:0 10px !important;display:inline-flex !important;align-items:center !important;justify-content:center !important;border-radius:999px !important;border:1px solid rgba(200,169,110,.20) !important;background:rgba(255,255,255,.035) !important;color:rgba(245,240,232,.66) !important;font-size:.74rem !important;font-weight:850 !important;pointer-events:none !important}
 #study .sitem.open::after,#study .sitem.expanded::after,#study .sitem.active::after,#study .sitem:focus-within::after,#study .qcard.open::after,#study .qcard.expanded::after,#study .qcard.active::after,#study .qcard:focus-within::after,.sitem.open::after,.sitem.expanded::after,.sitem.active::after,.sitem:focus-within::after{content:"Thu gọn" !important;color:rgba(232,212,168,.90) !important;border-color:rgba(232,212,168,.30) !important;background:rgba(200,169,110,.08) !important}
@@ -862,7 +862,7 @@ to{filter:brightness(1.04)}
 #study .sq,.sq,.compactQuestionText{font-size:.91rem !important}
 }
 .compactCardMeta{display:flex !important;align-items:center !important;gap:8px !important;min-width:0 !important;white-space:nowrap !important;padding-top:2px !important}
-.sitem.open .compactQuestionText,.sitem.autoOpenAnswer .compactQuestionText,#study .sitem.open .sq,#study .sitem.autoOpenAnswer .sq{display:block !important;-webkit-line-clamp:unset !important;overflow:visible !important;white-space:normal !important}
+.sitem.open .compactQuestionText,.sitem.autoOpenAnswer .compactQuestionText,#study .sitem.open .sq,#study .sitem.autoOpenAnswer .sq{display:block !important;line-clamp:unset!important;-webkit-line-clamp:unset!important;overflow:visible !important;white-space:normal !important}
 @media (max-width:760px){.compactCardMeta{display:grid !important;gap:6px !important;grid-column:1 / -1 !important}
 .compactCardRight{align-self:start !important;max-width:150px !important}
 }
@@ -883,14 +883,14 @@ to{filter:brightness(1.04)}
 @media (max-width:760px){.compactCardLine{height:56px !important;grid-template-columns:minmax(0,1fr) auto !important;min-height:30px !important;gap:7px !important}
 .studyReportBtn{font-size:.86rem !important;width:24px !important;height:24px !important;min-width:24px !important}
 }
-#study .sq,.sq,.compactQuestionText{margin:0 !important;padding:0 !important;min-width:0 !important;word-break:normal !important;hyphens:auto !important;text-overflow:clip !important;padding-right:0 !important;text-shadow:none !important;display:-webkit-box !important;-webkit-line-clamp:2 !important;-webkit-box-orient:vertical !important;overflow:hidden !important;white-space:normal !important;overflow-wrap:anywhere !important;font-size:1.02rem !important;line-height:1.34 !important;font-weight:580 !important;color:rgba(245,240,232,.76) !important;letter-spacing:0 !important}
+#study .sq,.sq,.compactQuestionText{margin:0 !important;padding:0 !important;min-width:0 !important;word-break:normal !important;hyphens:auto !important;text-overflow:clip !important;padding-right:0 !important;text-shadow:none !important;display:-webkit-box !important;line-clamp:2!important;-webkit-line-clamp:2!important;-webkit-box-orient:vertical !important;overflow:hidden !important;white-space:normal !important;overflow-wrap:anywhere !important;font-size:1.02rem !important;line-height:1.34 !important;font-weight:580 !important;color:rgba(245,240,232,.76) !important;letter-spacing:0 !important}
 #studyList .sitem,#study .sitem,.sitem.compactStudyCard,.sitem{background:linear-gradient(145deg,rgba(245,240,232,.052),rgba(255,255,255,.018)) !important;border:1px solid rgba(200,169,110,.20) !important;box-shadow:0 12px 30px rgba(0,0,0,.22) !important;transition:height .22s ease,max-height .22s ease,border-color .18s ease,background .18s ease,box-shadow .18s ease,transform .18s ease !important;position:relative !important;box-sizing:border-box !important;cursor:pointer !important;height:auto !important;margin:5px 0 !important;border-radius:14px !important;overflow:hidden !important;min-height:50px !important;max-height:96px !important;padding:8px 13px !important}
 .compactCardLine{display:grid !important;grid-template-columns:auto minmax(0,1fr) auto !important;height:auto !important;align-items:center !important;min-height:34px !important;gap:10px !important}
 #study .snum,.snum,.compactSubject{margin:0 !important;border-radius:999px !important;border:1px solid rgba(200,169,110,.22) !important;font-weight:760 !important;letter-spacing:.08em !important;color:rgba(232,212,168,.74) !important;background:rgba(200,169,110,.055) !important;border-color:rgba(200,169,110,.16) !important;line-height:1 !important;font-size:.64rem !important;padding:3px 8px !important}
 .studyReportBtn{padding:0 !important;border-radius:50% !important;border:1px solid rgba(232,212,168,.28) !important;background:rgba(15,10,8,.58) !important;color:rgba(232,212,168,.76) !important;display:inline-flex !important;align-items:center !important;justify-content:center !important;font-weight:900 !important;line-height:1 !important;box-shadow:0 8px 20px rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.045) !important;cursor:pointer !important;pointer-events:auto !important;user-select:none !important;width:26px !important;height:26px !important;min-width:26px !important;font-size:.82rem !important}
 .expandHint{border-radius:999px !important;border:1px solid rgba(200,169,110,.20) !important;font-size:0 !important;font-weight:850 !important;display:inline-flex !important;align-items:center !important;justify-content:center !important;flex:0 0 auto !important;color:rgba(245,240,232,.55) !important;border-color:rgba(200,169,110,.17) !important;background:rgba(255,255,255,.025) !important;padding:0 7px !important;height:24px !important;min-width:44px !important}
 .expandHint::before{font-size:.68rem !important}
-@media (max-width:760px){#study .sq,.sq,.compactQuestionText{-webkit-line-clamp:3 !important;font-size:.96rem !important;line-height:1.32 !important}
+@media (max-width:760px){#study .sq,.sq,.compactQuestionText{line-clamp:3!important;-webkit-line-clamp:3!important;font-size:.96rem !important;line-height:1.32 !important}
 #studyList .sitem,#study .sitem,.sitem.compactStudyCard,.sitem{padding:7px 10px !important;margin:5px 0 !important;min-height:48px !important;max-height:104px !important}
 }
 @keyframes landingBackgroundSwayRestore{0%{transform:translate3d(-14px,-8px,0) scale(1.075);filter:saturate(1.04) contrast(1.03) brightness(.97)}
@@ -1139,7 +1139,7 @@ to{opacity:1;transform:translateY(0)}
 .subjectGateFooter{justify-content:space-between;align-items:center;border-top:1px solid rgba(200,169,110,.12);flex-wrap:wrap;position:sticky !important;bottom:0 !important;z-index:5 !important;display:grid !important;grid-template-columns:minmax(0,1fr) minmax(160px,240px) !important;gap:12px !important;background:linear-gradient(180deg,rgba(12,10,9,.90),rgba(12,10,9,.98)) !important;padding:10px 0 0 !important;margin-top:0 !important;padding-top:14px !important}
 .subjectCardCode{gap:8px;background:rgba(200,169,110,.12);border:1px solid rgba(200,169,110,.2);color:var(--gold2);margin-bottom:12px;justify-content:flex-start !important;flex:0 0 auto !important;width:auto !important;min-height:26px !important;padding:6px 11px !important;display:inline-flex !important;align-items:center !important;border-radius:999px !important;line-height:1 !important;white-space:nowrap !important;overflow:hidden !important;text-overflow:ellipsis !important;font-size:.76rem !important;font-weight:950 !important;letter-spacing:.06em !important;grid-column:1 !important;grid-row:1 !important;justify-self:start !important;align-self:start !important;margin:0 !important;max-width:135px !important}
 .subjectCardTitle{opacity:1 !important;visibility:visible !important;display:block !important;min-width:0 !important;grid-column:2 !important;grid-row:1 !important;justify-self:end !important;align-self:start !important;width:auto !important;max-width:100% !important;min-height:0 !important;margin:3px 0 0 !important;padding:0 !important;color:rgba(245,240,232,.74) !important;font-size:.82rem !important;font-weight:800 !important;line-height:1.18 !important;text-align:right !important;letter-spacing:.01em !important;white-space:nowrap !important;overflow:hidden !important;text-overflow:ellipsis !important;text-shadow:none !important}
-.subjectCardDesc{opacity:1 !important;visibility:visible !important;display:-webkit-box !important;-webkit-box-orient:vertical !important;-webkit-line-clamp:2 !important;width:100% !important;min-width:0 !important;min-height:36px !important;max-height:39px !important;overflow:hidden !important;line-height:1.38 !important;margin:0 !important;grid-column:1 / -1 !important;grid-row:2 !important;margin-top:2px !important;color:rgba(245,240,232,.58) !important;font-size:.82rem !important;font-weight:600 !important}
+.subjectCardDesc{opacity:1 !important;visibility:visible !important;display:-webkit-box !important;-webkit-box-orient:vertical !important;line-clamp:2!important;-webkit-line-clamp:2!important;width:100% !important;min-width:0 !important;min-height:36px !important;max-height:39px !important;overflow:hidden !important;line-height:1.38 !important;margin:0 !important;grid-column:1 / -1 !important;grid-row:2 !important;margin-top:2px !important;color:rgba(245,240,232,.58) !important;font-size:.82rem !important;font-weight:600 !important}
 @media (max-width:760px){.subjectCardTitle{font-size:.78rem !important;max-width:170px !important}
 .subjectCardCode{max-width:115px !important}
 }
@@ -1689,7 +1689,7 @@ body:not(.hod-is-admin-final) #adminOpenBtn,body:not(.hod-is-admin-final) #hodFl
 #studyList .sitem,#study .sitem,.sitem.compactStudyCard{min-height:64px !important;max-height:92px !important;padding:9px 10px !important;border-radius:14px !important}
 .compactCardLine{grid-template-columns:minmax(0,1fr) auto !important;gap:7px !important;min-height:42px !important}
 #study .snum,.snum,.compactSubject{font-size:.60rem !important;padding:4px 7px !important}
-#study .sq,.sq,.compactQuestionText{font-size:.90rem !important;line-height:1.32 !important;-webkit-line-clamp:2 !important}
+#study .sq,.sq,.compactQuestionText{font-size:.90rem !important;line-height:1.32 !important;line-clamp:2!important;-webkit-line-clamp:2!important;}
 .compactCardRight{gap:5px !important;max-width:128px !important}
 .expandHint,.studyDeleteAction,.studyReportBtn{height:27px !important;min-height:27px !important;font-size:.68rem !important}
 .expandHint,.studyDeleteAction{padding:0 8px !important}
@@ -1714,7 +1714,7 @@ body:not(.hod-is-admin-final) #adminOpenBtn,body:not(.hod-is-admin-final) #hodFl
 .libraryV2Row{display:grid !important;grid-template-columns:auto minmax(0,1fr) auto auto !important;gap:12px !important;align-items:center !important;padding:8px 14px !important}
 .libraryV2Num{display:inline-flex !important;align-items:center !important;justify-content:center !important;height:30px !important;padding:0 10px !important;border-radius:999px !important;border:1px solid rgba(200,169,110,.20) !important;background:rgba(200,169,110,.06) !important;color:rgba(232,212,168,.80) !important;font-weight:850 !important;font-size:.70rem !important;letter-spacing:.08em !important;white-space:nowrap !important}
 .libraryV2Main{min-width:0 !important}
-.libraryV2Question{color:rgba(245,240,232,.82) !important;font-size:1rem !important;line-height:1.35 !important;font-weight:620 !important;display:-webkit-box !important;-webkit-line-clamp:2 !important;-webkit-box-orient:vertical !important;overflow:hidden !important}
+.libraryV2Question{color:rgba(245,240,232,.82) !important;font-size:1rem !important;line-height:1.35 !important;font-weight:620 !important;display:-webkit-box !important;line-clamp:2!important;-webkit-line-clamp:2!important;-webkit-box-orient:vertical !important;overflow:hidden !important}
 .libraryV2Answer{display:flex !important;gap:8px !important;align-items:center !important;min-width:0 !important;margin-top:5px !important;color:rgba(245,240,232,.58) !important;font-size:.82rem !important;line-height:1.35 !important}
 .libraryV2Answer b{color:rgba(232,212,168,.88) !important;white-space:nowrap !important}
 .libraryV2Answer span{overflow:hidden !important;text-overflow:ellipsis !important;white-space:nowrap !important;min-width:0 !important}
@@ -1729,7 +1729,7 @@ body:not(.hod-is-admin-final) #adminOpenBtn,body:not(.hod-is-admin-final) #hodFl
 .libraryV2Actions button:hover{background:rgba(200,169,110,.12) !important;border-color:rgba(232,212,168,.42) !important;color:var(--gold2) !important}
 .libraryV2Details{display:none !important;padding:0 14px 14px !important;border-top:1px solid rgba(200,169,110,.12) !important;margin-top:0 !important}
 .libraryV2Card.open .libraryV2Details{display:block !important}
-.libraryV2Card.open .libraryV2Question{-webkit-line-clamp:unset !important;display:block !important}
+.libraryV2Card.open .libraryV2Question{line-clamp:unset!important;-webkit-line-clamp:unset!important;display:block !important}
 .libraryV2Card.open .libraryV2Answer span{white-space:normal !important}
 .libraryV2Images{display:flex !important;gap:10px !important;flex-wrap:wrap !important;justify-content:center !important;margin-top:12px !important}
 .libraryV2Images img{max-width:min(260px,100%) !important;max-height:180px !important;object-fit:contain !important;border-radius:14px !important;border:1px solid rgba(200,169,110,.22) !important;background:rgba(0,0,0,.16) !important;padding:5px !important}
@@ -1739,10 +1739,10 @@ body:not(.hod-is-admin-final) #adminOpenBtn,body:not(.hod-is-admin-final) #hodFl
 .libraryV2Main{grid-column:1/-1;grid-row:2}
 .libraryV2Img{grid-column:2;grid-row:1/3;width:64px !important;height:46px !important}
 .libraryV2Actions{grid-column:1/-1;grid-row:3;justify-content:flex-start !important}
-.libraryV2Question{font-size:.94rem !important;-webkit-line-clamp:3 !important}
+.libraryV2Question{font-size:.94rem !important;line-clamp:3!important;-webkit-line-clamp:3!important;}
 .libraryV2Answer{font-size:.76rem !important;align-items:flex-start !important}
-.libraryV2Answer span{white-space:normal !important;display:-webkit-box !important;-webkit-line-clamp:1 !important;-webkit-box-orient:vertical !important}
-.libraryV2Card.open .libraryV2Answer span{-webkit-line-clamp:unset !important}
+.libraryV2Answer span{white-space:normal !important;display:-webkit-box !important;line-clamp:1!important;-webkit-line-clamp:1!important;-webkit-box-orient:vertical !important}
+.libraryV2Card.open .libraryV2Answer span{line-clamp:unset!important;-webkit-line-clamp:unset!important;}
 .libraryV2Actions button{height:30px !important;font-size:.72rem !important}
 .libraryV2Details{padding:0 12px 12px !important}
 .libraryV2Images img{max-height:140px !important}
@@ -2067,7 +2067,7 @@ body:not(.hod-is-admin-final) #adminOpenBtn,body:not(.hod-is-admin-final) #hodFl
 #quiz .examActiveSubjectTop{gap:8px !important;margin-bottom:8px !important}
 #quiz .examActiveSubjectCode{padding:5px 10px !important;border-radius:10px !important;font-size:.78rem !important;font-weight:650 !important}
 #quiz .examActiveSubjectName{font-size:.92rem !important;font-weight:620 !important;overflow:hidden !important;text-overflow:ellipsis !important;white-space:nowrap !important}
-#quiz .examActiveSubjectDesc{font-size:.82rem !important;line-height:1.35 !important;margin-bottom:7px !important;display:-webkit-box !important;-webkit-line-clamp:2 !important;-webkit-box-orient:vertical !important;overflow:hidden !important}
+#quiz .examActiveSubjectDesc{font-size:.82rem !important;line-height:1.35 !important;margin-bottom:7px !important;display:-webkit-box !important;line-clamp:2!important;-webkit-line-clamp:2!important;-webkit-box-orient:vertical !important;overflow:hidden !important}
 #quiz .examActiveSubjectMeta{font-size:.82rem !important;font-weight:650 !important}
 #quiz .examSubjectChips{grid-area:merge !important;display:flex !important;flex-wrap:wrap !important;gap:10px !important;margin:0 !important}
 #quiz .examSubjectChip{width:260px !important;height:128px !important;border-radius:16px !important;box-shadow:inset 0 0 0 1px rgba(232,212,168,.08),0 10px 22px rgba(0,0,0,.20) !important}
@@ -2095,7 +2095,7 @@ body:not(.hod-is-admin-final) #adminOpenBtn,body:not(.hod-is-admin-final) #hodFl
 #quiz .examActiveSubjectTop{margin-bottom:6px !important}
 #quiz .examActiveSubjectCode{font-size:.72rem !important;padding:4px 8px !important;border-radius:8px !important}
 #quiz .examActiveSubjectName{font-size:.84rem !important;font-weight:560 !important}
-#quiz .examActiveSubjectDesc{font-size:.76rem !important;line-height:1.25 !important;margin-bottom:5px !important;-webkit-line-clamp:1 !important}
+#quiz .examActiveSubjectDesc{font-size:.76rem !important;line-height:1.25 !important;margin-bottom:5px !important;line-clamp:1!important;-webkit-line-clamp:1!important;}
 #quiz .examActiveSubjectMeta{font-size:.76rem !important}
 #quiz .examSubjectChips{display:grid !important;grid-template-columns:1fr !important;gap:8px !important}
 #quiz .examSubjectChip{width:100% !important;height:104px !important;border-radius:14px !important}
@@ -2154,7 +2154,7 @@ body:not(.hod-is-admin-final) #adminOpenBtn,body:not(.hod-is-admin-final) #hodFl
 #quiz .examOnlyGridContainer{width:100% !important;max-width:1380px !important;height:100% !important;min-height:0 !important;margin:0 auto !important;display:grid !important;grid-template-columns:minmax(0,1fr) minmax(250px,310px) !important;gap:24px !important;align-items:stretch !important;justify-content:center !important}
 #quiz .examOnlyCard{height:100% !important;min-height:0 !important;max-height:100% !important;width:100% !important;max-width:none !important;margin:0 !important;display:flex !important;flex-direction:column !important;justify-content:space-between !important;padding:24px 28px !important;border-radius:28px !important;background:rgba(20,16,15,0.65) !important;border:1px solid rgba(232,212,168,0.12) !important;backdrop-filter:blur(24px) !important;box-shadow:0 30px 80px rgba(0,0,0,0.5),inset 0 1px 0 rgba(255,255,255,0.05) !important}
 #quiz .examOnlyTopline{flex:0 0 auto !important;align-items:center !important;margin-bottom:12px !important;gap:12px !important;border-bottom:1px solid rgba(255,255,255,0.04) !important;padding-bottom:12px !important}
-#quiz .examOnlyQuestionNo{font-size:1.35rem !important;line-height:1.1 !important;font-weight:900 !important;background:linear-gradient(135deg,#ffffff 30%,var(--gold2)) !important;-webkit-background-clip:text !important;-webkit-text-fill-color:transparent !important}
+#quiz .examOnlyQuestionNo{font-size:1.35rem !important;line-height:1.1 !important;font-weight:900 !important;background:linear-gradient(135deg,#ffffff 30%,var(--gold2)) !important;background-clip:text!important;-webkit-background-clip:text!important;-webkit-text-fill-color:transparent !important}
 #quiz .examOnlyMeta{font-size:0.92rem !important;margin-top:5px !important;line-height:1.25 !important;color:var(--mist) !important;opacity:0.85 !important}
 #quiz .examOnlyExit{padding:8px 16px !important;min-height:38px !important;border-radius:999px !important;border:1px solid rgba(233,135,123,0.22) !important;background:rgba(233,135,123,0.06) !important;color:#ffd0ca !important;font-weight:900 !important;transition:all 0.2s ease !important}
 #quiz .examOnlyExit:hover{background:rgba(233,135,123,0.15) !important;border-color:rgba(233,135,123,0.5) !important;transform:translateY(-1px) !important;box-shadow:0 4px 12px rgba(233,135,123,0.2) !important}
@@ -2165,7 +2165,7 @@ body:not(.hod-is-admin-final) #adminOpenBtn,body:not(.hod-is-admin-final) #hodFl
 #quiz .examOnlyContentBody{display:grid !important;grid-template-columns:1.15fr 0.85fr !important;gap:32px !important;flex:1 1 auto !important;min-height:0 !important;margin-bottom:12px !important}
 #quiz .examOnlyQuestionZone{display:flex !important;flex-direction:column !important;gap:16px !important;overflow-y:auto !important;overflow-x:hidden !important;max-height:100% !important;scrollbar-width:thin !important;scrollbar-color:rgba(232,212,168,0.25) transparent !important;padding-right:16px !important}
 #quiz .examOnlyRightZone{display:flex !important;flex-direction:column !important;overflow-y:auto !important;overflow-x:hidden !important;max-height:100% !important;scrollbar-width:thin !important;scrollbar-color:rgba(232,212,168,0.25) transparent !important;padding-right:0 !important}
-#quiz .examOnlyCard .qq{display:block !important;width:100% !important;min-width:0 !important;max-width:none !important;flex:0 0 auto !important;margin:0 !important;color:rgba(245,240,232,0.92) !important;font-size:clamp(1.08rem,1.15vw,1.35rem) !important;line-height:1.5 !important;font-weight:650 !important;white-space:normal !important;text-overflow:clip !important;-webkit-line-clamp:unset !important;overflow-wrap:anywhere !important;word-break:normal !important}
+#quiz .examOnlyCard .qq{display:block !important;width:100% !important;min-width:0 !important;max-width:none !important;flex:0 0 auto !important;margin:0 !important;color:rgba(245,240,232,0.92) !important;font-size:clamp(1.08rem,1.15vw,1.35rem) !important;line-height:1.5 !important;font-weight:650 !important;white-space:normal !important;text-overflow:clip !important;line-clamp:unset!important;-webkit-line-clamp:unset!important;overflow-wrap:anywhere !important;word-break:normal !important}
 #quiz .qimgs{flex:0 0 auto !important;margin:0 0 12px !important;display:flex !important;justify-content:center !important}
 #quiz .qimgs img{max-height:42vh !important;max-width:100% !important;object-fit:contain !important;border-radius:18px !important;border:1px solid rgba(232,212,168,.18) !important;background:rgba(0,0,0,.25) !important;padding:5px !important;box-shadow:0 12px 38px rgba(0,0,0,.45) !important}
 #quiz .examOnlyOptions{display:flex !important;flex-direction:column !important;gap:12px !important;width:100% !important;padding:8px 18px 24px 18px !important;box-sizing:border-box !important}
@@ -2339,3 +2339,83 @@ body:not(.hod-is-admin-final) #adminOpenBtn,body:not(.hod-is-admin-final) #hodFl
 .subjectCard.hasNewBadge{position:relative!important;overflow:visible!important;}
 .subjectCard .subjectNewBadge{display:inline-flex!important;position:absolute!important;top:-8px!important;right:10px!important;z-index:50!important;align-items:center!important;justify-content:center!important;min-width:42px!important;height:23px!important;padding:0 8px!important;border-radius:999px!important;background:linear-gradient(135deg,#fff07a,#ffd35a 58%,#fff3bb)!important;color:#211304!important;border:1px solid rgba(255,235,170,.72)!important;font-size:.54rem!important;font-weight:950!important;letter-spacing:.04em!important;line-height:1!important;text-transform:uppercase!important;box-shadow:0 4px 12px rgba(0,0,0,.30),0 0 11px rgba(255,224,92,.34)!important;pointer-events:none!important;}
 /* ===== END COPILOT_SHOW_SUBJECT_NEW_BADGE_20260630 ===== */
+
+
+/* ===== MOBILE_FLIP_EFFECT_VISIBLE_20260630 ===== */
+@media (max-width:760px){
+  #fc .zone{
+    perspective:1200px !important;
+    -webkit-perspective:1200px !important;
+  }
+  #fc .card{
+    transform-style:preserve-3d !important;
+    -webkit-transform-style:preserve-3d !important;
+    transition:transform .42s cubic-bezier(.2,.72,.2,1) !important;
+    will-change:transform !important;
+  }
+  #fc .card.flip.dir-horizontal,
+  #fc .card.dir-horizontal.flip{
+    transform:rotateY(180deg) !important;
+  }
+  #fc .card.flip.dir-up,
+  #fc .card.dir-up.flip{
+    transform:rotateX(-180deg) !important;
+  }
+  #fc .card.flip.dir-down,
+  #fc .card.dir-down.flip{
+    transform:rotateX(180deg) !important;
+  }
+  #fc .face{
+    backface-visibility:hidden !important;
+    -webkit-backface-visibility:hidden !important;
+    transform-style:preserve-3d !important;
+    -webkit-transform-style:preserve-3d !important;
+  }
+  #fc .front{
+    transform:rotateY(0deg) translateZ(.1px) !important;
+  }
+  #fc .back{
+    transform:rotateY(180deg) translateZ(.1px) !important;
+  }
+  #fc .card.dir-up .back{transform:rotateX(180deg) translateZ(.1px) !important}
+  #fc .card.dir-down .back{transform:rotateX(-180deg) translateZ(.1px) !important}
+  #fc .card.is-flipping{
+    filter:drop-shadow(0 0 18px rgba(232,212,168,.18)) !important;
+  }
+}
+/* ===== END MOBILE_FLIP_EFFECT_VISIBLE_20260630 ===== */
+
+
+/* ===== SUBJECT_GATE_MOBILE_VIEW_TOUCH_FIX_FINAL_20260630 ===== */
+@media (max-width:760px){
+  html,body{height:100svh !important;overflow:hidden !important;overscroll-behavior:none !important}
+  .subjectGate{padding:8px !important;align-items:stretch !important;place-items:stretch !important;overflow:hidden !important;touch-action:pan-y !important}
+  .subjectGate .polishedSubjectPanel,.polishedSubjectPanel{width:100% !important;height:calc(100svh - 16px) !important;max-height:calc(100svh - 16px) !important;padding:12px !important;border-radius:18px !important;overflow:hidden !important;display:flex !important;flex-direction:column !important;gap:10px !important}
+  .subjectGateHeader{flex:0 0 auto !important;gap:8px !important;display:grid !important;grid-template-columns:1fr !important}
+  .subjectGateLabel{font-size:.64rem !important;padding:5px 9px !important;margin-bottom:6px !important}
+  .polishedSubjectPanel h2{font-size:clamp(1.55rem,7vw,2rem) !important;line-height:1.05 !important;margin-bottom:4px !important}
+  .polishedSubjectPanel p,#subjectUserEmail{font-size:.88rem !important;line-height:1.25 !important;word-break:break-word !important}
+  .subjectGateTopActions{display:grid !important;grid-template-columns:1fr 1fr !important;gap:8px !important;width:100% !important}
+  .subjectGateTopActions .btn,#subjectRefresh,#subjectLogout{min-height:40px !important;height:40px !important;padding:0 10px !important;font-size:.82rem !important}
+  .subjectGateTabs{flex:0 0 auto !important;margin:0 !important;padding:4px 0 6px !important;gap:8px !important;overflow-x:auto !important;overflow-y:hidden !important;scrollbar-width:none !important}
+  .subjectGateTabs::-webkit-scrollbar{display:none !important}
+  .subjectGateTab{flex:1 0 max-content !important;min-height:40px !important;padding:0 14px !important;font-size:.78rem !important;border-radius:999px !important;border:1px solid rgba(232,212,168,.18) !important}
+  .subjectGateTools{flex:0 0 auto !important;gap:8px !important}
+  .subjectGateTools input,#subjectSearch{width:100% !important;min-width:0 !important;height:44px !important;font-size:16px !important;padding:0 14px !important}
+  .subjectList{flex:1 1 auto !important;min-height:0 !important;max-height:none !important;overflow-y:auto !important;overflow-x:hidden !important;-webkit-overflow-scrolling:touch !important;overscroll-behavior:contain !important;grid-template-columns:1fr !important;gap:10px !important;padding:4px 4px calc(118px + env(safe-area-inset-bottom)) 4px !important;margin:0 !important;scroll-padding-bottom:130px !important}
+  .subjectCard{height:auto !important;min-height:118px !important;padding:12px !important;border-radius:16px !important;gap:8px !important;touch-action:manipulation !important}
+  .subjectCardTitle{font-size:.98rem !important;line-height:1.15 !important;white-space:normal !important;overflow:visible !important;text-overflow:clip !important}
+  .subjectCardDesc,.subjectCard p{font-size:.78rem !important;line-height:1.28 !important;display:-webkit-box !important;-webkit-line-clamp:2 !important;line-clamp:2 !important;-webkit-box-orient:vertical !important;overflow:hidden !important}
+  .subjectMeta{gap:8px !important;align-items:center !important}
+  .subjectChoose{min-width:86px !important;min-height:34px !important;height:34px !important;display:inline-flex !important;align-items:center !important;justify-content:center !important}
+  .subjectGateFooter{position:absolute !important;left:12px !important;right:12px !important;bottom:calc(10px + env(safe-area-inset-bottom)) !important;z-index:20 !important;display:grid !important;grid-template-columns:1fr !important;gap:8px !important;padding:12px !important;border-radius:18px !important;background:linear-gradient(180deg,rgba(18,14,10,.90),rgba(8,7,6,.96)) !important;border:1px solid rgba(232,212,168,.22) !important;box-shadow:0 -12px 35px rgba(0,0,0,.42) !important;backdrop-filter:blur(14px) !important}
+  .subjectSelectedBox span{font-size:.66rem !important}
+  #subjectPickedText{font-size:1rem !important;line-height:1.2 !important;white-space:nowrap !important;overflow:hidden !important;text-overflow:ellipsis !important}
+  #subjectEnter{min-height:48px !important;height:48px !important;font-size:1rem !important}
+  #fc .zone,#fc .card,#fc .face{touch-action:pan-y !important;-webkit-tap-highlight-color:transparent !important}
+  #fc .zone{padding-left:12px !important;padding-right:12px !important;overflow:hidden !important}
+  #fc .card{cursor:pointer !important}
+  #fc .front{overscroll-behavior:contain !important;-webkit-overflow-scrolling:touch !important}
+}
+.subjectCard p,.subjectCardDesc{line-clamp:2 !important}
+/* ===== END SUBJECT_GATE_MOBILE_VIEW_TOUCH_FIX_FINAL_20260630 ===== */

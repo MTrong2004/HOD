@@ -7455,3 +7455,177 @@ window.APP_CONFIG.USE_TURSO_API = true;
 })();
 // ===== END APP_STARTUP_AUTO_LOAD_QUESTIONS_SUBJECTS_20260630 =====
 
+
+
+// ===== MOBILE_FLASHCARD_TOUCH_SMOOTH_20260630 =====
+// Làm thao tác flashcard trên mobile mượt hơn: vuốt đổi câu, không bị lật thẻ nhầm sau khi vuốt.
+(function () {
+  if (window.__MOBILE_FLASHCARD_TOUCH_SMOOTH_20260630) return;
+  window.__MOBILE_FLASHCARD_TOUCH_SMOOTH_20260630 = true;
+
+  function $(id) { return document.getElementById(id); }
+  function isMobile() { return window.matchMedia && window.matchMedia('(max-width: 760px)').matches; }
+  function goPrev() { if (typeof prev === 'function') prev(); }
+  function goNext() { if (typeof next === 'function') next(); }
+  function interactive(el) { return !!(el && el.closest && el.closest('button,input,textarea,select,a,.cardToolBtn,#editCard,.modal,.overlay')); }
+
+  function bind() {
+    const zone = $('zone');
+    if (!zone || zone.__mobileSmoothTouchBound) return;
+    zone.__mobileSmoothTouchBound = true;
+
+    let sx = 0, sy = 0, moved = false, started = false, lockClickUntil = 0;
+
+    zone.addEventListener('touchstart', function (e) {
+      if (!isMobile() || interactive(e.target)) { started = false; return; }
+      const t = e.touches && e.touches[0];
+      if (!t) return;
+      started = true;
+      moved = false;
+      sx = t.clientX;
+      sy = t.clientY;
+    }, { passive: true, capture: true });
+
+    zone.addEventListener('touchmove', function (e) {
+      if (!started || !isMobile()) return;
+      const t = e.touches && e.touches[0];
+      if (!t) return;
+      const dx = t.clientX - sx;
+      const dy = t.clientY - sy;
+      if (Math.abs(dx) > 18 && Math.abs(dx) > Math.abs(dy) * 1.15) {
+        moved = true;
+        e.preventDefault();
+      }
+    }, { passive: false, capture: true });
+
+    zone.addEventListener('touchend', function (e) {
+      if (!started || !isMobile()) return;
+      const t = e.changedTouches && e.changedTouches[0];
+      started = false;
+      if (!t) return;
+      const dx = t.clientX - sx;
+      const dy = t.clientY - sy;
+      if (moved && Math.abs(dx) > 46 && Math.abs(dx) > Math.abs(dy) * 1.15) {
+        lockClickUntil = Date.now() + 420;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (dx < 0) goNext(); else goPrev();
+      }
+    }, { passive: false, capture: true });
+
+    zone.addEventListener('click', function (e) {
+      if (Date.now() < lockClickUntil) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+      }
+    }, true);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind); else bind();
+  setTimeout(bind, 350);
+  setTimeout(bind, 1200);
+})();
+// ===== END MOBILE_FLASHCARD_TOUCH_SMOOTH_20260630 =====
+
+
+// ===== MOBILE_TAP_FLIP_RESTORE_20260630 =====
+// Mobile: chạm vào thẻ để lật ngay, có hiệu ứng rõ; vuốt trái/phải vẫn đổi câu.
+(function(){
+  if(window.__MOBILE_TAP_FLIP_RESTORE_20260630) return;
+  window.__MOBILE_TAP_FLIP_RESTORE_20260630 = true;
+
+  function $(id){ return document.getElementById(id); }
+  function mobile(){ return window.matchMedia ? window.matchMedia('(max-width:760px)').matches : window.innerWidth <= 760; }
+  function blockedTarget(el){ return !!(el && el.closest && el.closest('button,input,textarea,select,a,#cardTools,.cardTools,#editCard,.edit,.modal,.overlay')); }
+  function doFlip(){
+    const card = $('card');
+    if(card){
+      card.classList.add('is-flipping');
+      setTimeout(function(){ card.classList.remove('is-flipping'); }, 460);
+    }
+    if(typeof flip === 'function') flip('horizontal');
+  }
+
+  function bind(){
+    const zone = $('zone');
+    const card = $('card');
+    if(!zone || !card || zone.__mobileTapFlipRestore) return;
+    zone.__mobileTapFlipRestore = true;
+
+    let sx = 0, sy = 0, st = 0, tapped = false;
+
+    zone.addEventListener('touchstart', function(e){
+      if(!mobile() || blockedTarget(e.target)) return;
+      const t = e.touches && e.touches[0];
+      if(!t) return;
+      sx = t.clientX; sy = t.clientY; st = Date.now(); tapped = false;
+    }, {passive:true, capture:true});
+
+    zone.addEventListener('touchend', function(e){
+      if(!mobile() || blockedTarget(e.target)) return;
+      if(!card.contains(e.target)) return;
+      const t = e.changedTouches && e.changedTouches[0];
+      if(!t) return;
+      const dx = t.clientX - sx;
+      const dy = t.clientY - sy;
+      const quickTap = Date.now() - st < 450 && Math.abs(dx) < 14 && Math.abs(dy) < 14;
+      if(!quickTap) return;
+      tapped = true;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      doFlip();
+      setTimeout(function(){ tapped = false; }, 380);
+    }, {passive:false, capture:true});
+
+    zone.addEventListener('click', function(e){
+      if(tapped){
+        e.preventDefault();
+        e.stopImmediatePropagation();
+      }
+    }, true);
+  }
+
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind); else bind();
+  setTimeout(bind, 300);
+  setTimeout(bind, 1000);
+})();
+// ===== END MOBILE_TAP_FLIP_RESTORE_20260630 =====
+
+
+// ===== SUBJECT_GATE_MOBILE_VIEW_TOUCH_FIX_FINAL_20260630 =====
+(function(){
+  if (window.__SUBJECT_GATE_MOBILE_VIEW_TOUCH_FIX_FINAL_20260630) return;
+  window.__SUBJECT_GATE_MOBILE_VIEW_TOUCH_FIX_FINAL_20260630 = true;
+  function isPhone(){return window.matchMedia && window.matchMedia('(max-width: 760px)').matches;}
+  function blocked(el){return !!(el && el.closest && el.closest('button,a,input,textarea,select,label,.cardToolBtn,#editCard,.modal,.overlay,.subjectGateFooter'));}
+  function run(name){try{ if(typeof window[name]==='function') return window[name](); if(typeof eval(name)==='function') return eval(name)(); }catch(e){} }
+  function doFlip(){try{ if(typeof window.flip==='function') return window.flip('horizontal'); if(typeof flip==='function') return flip('horizontal'); }catch(e){} try{document.dispatchEvent(new KeyboardEvent('keydown',{code:'Space',key:' ',bubbles:true}));}catch(e){}}
+  function doNext(){run('next') || document.getElementById('next')?.click();}
+  function doPrev(){run('prev') || document.getElementById('prev')?.click();}
+  function bindFlash(){
+    const zone=document.getElementById('zone'), card=document.getElementById('card');
+    if(!zone || !card || zone.__subjectGateMobileTouchFinal) return;
+    zone.__subjectGateMobileTouchFinal=true;
+    let sx=0,sy=0,st=0,moved=false,target=null;
+    zone.addEventListener('touchstart',function(e){if(!isPhone()||!e.touches||!e.touches[0])return;target=e.target;sx=e.touches[0].clientX;sy=e.touches[0].clientY;st=Date.now();moved=false;},{passive:true});
+    zone.addEventListener('touchmove',function(e){if(!isPhone()||!e.touches||!e.touches[0])return;const dx=e.touches[0].clientX-sx,dy=e.touches[0].clientY-sy;if(Math.abs(dx)>10||Math.abs(dy)>10)moved=true;},{passive:true});
+    zone.addEventListener('touchend',function(e){
+      if(!isPhone()||blocked(target))return;
+      const t=e.changedTouches&&e.changedTouches[0]; if(!t)return;
+      const dx=t.clientX-sx,dy=t.clientY-sy,adx=Math.abs(dx),ady=Math.abs(dy);
+      if(adx>56 && adx>ady*1.35){e.preventDefault(); if(dx<0)doNext(); else doPrev(); return;}
+      if(!moved && Date.now()-st<450){e.preventDefault(); doFlip();}
+    },{passive:false});
+  }
+  function bindSubject(){
+    const list=document.getElementById('subjectList'); if(!list || list.__subjectGateMobilePickFinal)return; list.__subjectGateMobilePickFinal=true;
+    let sx=0,sy=0,moved=false;
+    list.addEventListener('touchstart',function(e){if(!isPhone()||!e.touches||!e.touches[0])return;sx=e.touches[0].clientX;sy=e.touches[0].clientY;moved=false;},{passive:true});
+    list.addEventListener('touchmove',function(e){if(!isPhone()||!e.touches||!e.touches[0])return;if(Math.abs(e.touches[0].clientX-sx)>8||Math.abs(e.touches[0].clientY-sy)>8)moved=true;},{passive:true});
+    list.addEventListener('touchend',function(e){if(!isPhone()||moved)return;const card=e.target&&e.target.closest&&e.target.closest('.subjectCard');if(!card)return;e.preventDefault();card.click();try{card.scrollIntoView({block:'nearest',inline:'nearest'});}catch(err){}},{passive:false});
+  }
+  function bind(){bindFlash();bindSubject();}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();
+  setTimeout(bind,600);setTimeout(bind,1600);
+})();
+// ===== END SUBJECT_GATE_MOBILE_VIEW_TOUCH_FIX_FINAL_20260630 =====

@@ -8,9 +8,8 @@ window.APP_CONFIG = {
     return (this.SUPABASE_URL || '').replace(/\/+$/, '') + '/functions/v1/login-notify';
   },
 
-  // ===== DISCORD CONFIG =====
-  // Đổi webhook Discord thì chỉ sửa dòng dưới đây.
-  DISCORD_WEBHOOK_URL: 'https://discord.com/api/webhooks/1519452717947420732/j-EVKdyuRYHRXU6MJbW9z_2lAy-wV2XnEOVULJEtDSgtignSVh2fWTTJKFgHj2MgoTJQ',
+  // Discord webhook: KHÔNG đặt ở đây nữa (client-side thì ai cũng xem được).
+  // Đã chuyển sang biến môi trường DISCORD_WEBHOOK_URL, xử lý trong api/index.js (path /api/notify).
 
   // ===== CLOUDINARY CONFIG =====
   // Đổi Cloudinary thì chỉ sửa các dòng dưới đây.

@@ -17,8 +17,9 @@ Lưu ý ảnh:
 Lưu ý quyền:
 - add_subject_request cho user đã approved.
 - Các action admin/editor còn lại cần admin cấu hình hoặc user có role admin/editor và approved, không bị blocked.
+- /api/notify: gửi thông báo Discord (login/action). Webhook URL đọc từ env DISCORD_WEBHOOK_URL,
+  KHÔNG được đưa xuống client. Luôn xác thực user_id+email khớp profile trong DB trước khi gửi.
 Lưu ý khi sửa:
-- Không đụng Discord webhook vì file này không xử lý Discord.
 - Nếu sửa lưu ảnh mất sau refresh/reset, kiểm tra cả app.js và action save_question_direct trong file này.
 AI_INDEX_JS_MAP_END */
 
@@ -68,6 +69,26 @@ function json(res, status = 200) {
 
 function getAdminEmail() {
   return clean(process.env.ADMIN_EMAIL).toLowerCase().trim();
+}
+
+function roleColor(role) {
+  if (role === 'admin') return 10038562;
+  if (role === 'editor') return 3066993;
+  return 3447003;
+}
+
+async function postDiscordEmbed(embed) {
+  const webhookUrl = clean(process.env.DISCORD_WEBHOOK_URL);
+  if (!webhookUrl) return;
+  try {
+    await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ embeds: [embed] })
+    });
+  } catch (e) {
+    console.warn('Discord notify failed:', e);
+  }
 }
 
 function parseJson(v, fallback) {
@@ -326,6 +347,61 @@ export default async function handler(req) {
         }
       } catch (e) { /* default approval */ }
       return json({ registration_mode });
+    }
+
+    if (path === 'notify') {
+      if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
+
+      const body = await req.json();
+      const { kind, user_id, email } = body;
+      if (!user_id || !email) return json({ error: 'Missing user_id or email' }, 400);
+
+      const userRes = await db.execute({ sql: 'select * from profiles where id = ?', args: [user_id] });
+      const profile = userRes.rows?.[0];
+      if (!profile || String(profile.email || '').toLowerCase().trim() !== String(email).toLowerCase().trim()) {
+        return json({ error: 'Unauthorized' }, 403);
+      }
+      const role = profile.role || 'user';
+
+      if (kind === 'login') {
+        await postDiscordEmbed({
+          title: '🔑 NGƯỜI DÙNG ĐĂNG NHẬP',
+          color: roleColor(role),
+          fields: [
+            { name: '👤 Gmail', value: email, inline: true },
+            { name: '🎭 Vai trò', value: role, inline: true },
+            { name: '🌐 Nguồn', value: body.source === 'admin' ? 'Admin panel' : 'Web học', inline: true },
+            { name: '⏰ Thời điểm', value: new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }), inline: false }
+          ]
+        });
+        return json({ ok: true });
+      }
+
+      if (kind === 'action') {
+        const isBlocked = profile.blocked === 1 || profile.blocked === true;
+        const isApproved = profile.approved === 1 || profile.approved === true;
+        const isEditorOrAdmin = ['admin', 'editor'].includes(role);
+        const adminEmail = getAdminEmail();
+        const isConfiguredAdmin = !!adminEmail && String(profile.email || '').toLowerCase().trim() === adminEmail;
+        if (!isConfiguredAdmin && !(isApproved && !isBlocked && isEditorOrAdmin)) {
+          return json({ error: 'Unauthorized' }, 403);
+        }
+
+        const { action_name, target_type, target_id } = body;
+        await postDiscordEmbed({
+          title: `⚙️ HÀNH ĐỘNG HỆ THỐNG: ${String(action_name || '').toUpperCase()}`,
+          color: roleColor(role),
+          fields: [
+            { name: '👤 Tài khoản', value: email, inline: true },
+            { name: '🎭 Vai trò', value: role, inline: true },
+            { name: '🔢 Đối tượng', value: `${target_type || 'N/A'} (ID: ${target_id || 'N/A'})`, inline: false },
+            { name: '⏰ Thời điểm', value: new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }), inline: false }
+          ]
+        });
+        return json({ ok: true });
+      }
+
+      return json({ error: 'Invalid kind' }, 400);
     }
 
     if (path === 'admin-dashboard') {

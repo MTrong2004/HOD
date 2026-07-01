@@ -3015,33 +3015,20 @@ Bắt đầu ngay từ câu 1.`;
 })();
 
 // ===== DISCORD_NOTIFICATIONS_CLIENT_SIDE_PATCH_20260625 =====
+// Gửi qua /api/notify — server xác thực user_id+email khớp profile rồi mới gọi webhook (đọc từ env, không lộ ra client).
 async function sendActionToDiscord(actionName, targetType, targetId, details) {
-  const discordUrl = 'https://discord.com/api/webhooks/1519452717947420732/j-EVKdyuRYHRXU6MJbW9z_2lAy-wV2XnEOVULJEtDSgtignSVh2fWTTJKFgHj2MgoTJQ';
-  
-  // Xác định màu sắc (Color) dựa trên vai trò hiện tại của tài khoản Admin đang thao tác
-  // Admin: Đỏ (10038562), Editor: Xanh lá (3066993), Khác: Xanh dương (3447003)
-  let embedColor = 3447003; 
-  if (profile && profile.role === 'admin') embedColor = 10038562;
-  else if (profile && profile.role === 'editor') embedColor = 3066993;
-
-  const payload = {
-    embeds: [{
-      title: `⚙️ HÀNH ĐỘNG HỆ THỐNG: ${String(actionName || '').toUpperCase()}`,
-      color: embedColor,
-      fields: [
-        { name: '👤 Tài khoản', value: user?.email || profile?.email || 'N/A', inline: true },
-        { name: '🎭 Vai trò', value: profile?.role || 'user', inline: true },
-        { name: '🔢 Đối tượng', value: `${targetType || 'N/A'} (ID: ${targetId || 'N/A'})`, inline: false },
-        { name: '⏰ Thời điểm', value: new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }), inline: false }
-      ]
-    }]
-  };
-
   try {
-    await fetch(discordUrl, {
+    await fetch('/api/notify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        kind: 'action',
+        user_id: user?.id,
+        email: user?.email || profile?.email,
+        action_name: actionName,
+        target_type: targetType,
+        target_id: targetId
+      }),
       signal: (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) ? AbortSignal.timeout(8000) : undefined
     });
   } catch (error) {
@@ -3052,29 +3039,11 @@ async function sendActionToDiscord(actionName, targetType, targetId, details) {
 
 // Hàm chuyên biệt để thông báo khi có người đăng nhập thành công vào hệ thống
 async function sendLoginToDiscord(email, role) {
-  const discordUrl = 'https://discord.com/api/webhooks/1519452717947420732/j-EVKdyuRYHRXU6MJbW9z_2lAy-wV2XnEOVULJEtDSgtignSVh2fWTTJKFgHj2MgoTJQ';
-  
-  let embedColor = 3447003; 
-  if (role === 'admin') embedColor = 10038562; // Admin màu đỏ
-  else if (role === 'editor') embedColor = 3066993; // Editor màu xanh lá
-
-  const payload = {
-    embeds: [{
-      title: `🔑 ĐĂNG NHẬP HỆ THỐNG THÀNH CÔNG`,
-      color: embedColor,
-      fields: [
-        { name: '👤 Tài khoản Gmail', value: email || 'N/A', inline: true },
-        { name: '🎭 Vai trò', value: role || 'user', inline: true },
-        { name: '⏰ Thời điểm', value: new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }), inline: false }
-      ]
-    }]
-  };
-
   try {
-    await fetch(discordUrl, {
+    await fetch('/api/notify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ kind: 'login', user_id: user?.id, email, role, source: 'admin' }),
       signal: (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) ? AbortSignal.timeout(8000) : undefined
     });
   } catch (error) {

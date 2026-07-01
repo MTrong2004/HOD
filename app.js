@@ -635,33 +635,13 @@ window.HODSupabase = (() => {
 
 
   // ===== APP_DIRECT_DISCORD_LOGIN_NOTIFY_20260627 =====
-  // Gửi thông báo đăng nhập web trực tiếp qua Discord webhook giống admin.js.
+  // Gửi thông báo đăng nhập web qua /api/notify (server tự lấy webhook từ env, không lộ ra client).
   async function sendLoginToDiscord(email, role) {
-    const discordUrl = 'https://discord.com/api/webhooks/1519452717947420732/j-EVKdyuRYHRXU6MJbW9z_2lAy-wV2XnEOVULJEtDSgtignSVh2fWTTJKFgHj2MgoTJQ';
-
-    let embedColor = 3447003;
-    if (role === 'admin') embedColor = 10038562;
-    else if (role === 'editor') embedColor = 3066993;
-
-    const payload = {
-      embeds: [{
-        title: '🔑 NGƯỜI DÙNG ĐĂNG NHẬP WEB',
-        color: embedColor,
-        fields: [
-          { name: '👤 Gmail', value: email || 'N/A', inline: true },
-          { name: '🎭 Vai trò', value: role || 'user', inline: true },
-          { name: '🌐 Nguồn', value: 'Web học', inline: true },
-          { name: '🔗 Trang', value: location.href.split('#')[0] || 'N/A', inline: false },
-          { name: '⏰ Thời điểm', value: new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }), inline: false }
-        ]
-      }]
-    };
-
     try {
-      const res = await fetch(discordUrl, {
+      const res = await fetch('/api/notify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ kind: 'login', user_id: currentUser?.id, email, role, source: 'web' })
       });
       if (!res.ok) console.warn('Discord login notify failed:', res.status, await res.text().catch(() => ''));
     } catch (error) {
@@ -5628,21 +5608,6 @@ return true;
 })();
 // ===== END FINAL_URL_ONLY_IMAGES_AND_CURRENT_RELOAD_20260628 =====
 
-// ===== REMOVE_RELOAD_CURRENT_QUESTION_BUTTON_20260628 =====
-// Bỏ nút "↻ Câu" trên giao diện học. Vẫn giữ các tối ưu URL ảnh và tải nhẹ.
-(function () {
-  function removeBtn() {
-    const btn = document.getElementById('reloadCurrentQuestionBtn');
-    if (btn) btn.remove();
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', removeBtn);
-  else removeBtn();
-  setTimeout(removeBtn, 100);
-  setTimeout(removeBtn, 500);
-  setInterval(removeBtn, 1000);
-})();
-// ===== END REMOVE_RELOAD_CURRENT_QUESTION_BUTTON_20260628 =====
-
 // ===== FINAL_UI_DEDUP_CLEANER_20260628 =====
 // Dọn rác giao diện do nhiều patch cũ tạo trùng: avatar, report box, nút đổi môn, nút tải câu, modal report.
 (function () {
@@ -5654,8 +5619,7 @@ return true;
   }
   function removeAll(id) { all('#' + id).forEach(x => x.remove()); }
   function cleanButtons() {
-    // Bỏ hoàn toàn nút tải/reload câu theo yêu cầu.
-    removeAll('reloadCurrentQuestionBtn');
+    // Nút tải/reload câu: xóa hẳn được xử lý ở REMOVE_ANY_RELOAD_TEXT_BUTTON_20260628.
 
     // Chỉ giữ 1 avatar tài khoản.
     const avatar = keepFirstById('hodTopAvatar');
@@ -6979,35 +6943,9 @@ window.clearLearningHubQuestionCache = function () {
 // ===== END ACTIVE_SUBJECT_COUNT_SYNC_20260629 =====
 
 
-// ===== SUBJECTS_CACHE_BUST_AFTER_ADD_20260629 =====
-// Sau khi thêm môn, ép request subjects đi network 1 lần để danh sách cập nhật ngay, không bị cache cũ giữ lại.
-(function(){
-  if(window.__SUBJECTS_CACHE_BUST_AFTER_ADD_20260629) return;
-  window.__SUBJECTS_CACHE_BUST_AFTER_ADD_20260629 = true;
-  const nativeFetch = window.fetch ? window.fetch.bind(window) : null;
-  if(!nativeFetch) return;
-  function methodOf(init){ return String(init && init.method ? init.method : 'GET').toUpperCase(); }
-  function urlOf(input){ try { return new URL(typeof input === 'string' ? input : input.url, location.href); } catch(e){ return null; } }
-  function isDirty(){
-    const n = Number(localStorage.getItem('learninghub_subjects_dirty_v3') || 0);
-    return n && Date.now() - n < 2 * 60 * 1000;
-  }
-  window.fetch = function(input, init){
-    let url = urlOf(input);
-    if(url && methodOf(init) === 'GET' && /\/rest\/v1\/subjects\b/.test(url.pathname) && isDirty()){
-      // offset=0 là tham số hợp lệ của PostgREST, dùng để đổi cache key nhưng không đổi dữ liệu.
-      if(!url.searchParams.has('offset')) url.searchParams.set('offset','0');
-      if(!url.searchParams.has('limit')) url.searchParams.set('limit','1000');
-      const next = typeof input === 'string' ? url.toString() : new Request(url.toString(), input);
-      return nativeFetch(next, init).then(res => {
-        try { localStorage.removeItem('learninghub_subjects_dirty_v3'); } catch(e) {}
-        return res;
-      });
-    }
-    return nativeFetch(input, init);
-  };
-})();
-// ===== END SUBJECTS_CACHE_BUST_AFTER_ADD_20260629 =====
+// SUBJECTS_CACHE_BUST_AFTER_ADD_20260629 đã bị xóa (20260702): chỉ tác dụng khi có
+// request GET /rest/v1/subjects (Supabase REST trực tiếp), nhưng subjects giờ luôn
+// lấy qua /api/subjects (xem NOTE_20260630 đầu file) nên nhánh đó không bao giờ chạy.
 
 
 
@@ -7034,13 +6972,16 @@ window.clearLearningHubQuestionCache = function () {
 // ===== END REMOVE_EYE_HIDE_OPTIONS_20260629 =====
 
 
-// ===== FIX_EXAM_BOTTOM_BLANK_20260629 =====
-// Sửa giao diện Kiểm tra bị trống khoảng phía dưới: cho khung kiểm tra tự giãn gần hết màn hình.
+// ===== EXAM_UI_STYLE_MERGED_20260702 =====
+// Gộp 5 patch CSS cũ (FIX_EXAM_BOTTOM_BLANK, SOFTEN_EXAM_TEXT, FIX_EXAM_UX_BALANCE,
+// FIX_EXAM_CENTER_LAYOUT, FIX_EXAM_SHIFT_RIGHT_SMALLER_Q — tất cả 20260629) thành 1 khối.
+// Giữ nguyên đúng giá trị cuối cùng theo thứ tự cascade gốc (patch sau đè patch trước),
+// không đổi bất kỳ giá trị hiển thị nào — chỉ gộp code, giao diện y hệt trước khi gộp.
 (function(){
-  function injectExamBlankFix(){
-    if (document.getElementById('fixExamBottomBlankStyle')) return;
+  function injectExamStyle(){
+    if (document.getElementById('examUiStyleMerged')) return;
     var style = document.createElement('style');
-    style.id = 'fixExamBottomBlankStyle';
+    style.id = 'examUiStyleMerged';
     style.textContent = `
       #quiz.pane.active,
       #quiz.active {
@@ -7090,6 +7031,37 @@ window.clearLearningHubQuestionCache = function () {
         min-height: 0 !important;
       }
 
+      #quiz .examOnlyCard .qq,
+      #quiz .examOnlyQuestionZone .qq,
+      #quiz .qq{
+        color:rgba(245,240,232,.78)!important;
+        -webkit-text-fill-color:rgba(245,240,232,.78)!important;
+        text-shadow:none!important;
+        font-size:clamp(1.00rem,1.04vw,1.18rem)!important;
+        line-height:1.42!important;
+        font-weight:580!important;
+      }
+      #quiz .examOnlyOption .qtxt,
+      #quiz .examOnlyCard .qtxt{
+        color:rgba(245,240,232,.60)!important;
+        font-weight:480!important;
+        text-shadow:none!important;
+      }
+      #quiz .examOnlyOption.sel{
+        background:linear-gradient(135deg,rgba(200,169,110,.075),rgba(232,212,168,.032))!important;
+        border-color:rgba(232,212,168,.42)!important;
+        box-shadow:inset 0 1px 0 rgba(255,255,255,.045)!important;
+      }
+      #quiz .examOnlyOption.sel .qtxt{
+        color:rgba(245,240,232,.76)!important;
+        font-weight:520!important;
+      }
+      #quiz .examOnlyOption.sel .qkey{
+        color:#14100b!important;
+        background:linear-gradient(135deg,rgba(232,212,168,.80),rgba(200,169,110,.76))!important;
+        box-shadow:0 1px 6px rgba(232,212,168,.12)!important;
+      }
+
       @media (max-width: 900px) {
         .examOnlyGridContainer {
           height: auto !important;
@@ -7100,66 +7072,8 @@ window.clearLearningHubQuestionCache = function () {
           height: auto !important;
         }
       }
-    `;
-    document.head.appendChild(style);
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', injectExamBlankFix); else injectExamBlankFix();
-})();
-// ===== END FIX_EXAM_BOTTOM_BLANK_20260629 =====
 
-
-// ===== SOFTEN_EXAM_TEXT_RUNTIME_20260629 =====
-(function(){
-  function injectSoftExamText(){
-    if (document.getElementById('softExamTextStyle')) return;
-    var style = document.createElement('style');
-    style.id = 'softExamTextStyle';
-    style.textContent = `
-      #quiz .examOnlyCard .qq,
-      #quiz .examOnlyQuestionZone .qq,
-      #quiz .qq{
-        color:rgba(245,240,232,.72)!important;
-        font-weight:560!important;
-        text-shadow:none!important;
-        -webkit-text-fill-color:rgba(245,240,232,.72)!important;
-      }
-      #quiz .examOnlyOption .qtxt,
-      #quiz .examOnlyCard .qtxt{
-        color:rgba(245,240,232,.60)!important;
-        font-weight:480!important;
-        text-shadow:none!important;
-      }
-      #quiz .examOnlyOption.sel{
-        background:linear-gradient(135deg,rgba(200,169,110,.105),rgba(232,212,168,.045))!important;
-        border-color:rgba(232,212,168,.48)!important;
-        box-shadow:0 0 14px rgba(232,212,168,.055), inset 0 1px 1px rgba(255,255,255,.06)!important;
-      }
-      #quiz .examOnlyOption.sel .qtxt{
-        color:rgba(245,240,232,.78)!important;
-        font-weight:540!important;
-      }
-      #quiz .examOnlyOption.sel .qkey{
-        color:#14100b!important;
-        background:linear-gradient(135deg,rgba(232,212,168,.86),rgba(200,169,110,.82))!important;
-        box-shadow:0 2px 8px rgba(232,212,168,.18)!important;
-      }
-    `;
-    document.head.appendChild(style);
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', injectSoftExamText); else injectSoftExamText();
-})();
-// ===== END SOFTEN_EXAM_TEXT_RUNTIME_20260629 =====
-
-
-// ===== FIX_EXAM_UX_BALANCE_RUNTIME_20260629 =====
-(function(){
-  function injectExamUxBalance(){
-    if (document.getElementById('examUxBalanceStyle')) return;
-    var style = document.createElement('style');
-    style.id = 'examUxBalanceStyle';
-    style.textContent = `
       @media (min-width:901px){
-        /* Xếp dọc: câu hỏi full-width trên, đáp án dưới (đọc dễ hơn, không bị bóp hẹp). Cả khối cuộn chung. */
         #quiz .examOnlyContentBody{
           display:flex!important;
           flex-direction:column!important;
@@ -7176,45 +7090,7 @@ window.clearLearningHubQuestionCache = function () {
           flex:0 0 auto!important;
         }
         #quiz .examOnlyOptions{padding:0!important;gap:11px!important;}
-      }
-      #quiz .examOnlyCard .qq,
-      #quiz .examOnlyQuestionZone .qq,
-      #quiz .qq{
-        color:rgba(245,240,232,.78)!important;
-        -webkit-text-fill-color:rgba(245,240,232,.78)!important;
-        font-size:clamp(1.14rem,1.24vw,1.42rem)!important;
-        font-weight:620!important;
-        line-height:1.46!important;
-      }
-      #quiz .examOnlyOption.sel{
-        background:linear-gradient(135deg,rgba(200,169,110,.075),rgba(232,212,168,.032))!important;
-        border-color:rgba(232,212,168,.42)!important;
-        box-shadow:inset 0 1px 0 rgba(255,255,255,.045)!important;
-      }
-      #quiz .examOnlyOption.sel .qtxt{
-        color:rgba(245,240,232,.76)!important;
-        font-weight:520!important;
-      }
-      #quiz .examOnlyOption.sel .qkey{
-        background:linear-gradient(135deg,rgba(232,212,168,.80),rgba(200,169,110,.76))!important;
-        box-shadow:0 1px 6px rgba(232,212,168,.12)!important;
-      }
-    `;
-    document.head.appendChild(style);
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', injectExamUxBalance); else injectExamUxBalance();
-})();
-// ===== END FIX_EXAM_UX_BALANCE_RUNTIME_20260629 =====
 
-
-// ===== FIX_EXAM_CENTER_LAYOUT_RUNTIME_20260629 =====
-(function(){
-  function injectExamCenterLayout(){
-    if (document.getElementById('examCenterLayoutStyle')) return;
-    var style = document.createElement('style');
-    style.id = 'examCenterLayoutStyle';
-    style.textContent = `
-      @media (min-width:901px){
         #quiz.pane.scroll.active,
         #quiz.pane.active,
         #quiz.scroll{
@@ -7222,39 +7098,7 @@ window.clearLearningHubQuestionCache = function () {
           padding-right:0!important;
           align-items:center!important;
         }
-        #quizBody{
-          width:min(1660px,calc(100vw - 160px))!important;
-          max-width:1660px!important;
-          margin-left:auto!important;
-          margin-right:auto!important;
-          transform:none!important;
-        }
-        #quiz .examOnlyGridContainer{
-          width:100%!important;
-          max-width:1660px!important;
-          margin-left:auto!important;
-          margin-right:auto!important;
-          grid-template-columns:minmax(0,1fr) 370px!important;
-          gap:28px!important;
-        }
-        #quiz .examOnlyCard{max-width:none!important;}
-      }
-    `;
-    document.head.appendChild(style);
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', injectExamCenterLayout); else injectExamCenterLayout();
-})();
-// ===== END FIX_EXAM_CENTER_LAYOUT_RUNTIME_20260629 =====
 
-
-// ===== FIX_EXAM_SHIFT_RIGHT_SMALLER_Q_RUNTIME_20260629 =====
-(function(){
-  function injectExamShiftRightSmallerQ(){
-    if (document.getElementById('examShiftRightSmallerQStyle')) return;
-    var style = document.createElement('style');
-    style.id = 'examShiftRightSmallerQStyle';
-    style.textContent = `
-      @media (min-width:901px){
         #quizBody{
           width:min(1580px,calc(100vw - 220px))!important;
           max-width:1580px!important;
@@ -7270,20 +7114,14 @@ window.clearLearningHubQuestionCache = function () {
           margin-left:auto!important;
           margin-right:auto!important;
         }
-      }
-      #quiz .examOnlyCard .qq,
-      #quiz .examOnlyQuestionZone .qq,
-      #quiz .qq{
-        font-size:clamp(1.00rem,1.04vw,1.18rem)!important;
-        line-height:1.42!important;
-        font-weight:580!important;
+        #quiz .examOnlyCard{max-width:none!important;}
       }
     `;
     document.head.appendChild(style);
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', injectExamShiftRightSmallerQ); else injectExamShiftRightSmallerQ();
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', injectExamStyle); else injectExamStyle();
 })();
-// ===== END FIX_EXAM_SHIFT_RIGHT_SMALLER_Q_RUNTIME_20260629 =====
+// ===== END EXAM_UI_STYLE_MERGED_20260702 =====
 
 
 // ===== CLEAR_ADD_SUBJECT_DRAFT_NEW_SESSION_20260629 =====
@@ -7752,41 +7590,6 @@ try {
 } catch(e) {}
 })();
 // ===== END COPILOT_FIX_IMAGE_RESET_LOSS_FINAL_20260630 =====
-
-// ===== FIX_ADD_SUBJECT_504_PROGRESS_CHUNKED_20260701 =====
-(function(){
-  if(window.__FIX_ADD_SUBJECT_504_PROGRESS_CHUNKED_20260701) return;
-  window.__FIX_ADD_SUBJECT_504_PROGRESS_CHUNKED_20260701 = true;
-  const $ = id => document.getElementById(id);
-  const LIMIT = 80;
-  function u(){ return window.HODSupabase?.getUser?.() || null; }
-  function p(){ return window.HODSupabase?.getProfile?.() || null; }
-  function admin(){ const r=String(p()?.role||'').toLowerCase(); return !!(window.HODSupabase?.isAdmin?.() || r==='admin' || r==='editor'); }
-  function msg(t){ try{ if(typeof notify==='function') notify(t); }catch(e){} }
-  function prog(t,c,n,d){ try{ if(typeof showProgress==='function') showProgress(t,c,n,d||''); }catch(e){} }
-  function hide(){ try{ if(typeof hideProgress==='function') hideProgress(); }catch(e){} }
-  function clean(arr){ return (Array.isArray(arr)?arr:[]).map((q,i)=>{ const o=(q&&typeof q.options==='object'&&!Array.isArray(q.options))?q.options:{}; const a=String(q?.answer||'').toUpperCase().replace(/[^A-Z]/g,''); const im=Array.isArray(q?.images)?q.images:[]; return {num:Number(q?.num)||i+1,question:String(q?.question||'').trim(),options:o,answer:a,answer_text:q?.answer_text||a.split('').map(k=>k+'. '+(o[k]||'')).join('; '),images:im,has_image:!!(q?.has_image||im.length),error_risk:q?.error_risk||'low',error_risk_reason:q?.error_risk_reason||null}; }).filter(q=>q.question&&q.answer&&q.options); }
-  function readQs(){ let arr=window.__previewImportData||window.__LH_LAST_PREVIEW_IMPORT_DATA||[]; if(!Array.isArray(arr)||!arr.length){ try{ let s=String($('userImportData')?.value||localStorage.getItem('learninghub_add_subject_file_data_v1')||'').trim(); const m=s.match(/```json\s*([\s\S]*?)```/i)||s.match(/```\s*([\s\S]*?)```/); if(m) s=m[1].trim(); const j=JSON.parse(s); arr=Array.isArray(j)?j:(Array.isArray(j?.questions)?j.questions:[]); }catch(e){ arr=[]; } } return clean(arr); }
-  async function post(action,payload){ const res=await fetch('/api/admin-action',{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({user_id:u()?.id,action,payload})}); const out=await res.json().catch(()=>({})); if(!res.ok||out.error) throw new Error(out.error||('HTTP '+res.status)); return out; }
-  function cache(code,count){ try{ const k='learninghub_subject_counts_cache_v3'; const s=JSON.parse(localStorage.getItem(k)||'{}')||{}; s.counts=s.counts||{}; s.confirmed=s.confirmed||{}; s.counts[code]=count; s.confirmed[code]=true; s.updated_at=new Date().toISOString(); localStorage.setItem(k,JSON.stringify(s)); localStorage.setItem('learninghub_subjects_dirty_v3',String(Date.now())); localStorage.removeItem('learninghub_subjects_cache_v1'); sessionStorage.removeItem('learninghub_subject_counts_cache_v1'); window.clearLearningHubSupabaseCache?.('subjects'); window.clearLearningHubSupabaseCache?.('questions'); window.clearLearningHubQuestionCache?.(); }catch(e){} }
-  function clearState(){ try{ window.__previewImportData=[]; window.__LH_LAST_PREVIEW_IMPORT_DATA=[]; $('importPreviewModal')?.classList.add('hidden'); ['learninghub_add_subject_file_name_v1','learninghub_add_subject_file_size_v1','learninghub_add_subject_file_data_v1','learninghub_add_subject_file_previewed_v1'].forEach(k=>localStorage.removeItem(k)); }catch(e){} }
-  async function one(code,q,i){ await post('add_question',{question_data:{subject_code:code,num:Number(q.num)||i+1,question:q.question,options:q.options||{},answer:q.answer,answer_text:q.answer_text||'',images:q.images||[],has_image:!!q.has_image,error_risk:q.error_risk||'low',error_risk_reason:q.error_risk_reason||null,updated_at:new Date().toISOString()}}); }
-  async function big(code,name,desc,qs){ prog('Đang tạo môn học...',0,qs.length,'Tạo môn trước để tránh lỗi 504...'); const created=await post('add_subject',{code,name:name||code,description:desc||'',questions:[]}); const finalCode=created.code||created.subject_code||code; for(let i=0;i<qs.length;i++){ prog('Đang upload câu hỏi...',i,qs.length,'Đang gửi câu '+(i+1)+'/'+qs.length); try{ await one(finalCode,qs[i],i); }catch(e){ throw new Error('Lỗi ở câu '+(qs[i].num||i+1)+': '+(e?.message||e)); } prog('Đang upload câu hỏi...',i+1,qs.length,'Đã gửi '+(i+1)+'/'+qs.length+' câu'); if(i%20===0) await new Promise(r=>setTimeout(r,30)); } cache(finalCode,qs.length); return {finalCode,success:qs.length}; }
-  async function small(code,name,desc,qs){ prog('Đang lưu môn học...',0,100,'Đang tạo môn và nhập câu hỏi...'); const out=await post('add_subject',{code,name:name||code,description:desc||'',questions:qs}); const finalCode=out.code||out.subject_code||code; cache(finalCode,qs.length); prog('Đang lưu môn học...',100,100,'Hoàn tất'); return {finalCode,success:qs.length}; }
-  window.__submitSubjectRequest = async function(){
-    const code=($('addSubjectCode')?.value||'').trim().toUpperCase(), name=($('addSubjectName')?.value||'').trim(), desc=($('addSubjectDesc')?.value||'').trim(), qs=readQs();
-    if(!code){ alert('Vui lòng nhập mã môn'); $('addSubjectCode')?.focus(); return; }
-    if(!/^[A-Z0-9_]{2,20}$/.test(code)){ alert('Mã môn chỉ gồm chữ, số, gạch dưới (2-20 ký tự)'); $('addSubjectCode')?.focus(); return; }
-    if(!name){ alert('Vui lòng nhập tên môn'); $('addSubjectName')?.focus(); return; }
-    if(!qs.length){ alert('Bạn cần chọn file và bấm Xem trước trước khi lưu môn học.'); return; }
-    if(!u()){ alert('Bạn cần đăng nhập trước khi lưu môn học.'); return; }
-    const b=$('userImportBtn'), old=b?b.textContent:''; if(b){ b.disabled=true; b.textContent='Đang lưu...'; }
-    try{ let r; if(admin()){ r=qs.length>LIMIT?await big(code,name,desc,qs):await small(code,name,desc,qs); const ok='Đã thêm môn '+r.finalCode+' với '+r.success+' câu hỏi'; prog('Hoàn tất upload',r.success,r.success,ok); alert(ok); msg(ok); clearState(); window.__switchSubjectGateTab?.('list'); try{ $('subjectRefresh')?.click(); setTimeout(()=>$('subjectRefresh')?.click(),5600); setTimeout(()=>window.refreshSubjectCountsOnce?.(),6500); }catch(e){} } else { prog('Đang gửi yêu cầu tạo môn học...',0,100,'Đang tải dữ liệu câu hỏi...'); await post('add_subject_request',{code,name,description:desc||'',questions_data:qs}); prog('Hoàn tất',100,100,'Đã gửi yêu cầu'); const ok='Đã gửi yêu cầu thêm môn '+code+'. Vui lòng chờ admin duyệt.'; alert(ok); msg(ok); clearState(); window.__switchSubjectGateTab?.('list'); } }
-    catch(e){ console.warn('Add subject chunked import error:',e); alert('Lỗi tạo môn: '+(e?.message||e)); msg('Lỗi tạo môn'); }
-    finally{ if(b){ b.disabled=false; b.textContent=old||'Lưu Môn Học'; } setTimeout(hide,450); }
-  };
-})();
-// ===== END FIX_ADD_SUBJECT_504_PROGRESS_CHUNKED_20260701 =====
 
 // ===== FIX_ADD_SUBJECT_FAST_PARALLEL_UPLOAD_20260701 =====
 // Tăng tốc upload môn lớn: vẫn tránh 504 nhưng gửi nhiều câu song song có giới hạn.

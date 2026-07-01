@@ -28,7 +28,8 @@ const MIME_TYPES = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.gif': 'image/gif',
-  '.svg': 'image/svg+xml'
+  '.svg': 'image/svg+xml',
+  '.webp': 'image/webp'
 };
 
 const server = http.createServer(async (req, res) => {
@@ -95,10 +96,14 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 2. Serve static files
+  // 2. Serve static files (root trước, rồi tới public/ — nơi chứa các asset dùng chung với build)
   let safePath = req.url.split('?')[0];
   if (safePath === '/') safePath = '/index.html';
-  const filePath = path.join(root, safePath);
+  let filePath = path.join(root, safePath);
+
+  if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+    filePath = path.join(root, 'public', safePath);
+  }
 
   if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
     res.writeHead(404, { 'Content-Type': 'text/plain' });

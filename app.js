@@ -503,7 +503,12 @@ window.HODSupabase = (() => {
       images: row.images || [],
       has_image: !!(row.has_image || (row.images || []).length),
       error_risk: row.error_risk || 'low',
-      error_risk_reason: row.error_risk_reason || ''
+      error_risk_reason: row.error_risk_reason || '',
+      // Đánh dấu đã có đủ dữ liệu từ Turso, để các đoạn code cũ (fallback gọi
+      // sang Supabase để "lazy load" ảnh/dữ liệu) không kích hoạt nữa - Supabase
+      // giờ chỉ dùng cho Auth, mọi dữ liệu câu hỏi đều lấy từ Turso.
+      __imagesChecked: true,
+      __imagesLoaded: true
     };
   }
 
@@ -864,14 +869,22 @@ window.HODSupabase = (() => {
     await applyOAuthHashSession(client);
     const { data } = await client.auth.getSession();
     currentUser = data.session?.user || null;
-    if (currentUser) { const prof = await loadProfile(); if (prof) await loadQuestionsFromSupabase(); }
+    if (currentUser) { const prof = await loadProfile(); if (prof) await loadQuestionsFromTurso(); }
     else updateAuthUI();
 
     client.auth.onAuthStateChange(async (_event, session) => {
       currentUser = session?.user || null;
-      if (currentUser) { const prof = await loadProfile(); if (prof) await loadQuestionsFromSupabase(); }
+      if (currentUser) { const prof = await loadProfile(); if (prof) await loadQuestionsFromTurso(); }
       else { currentProfile = null; updateAuthUI(); }
     });
+  }
+
+  // FIX_AUTO_LOAD_ON_SESSION_RESTORE_20260701: khi khoi phuc phien dang nhap luc mo lai trang,
+  // uu tien goi thang loader Turso chuan (loadCurrentSubjectOnly) thay vi ham loadQuestionsFromSupabase
+  // cu o tren (ham cu khong tu cap nhat lai man hinh khi loi, khien giao dien ket o "Dang cho du lieu Supabase...").
+  async function loadQuestionsFromTurso() {
+    if (typeof window.loadCurrentSubjectOnly === 'function') return window.loadCurrentSubjectOnly();
+    return loadQuestionsFromSupabase();
   }
 
   document.addEventListener('DOMContentLoaded', init);
@@ -1120,7 +1133,7 @@ async function getSubjects() {
       const json = await res.json().catch(() => ({}));
       if (!res.ok || json.error) throw new Error(json.error || 'Không tải được questions từ Turso');
       const data = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
-      RAW = data.map(r => ({ id: r.id, subject_code: r.subject_code || code, num: r.num, question: r.question, options: r.options || {}, answer: r.answer, answer_text: r.answer_text, images: (typeof cleanImages === 'function' ? cleanImages(r.images || []) : r.images || []), has_image: !!(r.has_image || (r.images || []).length), error_risk: r.error_risk || 'low', error_risk_reason: r.error_risk_reason || '' }));
+      RAW = data.map(r => ({ id: r.id, subject_code: r.subject_code || code, num: r.num, question: r.question, options: r.options || {}, answer: r.answer, answer_text: r.answer_text, images: (typeof cleanImages === 'function' ? cleanImages(r.images || []) : r.images || []), has_image: !!(r.has_image || (r.images || []).length), error_risk: r.error_risk || 'low', error_risk_reason: r.error_risk_reason || '', __imagesChecked: true, __imagesLoaded: true }));
       pool = [...RAW];
       var _saved = +localStorage.getItem('learninghub_progress_' + code) || 0;
       ci = Math.max(0, Math.min(_saved, Math.max(0, pool.length - 1)));
@@ -1879,7 +1892,7 @@ Bắt đầu ngay từ câu 1.`;
     const json = await res.json().catch(() => ({}));
     if (!res.ok || json.error) throw new Error(json.error || 'Không tải được questions từ Turso');
     const data = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
-    RAW = data.map(r => ({ id: r.id, subject_code: r.subject_code || subject, num: r.num, question: r.question, options: r.options || {}, answer: r.answer, answer_text: r.answer_text, images: (typeof cleanImages === 'function' ? cleanImages(r.images || []) : r.images || []), has_image: !!(r.has_image || (r.images || []).length), error_risk: r.error_risk || 'low', error_risk_reason: r.error_risk_reason || '' }));
+    RAW = data.map(r => ({ id: r.id, subject_code: r.subject_code || subject, num: r.num, question: r.question, options: r.options || {}, answer: r.answer, answer_text: r.answer_text, images: (typeof cleanImages === 'function' ? cleanImages(r.images || []) : r.images || []), has_image: !!(r.has_image || (r.images || []).length), error_risk: r.error_risk || 'low', error_risk_reason: r.error_risk_reason || '', __imagesChecked: true, __imagesLoaded: true }));
     pool = [...RAW];
     var _saved2 = +localStorage.getItem('learninghub_progress_' + subject) || 0;
     ci = Math.max(0, Math.min(_saved2, Math.max(0, pool.length - 1)));
@@ -1904,7 +1917,7 @@ window.loadCurrentSubjectOnly = loadSubjectOnly;
     } catch (e) { }
   }
   document.addEventListener('DOMContentLoaded', () => {
-    empty('Đang chờ dữ liệu Supabase...');
+    empty('Đang tải dữ liệu từ Turso...');
     patchLoaders();
     // Tắt tự load lặp lại: chỉ load khi đăng nhập/chọn môn.
   });
@@ -4487,7 +4500,8 @@ return true;
       options: r.options || {}, answer: r.answer, answer_text: r.answer_text,
       images: (typeof cleanImages === 'function' ? cleanImages(r.images || []) : r.images || []),
       has_image: !!(r.has_image || (r.images || []).length),
-      error_risk: r.error_risk || 'low', error_risk_reason: r.error_risk_reason || ''
+      error_risk: r.error_risk || 'low', error_risk_reason: r.error_risk_reason || '',
+      __imagesChecked: true, __imagesLoaded: true
     }));
   }
 

@@ -2210,24 +2210,46 @@ return true;
     zone.appendChild(ghost);
     // câu mới vào #card thật, đặt sẵn ở mép phía VÀO (next: từ phải, prev: từ trái)
     card.classList.remove('lhDragging');
+    card.classList.add('lhSliding');
     card.style.transition = 'none';
+    // Nếu câu cũ (ghost) đang ở trạng thái lật, giữ nguyên rotateY khi trượt ra,
+    // tránh bị translateX ghi đè làm ghost giật về mặt trước lúc đang trượt.
+    const ghostFlipT = ghost.classList.contains('flip') ? 'rotateY(180deg) ' : '';
     dir === 'next' ? goNext() : goPrev();
     const fromX = dir === 'next' ? '100%' : '-100%';
     const ghostToX = dir === 'next' ? '-100%' : '100%';
     card.style.transform = 'translateX(' + fromX + ')';
     card.style.opacity = '1';
-    void card.offsetWidth; // chốt vị trí xuất phát trước khi chạy transition
-    const ease = 'transform .26s cubic-bezier(.22,.61,.36,1), opacity .26s ease';
-    card.style.transition = ease;
-    ghost.style.transition = ease;
-    card.style.transform = 'translateX(0)';   // câu mới vào giữa
-    ghost.style.transform = 'translateX(' + ghostToX + ')'; // câu cũ ra cùng hướng
-    ghost.style.opacity = '.35';
-    setTimeout(() => {
+    // Dùng double rAF thay vì chỉ ép reflow (offsetWidth): đảm bảo trình duyệt
+    // đã vẽ xong vị trí xuất phát ở 1 frame riêng trước khi bắt đầu transition,
+    // tránh bị gộp frame / giật hình trên máy yếu hoặc khi renderCard() tốn thời gian.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!__sliding) return; // đã bị huỷ/dọn dẹp trước đó thì thôi
+        const ease = 'transform .26s cubic-bezier(.22,.61,.36,1), opacity .26s ease';
+        card.style.transition = ease;
+        ghost.style.transition = ease;
+        card.style.transform = 'translateX(0)';   // câu mới vào giữa
+        ghost.style.transform = ghostFlipT + 'translateX(' + ghostToX + ')'; // câu cũ ra cùng hướng
+        ghost.style.opacity = '.35';
+      });
+    });
+    // Dọn dẹp NGAY KHI transition thật sự kết thúc (transitionend), không dùng
+    // setTimeout cố định — vì nếu renderCard()/thiết bị chậm làm animation bắt đầu
+    // trễ, setTimeout cũ có thể bắn ra giữa chừng, cắt animation và gây giật/nhảy khung hình.
+    // Vẫn giữ setTimeout dự phòng (an toàn) phòng khi transitionend không bắn được.
+    let __slideDone = false;
+    function finishSlide() {
+      if (__slideDone) return;
+      __slideDone = true;
+      card.removeEventListener('transitionend', finishSlide);
       ghost.remove();
       card.style.transition = ''; card.style.transform = ''; card.style.opacity = '';
+      card.classList.remove('lhSliding');
       __sliding = false; window.__lhSuppressFlip = false;
-    }, 290);
+    }
+    card.addEventListener('transitionend', finishSlide);
+    setTimeout(finishSlide, 480);
   }
 
   function ensureMobileNav() {
@@ -2280,7 +2302,7 @@ return true;
         e.preventDefault();
         if (Math.abs(dx) > 6) moved = true;
         const c = card();
-        if (c) { c.style.transform = 'translateX(' + dx + 'px)'; c.style.opacity = String(Math.max(.4, 1 - Math.abs(dx) / (W() * 1.1))); }
+        if (c) { const flipT = c.classList.contains('flip') ? 'rotateY(180deg) ' : ''; c.style.transform = flipT + 'translateX(' + dx + 'px)'; c.style.opacity = String(Math.max(.4, 1 - Math.abs(dx) / (W() * 1.1))); }
       }
     }, { passive: false });
 
@@ -2300,7 +2322,7 @@ return true;
         // chưa đủ xa -> búng về chỗ cũ
         window.__lhSuppressFlip = moved;
         c.style.transition = 'transform .2s cubic-bezier(.22,.61,.36,1), opacity .2s ease';
-        c.style.transform = 'translateX(0)';
+        c.style.transform = (c.classList.contains('flip') ? 'rotateY(180deg) ' : '') + 'translateX(0)';
         c.style.opacity = '1';
         setTimeout(() => { c.style.transition = ''; c.style.transform = ''; c.style.opacity = ''; window.__lhSuppressFlip = false; }, 220);
       }

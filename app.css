@@ -942,6 +942,38 @@ to{opacity:.26;transform:translate3d(12px,5px,0)}
 @media (prefers-reduced-motion:reduce){.hodLoginGate,.hodLoginGate::before,.hodLoginGate:before,.hodLoginGate::after,.hodLoginGate:after{animation-duration:7s !important;animation-iteration-count:infinite !important}
 }
 .answerMatchChip{align-items:center !important;gap:6px !important;border-radius:999px !important;border:1px solid rgba(114,197,140,.34) !important;background:rgba(114,197,140,.10) !important;color:rgba(218,255,229,.94) !important;font-size:.72rem !important;font-weight:850 !important;max-width:120px !important;text-overflow:ellipsis !important;white-space:nowrap !important;flex:0 1 auto !important;display:none !important;width:0 !important;height:0 !important;margin:0 !important;padding:0 !important;overflow:hidden !important;visibility:hidden !important}
+
+/* ===== MOBILE_LANDING_OVERLAP_CASCADE_FIX_20260701 =====
+   Fix: khối .hodLoginGate/.hodLoginGate::before/.hodLoginGatePanel "landingGateBgMoveHard"
+   + "lhPanelSoftFloat" ở trên (không có media query) đè mất các giá trị dành riêng cho mobile
+   đã set ở @media(max-width:860px) phía trước (dòng ~768, ~802, ~817):
+   - .hodLoginGate: padding, align-items
+   - .hodLoginGate::before: transform, top, height (overlay nền)
+   - .hodLoginGatePanel.simpleLanding: layout đổi NGƯỢC từ flex-column (mobile) về lại
+     grid 2 cột (desktop) — lỗi nặng nhất, có thể làm panel bị vỡ layout trên điện thoại.
+   Đặt lại đúng giá trị mobile ở ĐÂY (sau cùng) để thắng cascade, không đổi logic gì khác.
+*/
+@media (max-width:860px){
+  .hodLoginGate{
+    padding:10px !important;
+    align-items:stretch !important;
+  }
+  .hodLoginGate::before,
+  .hodLoginGate:before{
+    transform:translate3d(0,0,-120px) scale(1.18) !important;
+    top:-12vh !important;
+    height:124vh !important;
+  }
+  .hodLoginGatePanel.simpleLanding{
+    display:flex !important;
+    flex-direction:column !important;
+    grid-template-columns:1fr !important;
+    width:100% !important;
+    min-height:0 !important;
+    border-radius:24px !important;
+  }
+}
+/* ===== MOBILE_LANDING_OVERLAP_CASCADE_FIX_20260701_END ===== */
 .searchMark,mark.searchMark{display:inline !important;border-radius:5px !important;padding:0 3px !important;background:rgba(232,212,168,.62) !important;color:#17120c !important;font-weight:800 !important;box-shadow:none !important}
 .searchMark.phraseMark{background:linear-gradient(135deg,rgba(255,232,165,.92),rgba(232,196,105,.82)) !important;color:#16110b !important}
 .searchMark.tokenMark{box-shadow:none !important;background:rgba(232,212,168,.38) !important;color:rgba(255,255,255,.95) !important}
@@ -2440,29 +2472,13 @@ body:not(.hod-is-admin-final) #adminOpenBtn,body:not(.hod-is-admin-final) #hodFl
 #zone.swiped .mobileCardNav .mobileSwipeHint,.mobileCardNav.swiped .mobileSwipeHint{opacity:0 !important;pointer-events:none !important}
 /* ===== END MOBILE_QA_FIXES_20260701 ===== */
 
-/* ===== FLASHCARD_SWIPE_SLIDE_20260701 ===== */
-/* Hiệu ứng trượt thẻ khi đổi câu (giống Quizlet mobile). Dùng animation để đè transform lật tạm thời. */
-@media (max-width:760px){
-  #fc .card.lhSlideOutLeft{animation:lhCardOutLeft .15s ease forwards !important}
-  #fc .card.lhSlideOutRight{animation:lhCardOutRight .15s ease forwards !important}
-  #fc .card.lhSlideInRight{animation:lhCardInRight .22s cubic-bezier(.22,.61,.36,1) !important}
-  #fc .card.lhSlideInLeft{animation:lhCardInLeft .22s cubic-bezier(.22,.61,.36,1) !important}
-}
-@keyframes lhCardOutLeft{from{transform:translateX(0);opacity:1}to{transform:translateX(-62%);opacity:0}}
-@keyframes lhCardOutRight{from{transform:translateX(0);opacity:1}to{transform:translateX(62%);opacity:0}}
-@keyframes lhCardInRight{from{transform:translateX(62%);opacity:0}to{transform:translateX(0);opacity:1}}
-@keyframes lhCardInLeft{from{transform:translateX(-62%);opacity:0}to{transform:translateX(0);opacity:1}}
-@media (prefers-reduced-motion:reduce){
-  #fc .card.lhSlideOutLeft,#fc .card.lhSlideOutRight,#fc .card.lhSlideInRight,#fc .card.lhSlideInLeft{animation:none !important}
-}
-/* ===== END FLASHCARD_SWIPE_SLIDE_20260701 ===== */
-
 /* ===== FLASHCARD_DRAG_FOLLOW_20260701 ===== */
 /* Mức B: kéo dính ngón. pan-y cho phép cuộn dọc tự nhiên, ngang do JS xử lý. */
 @media (max-width:760px){
   #fc .zone,#fc .card,#fc .front,#fc .back{touch-action:pan-y !important}
   #fc .card.lhDragging{transition:none !important;will-change:transform,opacity}
   #fc .card.lhDragging .face{box-shadow:0 28px 70px rgba(0,0,0,.5) !important}
+  #fc .card.lhSliding{will-change:transform,opacity}
 }
 /* ===== END FLASHCARD_DRAG_FOLLOW_20260701 ===== */
 

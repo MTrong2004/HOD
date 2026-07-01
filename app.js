@@ -778,6 +778,15 @@ window.HODSupabase = (() => {
       alert('Câu hỏi hiện đang lấy từ data local. Hãy đăng nhập và tải questions từ Supabase trước khi gửi yêu cầu sửa.');
       return;
     }
+    // Chờ upload ảnh Cloudinary (nếu đang chạy dở) rồi quét nốt ảnh base64 còn sót,
+    // tránh trường hợp bấm gửi trước khi upload xong làm ảnh bị lọc mất khi gửi lên backend.
+    try {
+      if (typeof window.__LHGetPendingImageUpload === 'function') {
+        const p = window.__LHGetPendingImageUpload();
+        if (p) await p;
+      }
+      if (typeof window.__LHUploadPendingDataUrls === 'function') await window.__LHUploadPendingDataUrls();
+    } catch (e) { console.warn('Chờ upload ảnh trước khi gửi yêu cầu sửa thất bại:', e); }
     const payload = {
       question_id: oldQ.id,
       question_num: oldQ.num,
@@ -2161,75 +2170,134 @@ return true;
 })();
 
 
-// ===== FINAL_MOBILE_FLASHCARD_NAVIGATION_20260613 =====
-// Mobile: thêm nút chuyển câu và vuốt trái/phải để đổi flashcard.
+// ===== MOBILE_FLASHCARD_NAVIGATION_20260702 (viết lại) =====
+// Mobile: nút chuyển câu và vuốt trái/phải để đổi flashcard.
+//
+// Lý do viết lại: bản cũ trượt trực tiếp trên #card — nhưng #card mang class
+// "dir-horizontal/dir-up/dir-down" + "flip" để lật thẻ bằng CSS:
+//   #fc .card.dir-horizontal.flip{transform:rotateY(180deg) !important}
+// Rule này có !important nên bất cứ khi nào thẻ đang ở trạng thái lật (đang xem
+// đáp án), CSS đè hoàn toàn lên transform trượt (translateX) mà JS gán qua inline
+// style — khiến thẻ không trượt đúng như tính toán, gây cảm giác "trượt sai hướng".
+// Cách sửa: bọc #card trong 1 wrapper riêng (#cardSlideWrap) CHỈ lo việc trượt
+// (translateX). #card bên trong vẫn tự lo việc lật (rotateY) như cũ, không đụng
+// nhau nên không còn xung đột !important nữa.
 (function () {
   function $(id) { return document.getElementById(id); }
   function goPrev() { if (typeof prev === 'function') prev(); }
   function goNext() { if (typeof next === 'function') next(); }
+  const isMobile = () => window.matchMedia('(max-width:760px)').matches;
 
-  // Hiệu ứng trượt thẻ khi đổi câu (Quizlet-style), chỉ trên mobile.
-  let __sliding = false;
-  // Trượt liền mạch: câu cũ (ghost) và câu mới (#card) chạy SONG SONG cùng hướng.
-  function slideChange(dir) {
+  // Bọc #card vào #cardSlideWrap 1 lần duy nhất, giữ nguyên #card và toàn bộ
+  // logic lật/hiển thị đang có — chỉ thêm 1 lớp cha để xử lý trượt riêng.
+  function ensureSlideWrap() {
+    let wrap = $('cardSlideWrap');
+    if (wrap) return wrap;
     const card = $('card');
+    if (!card || !card.parentNode) return null;
+    wrap = document.createElement('div');
+    wrap.id = 'cardSlideWrap';
+    wrap.style.cssText = 'position:relative;width:100%';
+    card.parentNode.insertBefore(wrap, card);
+    wrap.appendChild(card);
+    return wrap;
+  }
+
+  let __sliding = false;
+  // Trượt liền mạch: câu cũ (ghost) và câu mới (wrap) chạy song song cùng hướng.
+  function slideChange(dir) {
     const zone = $('zone');
-    const isMobile = window.matchMedia('(max-width:760px)').matches;
-    if (!card || !zone || !isMobile) { dir === 'next' ? goNext() : goPrev(); return; }
+    // Chỉ bọc #card vào wrapper trên mobile — bọc trên desktop sẽ đổi #card từ flex item
+    // trực tiếp của .zone thành con của 1 div thường, có thể làm lệch layout desktop.
+    if (!zone || !isMobile()) { dir === 'next' ? goNext() : goPrev(); return; }
+    const wrap = ensureSlideWrap();
+    if (!wrap) { dir === 'next' ? goNext() : goPrev(); return; }
     if (__sliding) return;
     __sliding = true;
     window.__lhSuppressFlip = true;
     const zr = zone.getBoundingClientRect();
-    const r = card.getBoundingClientRect();
-    // ghost = ảnh chụp câu cũ ngay tại vị trí đang thấy (kể cả khi đang kéo dở)
-    const ghost = card.cloneNode(true);
+    const r = wrap.getBoundingClientRect();
+    // ghost = ảnh chụp câu cũ ngay tại vị trí đang thấy (kể cả khi đang kéo dở).
+    // Clone nguyên wrap (gồm cả #card bên trong) nên giữ đúng trạng thái lật hiện tại.
+    const ghost = wrap.cloneNode(true);
     ghost.removeAttribute('id');
-    ghost.classList.remove('lhDragging');
     ghost.classList.add('lhGhost');
-    ghost.style.cssText += ';position:absolute;margin:0;pointer-events:none;z-index:6;left:' + (r.left - zr.left) + 'px;top:' + (r.top - zr.top) + 'px;width:' + r.width + 'px;height:' + r.height + 'px;transform:none;opacity:' + (card.style.opacity || '1') + ';transition:none;';
+    ghost.style.cssText += ';position:absolute;margin:0;pointer-events:none;z-index:6;left:' + (r.left - zr.left) + 'px;top:' + (r.top - zr.top) + 'px;width:' + r.width + 'px;height:' + r.height + 'px;transform:none;opacity:1;transition:none;';
     zone.appendChild(ghost);
-    // câu mới vào #card thật, đặt sẵn ở mép phía VÀO (next: từ phải, prev: từ trái)
-    card.classList.remove('lhDragging');
-    card.classList.add('lhSliding');
-    card.style.transition = 'none';
-    // Nếu câu cũ (ghost) đang ở trạng thái lật, giữ nguyên rotateY khi trượt ra,
-    // tránh bị translateX ghi đè làm ghost giật về mặt trước lúc đang trượt.
-    const ghostFlipT = ghost.classList.contains('flip') ? 'rotateY(180deg) ' : '';
-    dir === 'next' ? goNext() : goPrev();
-    const fromX = dir === 'next' ? '100%' : '-100%';
-    const ghostToX = dir === 'next' ? '-100%' : '100%';
-    card.style.transform = 'translateX(' + fromX + ')';
-    card.style.opacity = '1';
-    // Dùng double rAF thay vì chỉ ép reflow (offsetWidth): đảm bảo trình duyệt
-    // đã vẽ xong vị trí xuất phát ở 1 frame riêng trước khi bắt đầu transition,
-    // tránh bị gộp frame / giật hình trên máy yếu hoặc khi renderCard() tốn thời gian.
+
+    wrap.classList.remove('lhDragging');
+    wrap.classList.add('lhSliding');
+    wrap.style.transition = 'none';
+    dir === 'next' ? goNext() : goPrev(); // đổi nội dung #card bên trong wrap
+    const fromX = dir === 'next' ? '100%' : '-100%'; // next: câu mới vào từ bên phải; prev: từ bên trái
+    const toX = dir === 'next' ? '-100%' : '100%';   // câu cũ (ghost) ra cùng hướng vuốt
+    wrap.style.transform = 'translateX(' + fromX + ')';
+
+    // Double rAF: đảm bảo trình duyệt vẽ xong vị trí xuất phát ở 1 frame riêng
+    // trước khi bắt đầu transition, tránh gộp frame/giật hình trên máy yếu.
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (!__sliding) return; // đã bị huỷ/dọn dẹp trước đó thì thôi
-        const ease = 'transform .26s cubic-bezier(.22,.61,.36,1), opacity .26s ease';
-        card.style.transition = ease;
-        ghost.style.transition = ease;
-        card.style.transform = 'translateX(0)';   // câu mới vào giữa
-        ghost.style.transform = ghostFlipT + 'translateX(' + ghostToX + ')'; // câu cũ ra cùng hướng
+        const ease = 'transform .26s cubic-bezier(.22,.61,.36,1)';
+        wrap.style.transition = ease;
+        ghost.style.transition = ease + ', opacity .26s ease';
+        wrap.style.transform = 'translateX(0)'; // câu mới vào giữa
+        ghost.style.transform = 'translateX(' + toX + ')'; // câu cũ ra
         ghost.style.opacity = '.35';
       });
     });
-    // Dọn dẹp NGAY KHI transition thật sự kết thúc (transitionend), không dùng
-    // setTimeout cố định — vì nếu renderCard()/thiết bị chậm làm animation bắt đầu
-    // trễ, setTimeout cũ có thể bắn ra giữa chừng, cắt animation và gây giật/nhảy khung hình.
-    // Vẫn giữ setTimeout dự phòng (an toàn) phòng khi transitionend không bắn được.
+
     let __slideDone = false;
     function finishSlide() {
       if (__slideDone) return;
       __slideDone = true;
-      card.removeEventListener('transitionend', finishSlide);
+      wrap.removeEventListener('transitionend', finishSlide);
       ghost.remove();
-      card.style.transition = ''; card.style.transform = ''; card.style.opacity = '';
-      card.classList.remove('lhSliding');
+      wrap.style.transition = ''; wrap.style.transform = '';
+      wrap.classList.remove('lhSliding');
       __sliding = false; window.__lhSuppressFlip = false;
     }
-    card.addEventListener('transitionend', finishSlide);
+    wrap.addEventListener('transitionend', finishSlide);
     setTimeout(finishSlide, 480);
+  }
+
+  // Bấm nhanh (tap): chuyển 1 câu có hiệu ứng trượt (slideChange).
+  // Bấm giữ: sau 1 khoảng trễ ngắn, tự động chuyển câu liên tục (không hiệu ứng trượt,
+  // để không bị dồn/giật animation) cho tới khi thả tay ra.
+  function bindHoldRepeat(btn, dir) {
+    if (!btn) return;
+    const REPEAT_DELAY = 420;   // chờ trước khi bắt đầu tua nhanh
+    const REPEAT_INTERVAL = 130; // tốc độ tua khi giữ
+    let startTimer = null, repeatTimer = null, repeated = false, touchActive = false;
+
+    function stepOnce() { dir === 'next' ? goNext() : goPrev(); }
+    function clearTimers() {
+      if (startTimer) { clearTimeout(startTimer); startTimer = null; }
+      if (repeatTimer) { clearInterval(repeatTimer); repeatTimer = null; }
+    }
+    function startHold() {
+      repeated = false;
+      clearTimers();
+      startTimer = setTimeout(() => {
+        repeated = true;
+        stepOnce();
+        repeatTimer = setInterval(stepOnce, REPEAT_INTERVAL);
+      }, REPEAT_DELAY);
+    }
+    function endHold() { clearTimers(); }
+
+    btn.addEventListener('touchstart', e => { touchActive = true; e.stopPropagation(); startHold(); }, { passive: true });
+    btn.addEventListener('touchend', e => { e.stopPropagation(); endHold(); setTimeout(() => { touchActive = false; }, 400); }, { passive: true });
+    btn.addEventListener('touchcancel', e => { e.stopPropagation(); endHold(); setTimeout(() => { touchActive = false; }, 400); }, { passive: true });
+    // mousedown/mouseup: phòng khi test bằng chuột trên desktop; touchActive chặn double-fire trên thiết bị vừa có touch vừa giả lập mouse.
+    btn.addEventListener('mousedown', e => { if (touchActive) return; e.stopPropagation(); startHold(); });
+    btn.addEventListener('mouseup', e => { if (touchActive) return; e.stopPropagation(); endHold(); });
+    btn.addEventListener('mouseleave', () => { if (!touchActive) endHold(); });
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (repeated) { repeated = false; return; } // đã tua rồi thì bỏ qua click cuối, tránh nhảy dư 1 câu
+      slideChange(dir);
+    });
   }
 
   function ensureMobileNav() {
@@ -2244,67 +2312,72 @@ return true;
       <button id="mobileNext" type="button" aria-label="Câu sau">›</button>`;
     zone.appendChild(nav);
     try { if (localStorage.getItem('learninghub_swipe_hint_seen_v1') === '1') zone.classList.add('swiped'); } catch (e) { }
-    $('mobilePrev')?.addEventListener('click', e => { e.stopPropagation(); slideChange('prev'); });
-    $('mobileNext')?.addEventListener('click', e => { e.stopPropagation(); slideChange('next'); });
+    bindHoldRepeat($('mobilePrev'), 'prev');
+    bindHoldRepeat($('mobileNext'), 'next');
   }
 
-  // Mức B: kéo dính ngón realtime + búng/snap (giống Quizlet). Chỉ trên mobile.
+  // Kéo dính ngón realtime + búng/snap (giống Quizlet). Chỉ trên mobile.
+  // Kéo trên wrap (không phải #card) để không đụng transform lật (rotateY) của #card.
   function bindDrag() {
     const zone = $('zone');
     if (!zone || zone.__mobileDragBound) return;
     zone.__mobileDragBound = true;
     let sx = 0, sy = 0, st = 0, dragging = false, decided = false, axis = null, moved = false;
-    const isMobile = () => window.matchMedia('(max-width:760px)').matches;
-    const card = () => $('card');
+    // true khi touch hiện tại bắt đầu trên nút/khu vực loại trừ (mobileCardNav, edit...).
+    // Phải giữ nguyên trạng thái này xuyên suốt touchmove/touchend của CÙNG 1 lần chạm,
+    // nếu không touchmove/touchend sẽ dùng sx/sy CŨ (của lần kéo trước đó) để tính khoảng
+    // cách kéo, khiến việc giữ nút bị hiểu nhầm thành một cú vuốt và tự nhảy câu.
+    let ignoreTouch = false;
     const W = () => (zone.getBoundingClientRect().width || window.innerWidth || 360);
     function markSeen() { zone.classList.add('swiped'); try { localStorage.setItem('learninghub_swipe_hint_seen_v1', '1'); } catch (e) { } }
 
     zone.addEventListener('touchstart', e => {
-      if (!isMobile() || __sliding) return;
       const t = e.changedTouches && e.changedTouches[0]; if (!t) return;
-      if (e.target.closest('#cardTools, #editCard, .edit, .mobileCardNav')) return;
+      ignoreTouch = !isMobile() || __sliding || !!e.target.closest('#cardTools, #editCard, .edit, .mobileCardNav');
+      if (ignoreTouch) return;
       sx = t.clientX; sy = t.clientY; st = Date.now();
       dragging = false; decided = false; axis = null; moved = false;
     }, { passive: true });
 
     zone.addEventListener('touchmove', e => {
-      if (!isMobile() || __sliding) return;
+      if (ignoreTouch || !isMobile() || __sliding) return;
       const t = e.changedTouches && e.changedTouches[0]; if (!t) return;
       const dx = t.clientX - sx, dy = t.clientY - sy;
       if (!decided) {
         if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
         decided = true;
         axis = Math.abs(dx) > Math.abs(dy) * 1.2 ? 'x' : 'y'; // dọc -> để trình duyệt cuộn
-        if (axis === 'x') { const c = card(); if (c) { c.style.transition = 'none'; c.classList.add('lhDragging'); } }
+        if (axis === 'x') { const w = ensureSlideWrap(); if (w) { w.style.transition = 'none'; w.classList.add('lhDragging'); } }
       }
       if (dragging || axis === 'x') {
         dragging = true;
         e.preventDefault();
         if (Math.abs(dx) > 6) moved = true;
-        const c = card();
-        if (c) { const flipT = c.classList.contains('flip') ? 'rotateY(180deg) ' : ''; c.style.transform = flipT + 'translateX(' + dx + 'px)'; c.style.opacity = String(Math.max(.4, 1 - Math.abs(dx) / (W() * 1.1))); }
+        const w = ensureSlideWrap();
+        if (w) { w.style.transform = 'translateX(' + dx + 'px)'; w.style.opacity = String(Math.max(.4, 1 - Math.abs(dx) / (W() * 1.1))); }
       }
     }, { passive: false });
 
     function endDrag(e) {
-      if (!dragging) return;
+      if (ignoreTouch || !dragging) return;
       dragging = false;
-      const c = card(); if (c) c.classList.remove('lhDragging');
+      const w = ensureSlideWrap();
+      if (w) w.classList.remove('lhDragging');
       const t = e.changedTouches && e.changedTouches[0];
       const dx = t ? (t.clientX - sx) : 0;
       const dt = Date.now() - st;
       const commit = (Math.abs(dx) > W() * 0.30) || (dt < 320 && Math.abs(dx) > 56);
-      if (!c) return;
+      if (!w) return;
       if (commit) {
         markSeen();
-        slideChange(dx < 0 ? 'next' : 'prev'); // ghost(câu cũ) + #card(câu mới) chạy song song
+        slideChange(dx < 0 ? 'next' : 'prev'); // ghost(câu cũ) + wrap(câu mới) chạy song song
       } else {
         // chưa đủ xa -> búng về chỗ cũ
         window.__lhSuppressFlip = moved;
-        c.style.transition = 'transform .2s cubic-bezier(.22,.61,.36,1), opacity .2s ease';
-        c.style.transform = (c.classList.contains('flip') ? 'rotateY(180deg) ' : '') + 'translateX(0)';
-        c.style.opacity = '1';
-        setTimeout(() => { c.style.transition = ''; c.style.transform = ''; c.style.opacity = ''; window.__lhSuppressFlip = false; }, 220);
+        w.style.transition = 'transform .2s cubic-bezier(.22,.61,.36,1), opacity .2s ease';
+        w.style.transform = 'translateX(0)';
+        w.style.opacity = '1';
+        setTimeout(() => { w.style.transition = ''; w.style.transform = ''; w.style.opacity = ''; window.__lhSuppressFlip = false; }, 220);
       }
     }
     zone.addEventListener('touchend', endDrag, { passive: false });
@@ -2313,7 +2386,7 @@ return true;
     zone.addEventListener('click', e => { if (window.__lhSuppressFlip) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
   }
 
-  function boot() { ensureMobileNav(); bindDrag(); }
+  function boot() { if (isMobile()) ensureSlideWrap(); ensureMobileNav(); bindDrag(); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
   setTimeout(boot, 300);
   setTimeout(boot, 1000);
@@ -6307,6 +6380,10 @@ window.clearLearningHubQuestionCache = function () {
 (function () {
   const STORE = 'learninghub_subject_code_merged_v1';
   let pending = null;
+  // Lộ ra ngoài để submitEditRequest (gửi yêu cầu sửa cho user thường) có thể chờ
+  // upload Cloudinary xong trước khi gửi — tránh gửi request khi editDraft.images
+  // vẫn còn là base64 tạm (bị cleanImages() lọc mất khi tới backend).
+  window.__LHGetPendingImageUpload = () => pending;
   function $(id) { return document.getElementById(id) }
   function msg(t) { if (typeof notify === 'function') notify(t); else console.log(t) }
   function c() { return window.HODSupabase?.__client || null }
@@ -6334,6 +6411,9 @@ window.clearLearningHubQuestionCache = function () {
   function bindInput() { const inp = $('imgUpload'); if (!inp || inp.__ultraUpload) return; inp.__ultraUpload = true; inp.onchange = null; inp.addEventListener('change', e => { const files = [...(e.target.files || [])]; if (!files.length) return; e.preventDefault(); e.stopImmediatePropagation(); pending = runUpload(files).catch(err => { status('Upload lỗi: ' + (err.message || err)); alert(err.message || err); throw err }).finally(() => { inp.value = '' }); }, true) }
   function build() { const d = draft(); if (!d) return null; d.question = ($('editQuestion')?.value || '').trim(); d.answer = ($('editAnswer')?.value || '').trim().toUpperCase(); const o = {}; document.querySelectorAll('[data-opt]').forEach(t => { if ((t.value || '').trim()) o[t.dataset.opt] = t.value.trim() }); d.options = o; d.answer_text = typeof answerText === 'function' ? answerText(d) : ''; d.subject_code = sc() || d.subject_code || ''; d.images = window.__LHCleanImages ? window.__LHCleanImages(imgs(d.images)) : imgs(d.images).filter(x => /^https?:\/\//i.test(x.src || x.url)); return d }
   async function uploadDataUrls() { const d = draft(); if (!d) return; const list = imgs(d.images); if (!list.some(x => dataUrl(x.src || x.url))) { d.images = window.__LHCleanImages ? window.__LHCleanImages(list) : list; return } status('Đang upload ảnh trước khi lưu...'); const out = []; for (const im of list) { const s = im.src || im.url; out.push(dataUrl(s) ? await up(toFile(s, im.name)) : im) } d.images = window.__LHCleanImages ? window.__LHCleanImages(out) : out; renderUrls() }
+  // Lộ ra ngoài: submitEditRequest dùng để "quét" nốt ảnh base64 còn sót (vd upload qua
+  // paste thay vì chọn file) trước khi gửi yêu cầu duyệt, tránh mất ảnh như khi upload dở dang.
+  window.__LHUploadPendingDataUrls = uploadDataUrls;
   async function qid(d) { if (d.id) return d.id; const db = c(), code = d.subject_code || sc(); if (!db || !code || !d.num) return null; const { data, error } = await db.from('questions').select('id').eq('subject_code', code).eq('num', d.num).maybeSingle(); return error || !data ? null : data.id }
   async function saveDirect() { if (!can()) return false; const usr = u(); if (!usr || !draft()) { alert('Chưa sẵn sàng dữ liệu'); return true } const btn = $('saveEdit'); try { if (btn) { btn.disabled = true; btn.textContent = 'Đang upload/lưu...' } if (pending) await pending; await uploadDataUrls(); const d = build(), id = await qid(d); if (!id) { alert('Không tìm thấy ID câu hỏi. Hãy tải lại trang rồi thử lại.'); return true } const oldQ = (RAW || []).find(x => String(x.id) === String(id)) || (pool || [])[ci] || d; const imgs = d.images || []; const payload = { id, subject_code: d.subject_code || oldQ.subject_code || sc(), num: d.num || oldQ.num, question: d.question, options: d.options || {}, answer: d.answer, answer_text: d.answer_text, images: imgs, has_image: imgs.length > 0, updated_at: new Date().toISOString(), error_risk: oldQ.error_risk || 'low', error_risk_reason: oldQ.error_risk_reason || null }; const res = await fetch('/api/admin-action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store', body: JSON.stringify({ user_id: usr.id, action: 'save_question_direct', payload: { question_id: id, new_data: payload, old_data: oldQ } }) }); const json = await res.json().catch(() => ({})); if (!res.ok || json.error) { alert('Lưu trực tiếp thất bại: ' + (json.error || res.status)); return true } if (typeof window.clearLearningHubQuestionCache === 'function') window.clearLearningHubQuestionCache(); $('editModal')?.classList.add('hidden'); msg('Đã lưu trực tiếp'); if (typeof window.loadCurrentSubjectOnly === 'function') await window.loadCurrentSubjectOnly(true); return true } finally { pending = null; if (btn) { btn.disabled = false; btn.textContent = 'Lưu trực tiếp' } } }
   function bindSave() { const b = $('saveEdit'); if (!b || b.__ultraSave) return; b.__ultraSave = true; b.onclick = null; b.addEventListener('click', async e => { if (!can()) return; e.preventDefault(); e.stopImmediatePropagation(); await saveDirect() }, true) }

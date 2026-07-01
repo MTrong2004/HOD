@@ -2476,9 +2476,9 @@ body:not(.hod-is-admin-final) #adminOpenBtn,body:not(.hod-is-admin-final) #hodFl
 /* Mức B: kéo dính ngón. pan-y cho phép cuộn dọc tự nhiên, ngang do JS xử lý. */
 @media (max-width:760px){
   #fc .zone,#fc .card,#fc .front,#fc .back{touch-action:pan-y !important}
-  #fc .card.lhDragging{transition:none !important;will-change:transform,opacity}
-  #fc .card.lhDragging .face{box-shadow:0 28px 70px rgba(0,0,0,.5) !important}
-  #fc .card.lhSliding{will-change:transform,opacity}
+  #fc #cardSlideWrap.lhDragging{will-change:transform,opacity}
+  #fc #cardSlideWrap.lhDragging .card .face{box-shadow:0 28px 70px rgba(0,0,0,.5) !important}
+  #fc #cardSlideWrap.lhSliding{will-change:transform,opacity}
 }
 /* ===== END FLASHCARD_DRAG_FOLLOW_20260701 ===== */
 

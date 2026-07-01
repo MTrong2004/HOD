@@ -115,6 +115,46 @@ window.APP_CONFIG = window.APP_CONFIG || {
 };
 // ===== END CONFIG FALLBACK =====
 
+// ===== PATCH_TAB_ISOLATED_SUBJECT_SESSION_20260701 =====
+// Mục đích: cho phép mở nhiều tab để so sánh nhiều môn học cùng lúc mà không bị "nhảy" môn khi F5 (reload).
+// Cách làm: key localStorage 'learninghub_subject_code_merged_v1' (môn đang chọn) được tách làm 2 lớp:
+//  - sessionStorage: riêng cho từng tab, luôn được đọc trước -> F5 đúng tab đó không đổi môn.
+//  - localStorage: vẫn ghi song song, chỉ dùng làm giá trị mặc định cho TAB MỚI mở (tab chưa từng chọn môn).
+// Toàn bộ code còn lại trong file vẫn gọi localStorage.getItem/setItem/removeItem như cũ (kể cả qua biến
+// SUBJECT_STORE/STORE), không cần sửa từng chỗ; patch này chỉ "chặn" riêng đúng 1 key ở tầng Storage.prototype,
+// không đổi hành vi các key khác (progress, cache, ...).
+// KHÔNG XÓA patch này nếu còn muốn giữ tính năng nhiều tab độc lập theo môn.
+(function () {
+  const KEY = 'learninghub_subject_code_merged_v1';
+  const nativeGet = Storage.prototype.getItem;
+  const nativeSet = Storage.prototype.setItem;
+  const nativeRemove = Storage.prototype.removeItem;
+
+  Storage.prototype.getItem = function (key) {
+    if (this === window.localStorage && key === KEY) {
+      const tabVal = nativeGet.call(window.sessionStorage, KEY);
+      if (tabVal !== null) return tabVal;
+      return nativeGet.call(window.localStorage, KEY);
+    }
+    return nativeGet.call(this, key);
+  };
+
+  Storage.prototype.setItem = function (key, value) {
+    if (this === window.localStorage && key === KEY) {
+      nativeSet.call(window.sessionStorage, KEY, value);
+    }
+    return nativeSet.call(this, key, value);
+  };
+
+  Storage.prototype.removeItem = function (key) {
+    if (this === window.localStorage && key === KEY) {
+      nativeRemove.call(window.sessionStorage, KEY);
+    }
+    return nativeRemove.call(this, key);
+  };
+})();
+// ===== END PATCH_TAB_ISOLATED_SUBJECT_SESSION_20260701 =====
+
 // ===== APP_API_DEDUPE_QUESTIONS_PROFILE_20260630 =====
 // Chống gọi trùng /api/questions và /api/profile trong lúc app khởi động/chọn môn.
 // Giữ nguyên dữ liệu đang dùng, chỉ gộp các request giống nhau đang chạy cùng lúc.
